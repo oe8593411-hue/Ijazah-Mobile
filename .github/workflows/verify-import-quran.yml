@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: quran-corpus-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   import:
     runs-on: ubuntu-latest
