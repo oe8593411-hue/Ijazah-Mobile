@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
@@ -13,7 +13,7 @@ export default function Recite(){
  const [referenceText,setReferenceText]=useState("جاري تحميل الآية الموثقة…");
  const [referenceLabel,setReferenceLabel]=useState("الآية");
 
- useState(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
+ useEffect(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
    const corpus=m.default as {ayahs:{surah:number;ayah:number;text:string}[]};
    const hit=corpus.ayahs.find(x=>x.surah===selectedSurah&&x.ayah===selectedAyah);
    if(hit){setReferenceText(hit.text);setReferenceLabel(`الآية ${hit.ayah}`);}
