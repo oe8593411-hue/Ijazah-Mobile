@@ -55,7 +55,7 @@ export default function SmartTest(){
 
       <View style={s.truth}><Text style={s.truthTitle}>🔐 قاعدة الدقة</Text><Text style={s.truthText}>لن تُسجَّل نقطة ضعف بسبب نتيجة غير مؤكدة. الاختبار الحقيقي سيعتمد على القرآن الموثق ومحرك التلاوة الفعلي، وليس على نص مولّد من الذكاء الاصطناعي.</Text></View>
 
-      <Pressable style={s.start} onPress={()=>router.push("/recite")}>
+      <Pressable style={s.start} onPress={()=>router.push({pathname:"/smart-test-session",params:{count:String(count),difficulty}})}>
         <Text style={s.startText}>ابدأ الاختبار</Text>
         <Text style={s.startSub}>سيتم تجهيز الأسئلة قبل بدء التسميع</Text>
       </Pressable>
