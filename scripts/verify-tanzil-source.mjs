@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import crypto from "node:crypto";
 
 const file = process.env.QURAN_FILE;
-const expected = process.env.TANZIL_SHA256?.toLowerCase();
-if (!file || !expected) throw new Error("Missing QURAN_FILE or TANZIL_SHA256.");
+const expected = "7f30c647331a61100ebf24a80507dc0fcdd9f2df97f1312b5b2dfcb982a7f326";
+if (!file) throw new Error("Missing QURAN_FILE.");
 
 const raw = await fs.readFile(file);
 const actual = crypto.createHash("sha256").update(raw).digest("hex");
