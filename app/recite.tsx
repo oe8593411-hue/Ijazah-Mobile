@@ -1,12 +1,23 @@
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Audio, RecordingPresets, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 
 const C={navy:"#071A33",navy2:"#102746",cyan:"#22C7D8",soft:"#E4F9FB",ink:"#152A42",muted:"#7B8B9E",surface:"#F7F9FC",white:"#FFFFFF"};
 
 export default function Recite(){
+ const params=useLocalSearchParams<{surah?:string;ayah?:string}>();
+ const selectedSurah=Math.max(1,Math.min(114,Number(params.surah)||1));
+ const selectedAyah=Math.max(1,Number(params.ayah)||1);
+ const [referenceText,setReferenceText]=useState("جاري تحميل الآية الموثقة…");
+ const [referenceLabel,setReferenceLabel]=useState("الآية");
+
+ useState(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
+   const corpus=m.default as {ayahs:{surah:number;ayah:number;text:string}[]};
+   const hit=corpus.ayahs.find(x=>x.surah===selectedSurah&&x.ayah===selectedAyah);
+   if(hit){setReferenceText(hit.text);setReferenceLabel(`الآية ${hit.ayah}`);}
+ }).catch(()=>setReferenceText("سيظهر النص بعد تجهيز نسخة المصحف داخل التطبيق.")); });
  const recorder=useAudioRecorder(RecordingPresets.HIGH_QUALITY);
  const state=useAudioRecorderState(recorder);
  const [message,setMessage]=useState("جاهز للتسجيل");
@@ -18,7 +29,8 @@ export default function Recite(){
   try{
    if(state.isRecording){
     await recorder.stop();
-    setRecorded(true);\n    setSessionStatus("recorded");
+    setRecorded(true);
+    setSessionStatus("recorded");
     setMessage("تم حفظ التسجيل مؤقتًا على الجهاز. التحليل لن يُعرض قبل اكتمال المحرك الحقيقي.");
     return;
    }
@@ -46,11 +58,11 @@ export default function Recite(){
     <Pressable onPress={()=>setMode("live")} style={[s.mode,mode==="live"&&s.modeActive]}><Text style={[s.modeText,mode==="live"&&s.modeTextActive]}>مباشر</Text></Pressable>
    </View>
 
-   <View style={s.surahRow}><View><Text style={s.surah}>سُورَةُ الْفَاتِحَةِ</Text><Text style={s.meta}>الآية ١ • رواية حفص</Text></View><View style={s.badge}><Text style={s.badgeText}>١</Text></View></View>
+   <View style={s.surahRow}><View><Text style={s.surah}>موضع التسميع</Text><Text style={s.meta}>سورة رقم ${selectedSurah} • ${referenceLabel} • رواية حفص</Text></View><View style={s.badge}><Text style={s.badgeText}>{selectedSurah}</Text></View></View>
 
    <View style={s.ayah}>
-    <View style={s.ayahTop}><Text style={s.referenceBadge}>مرجع موثّق</Text><Text style={s.ayahNumber}>١</Text></View>
-    <Text style={s.ayahText}>الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ</Text>
+    <View style={s.ayahTop}><Text style={s.referenceBadge}>مرجع موثّق</Text><Text style={s.ayahNumber}>{referenceLabel}</Text></View>
+    <Text style={s.ayahText}>{referenceText}</Text>
     <Text style={s.reference}>النص القرآني ثابت من قاعدة موثّقة ولا يتم توليده بالذكاء الاصطناعي.</Text>
    </View>
 
@@ -60,7 +72,8 @@ export default function Recite(){
     <View style={s.metrics}>
       <Metric label="التسجيل" value={state.isRecording?"يعمل":"جاهز"}/>
       <Metric label="التحليل الصوتي" value="غير متصل"/>
-      <Metric label="الجلسة" value={sessionStatus==="recording"?"تسجيل":sessionStatus==="recorded"?"جاهزة":"—"}/>\n      <Metric label="النتيجة" value="—"/>
+      <Metric label="الجلسة" value={sessionStatus==="recording"?"تسجيل":sessionStatus==="recorded"?"جاهزة":"—"}/>
+      <Metric label="النتيجة" value="—"/>
     </View>
    </View>
 
