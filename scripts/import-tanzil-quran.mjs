@@ -4,9 +4,9 @@ import pg from "pg";
 
 const file = process.env.QURAN_FILE;
 const databaseUrl = process.env.DATABASE_URL;
-const expectedSha256 = process.env.TANZIL_SHA256;
+const expectedSha256 = "7f30c647331a61100ebf24a80507dc0fcdd9f2df97f1312b5b2dfcb982a7f326";
 
-if (!file || !databaseUrl || !expectedSha256) {
+if (!file || !databaseUrl) {
   throw new Error("Missing QURAN_FILE, DATABASE_URL, or TANZIL_SHA256.");
 }
 
@@ -54,7 +54,7 @@ try {
       `INSERT INTO public.quran_surahs (corpus_id, number, name_ar, name_en)
        VALUES ($1,$2,$3,$4)
        ON CONFLICT DO NOTHING`,
-      [corpusId, surah, `سورة ${surah}`, `Surah ${surah}`]
+      [corpusId, surah, `سورة ${surah}`, `Surah ${surah}`, rows.filter(r => r.surah === surah).length]
     );
   }
 
