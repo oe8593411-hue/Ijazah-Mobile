@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 
 const input = process.env.QURAN_FILE || "quran-uthmani.txt";
 const output = process.env.OUTPUT_FILE || "src/quran/verified-corpus.json";
@@ -28,6 +29,6 @@ const payload = {
   ayahs,
 };
 
-await fs.mkdir(new URL(".", `file://${process.cwd()}/${output}`), { recursive: true }).catch(() => {});
+await fs.mkdir(path.dirname(output), { recursive: true });
 await fs.writeFile(output, JSON.stringify(payload));
 console.log(JSON.stringify({ exported: true, output, ayahs: ayahs.length, surahs: 114, sha256: payload.sha256 }));
