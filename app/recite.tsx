@@ -12,12 +12,13 @@ export default function Recite(){
  const [message,setMessage]=useState("جاهز للتسجيل");
  const [recorded,setRecorded]=useState(false);
  const [mode,setMode]=useState<"live"|"deep">("live");
+ const [sessionStatus,setSessionStatus]=useState<"idle"|"recording"|"recorded"|"processing">("idle");
 
  async function toggleRecording(){
   try{
    if(state.isRecording){
     await recorder.stop();
-    setRecorded(true);
+    setRecorded(true);\n    setSessionStatus("recorded");
     setMessage("تم حفظ التسجيل مؤقتًا على الجهاز. التحليل لن يُعرض قبل اكتمال المحرك الحقيقي.");
     return;
    }
@@ -59,7 +60,7 @@ export default function Recite(){
     <View style={s.metrics}>
       <Metric label="التسجيل" value={state.isRecording?"يعمل":"جاهز"}/>
       <Metric label="التحليل الصوتي" value="غير متصل"/>
-      <Metric label="النتيجة" value="—"/>
+      <Metric label="الجلسة" value={sessionStatus==="recording"?"تسجيل":sessionStatus==="recorded"?"جاهزة":"—"}/>\n      <Metric label="النتيجة" value="—"/>
     </View>
    </View>
 
