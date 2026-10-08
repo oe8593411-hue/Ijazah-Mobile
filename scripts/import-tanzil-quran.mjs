@@ -146,7 +146,7 @@ try {
      LEFT JOIN public.quran_ayahs a
        ON a.corpus_id=s.corpus_id AND a.surah_number=s.surah_number
      WHERE s.corpus_id=$1
-     GROUP BY s.surah_number
+     GROUP BY s.surah_number, s.ayah_count
      HAVING COUNT(a.id) <> s.ayah_count
      ORDER BY s.surah_number`,
     [corpusId]
