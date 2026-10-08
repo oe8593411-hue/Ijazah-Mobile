@@ -9,7 +9,7 @@ const raw = await fs.readFile(file);
 const actual = crypto.createHash("sha256").update(raw).digest("hex");
 if (actual !== expected) throw new Error(`Checksum mismatch: expected ${expected}, got ${actual}`);
 
-const lines = raw.toString("utf8").replace(/^\\uFEFF/, "").split(/\\r?\\n/).filter(Boolean);
+const lines = raw.toString("utf8").replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
 const parsed = lines.map(line => {
   const [s, a, ...rest] = line.split("|");
   return { s: Number(s), a: Number(a), text: rest.join("|") };
