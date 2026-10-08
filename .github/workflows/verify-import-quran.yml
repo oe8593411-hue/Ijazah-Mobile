@@ -1,0 +1,29 @@
+name: Verify and import Quran corpus
+
+on:
+  workflow_dispatch:
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install pg
+      - name: Download exact Tanzil Uthmani 1.1 source
+        run: curl --fail --location --retry 3 --output quran-uthmani.txt https://tanzil.net/download/quran-uthmani.txt
+      - name: Verify checksum and structure
+        env:
+          QURAN_FILE: quran-uthmani.txt
+          TANZIL_SHA256: ${{ secrets.TANZIL_SHA256 }}
+        run: node scripts/verify-tanzil-source.mjs
+      - name: Import only after verification
+        env:
+          QURAN_FILE: quran-uthmani.txt
+          TANZIL_SHA256: ${{ secrets.TANZIL_SHA256 }}
+          DATABASE_URL: ${{ secrets.IJAZAH_DATABASE_URL }}
+        run: node scripts/import-tanzil-quran.mjs
