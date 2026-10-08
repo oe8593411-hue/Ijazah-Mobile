@@ -19,11 +19,9 @@ jobs:
       - name: Verify checksum and structure
         env:
           QURAN_FILE: quran-uthmani.txt
-          TANZIL_SHA256: ${{ secrets.TANZIL_SHA256 }}
         run: node scripts/verify-tanzil-source.mjs
       - name: Import only after verification
         env:
           QURAN_FILE: quran-uthmani.txt
-          TANZIL_SHA256: ${{ secrets.TANZIL_SHA256 }}
           DATABASE_URL: ${{ secrets.IJAZAH_DATABASE_URL }}
         run: node scripts/import-tanzil-quran.mjs
