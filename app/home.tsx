@@ -35,6 +35,7 @@ export default function Home() {
           <Action title="المراجعة" sub="خطة اليوم" icon="↻" />
           <Action title="التجويد" sub="تعلّم القواعد" icon="✦" />
           <Action title="تقدمي" sub="إحصائيات دقيقة" icon="◔" />
+          <Pressable style={styles.card} onPress={() => router.push("/smart-test")}><Text style={styles.icon}>🧠</Text><Text style={styles.cardTitle}>الاختبار الذكي</Text><Text style={styles.cardSub}>اختبار حفظ Premium</Text></Pressable>
         </View>
 
         <View style={styles.streak}>
