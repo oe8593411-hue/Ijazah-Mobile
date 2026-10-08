@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import crypto from "node:crypto";
 
 const file = process.env.QURAN_FILE;
-const expected = "7f30c647331a61100ebf24a80507dc0fcdd9f2df97f1312b5b2dfcb982a7f326";
+const expected = "bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8";
 if (!file) throw new Error("Missing QURAN_FILE.");
 
 const raw = await fs.readFile(file);
