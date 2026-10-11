@@ -26,6 +26,11 @@ jobs:
       - name: Validate Expo project
         run: npx expo-doctor
 
+      - name: Link or initialize EAS project
+        run: npx eas-cli@latest init --account ijazah-omar --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Build Android preview
         run: npx eas-cli@latest build --platform android --profile preview --non-interactive --wait
         env:
