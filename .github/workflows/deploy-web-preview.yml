@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Export web preview
-        run: npx expo export --platform web --base-url /Ijazah-Mobile/
+        run: npx expo export --platform web
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload web artifact
