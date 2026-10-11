@@ -24,7 +24,9 @@ jobs:
         run: npm install
 
       - name: Validate Expo project
-        run: npx expo-doctor      - name: Build Android preview
+        run: npx expo-doctor
+
+      - name: Build Android preview
         run: npx eas-cli@latest build --platform android --profile preview --non-interactive --wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
