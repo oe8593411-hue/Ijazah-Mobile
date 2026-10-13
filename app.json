@@ -24,8 +24,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "baseUrl": "/Ijazah-Mobile"
+      "typedRoutes": true
     }
   }
 }
