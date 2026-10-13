@@ -29,11 +29,15 @@ export default function Recite(){
 
  async function toggleRecording(){
   try{
+   if(riwaya !== "حفص عن عاصم"){
+    setMessage("التسجيل والتحليل لهذه الرواية غير مفعّلين بعد؛ نحتاج أولًا إلى نص موثّق ومحرك تحليل مختبَر لها.");
+    return;
+   }
    if(state.isRecording){
     await recorder.stop();
     setRecorded(true);
     setSessionStatus("recorded");
-    setMessage("تم حفظ التسجيل مؤقتًا على الجهاز. التحليل لن يُعرض قبل اكتمال المحرك الحقيقي.");
+    setMessage("تم حفظ التسجيل مؤقتًا على الجهاز. محرك التحليل غير متصل؛ لن نعرض تصحيحًا أو درجة وهمية.");
     return;
    }
    const permission=await Audio.requestRecordingPermissionsAsync();
@@ -41,11 +45,13 @@ export default function Recite(){
    setRecorded(false);
    await recorder.prepareToRecordAsync();
    recorder.record();
+   setSessionStatus("recording");
    setMessage("جاري الاستماع… اقرأ الآية بهدوء");
   }catch(error){
    console.error("Ijazah recording error:",error);
-   const detail=error instanceof Error?error.message:"خطأ غير معروف";
-   setMessage(`تعذر بدء التسجيل: ${detail}`);
+   const detail=error instanceof Error?error.message:String(error??"خطأ غير معروف");
+   setSessionStatus("idle");
+   setMessage(`تعذر بدء التسجيل (${detail}). تأكد من إذن الميكروفون ثم أعد المحاولة.`);
   }
  }
 
