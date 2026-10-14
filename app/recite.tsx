@@ -26,6 +26,43 @@ export default function Recite(){
  const [recorded,setRecorded]=useState(false);
  const [mode,setMode]=useState<"live"|"deep">("live");
  const [sessionStatus,setSessionStatus]=useState<"idle"|"recording"|"recorded"|"processing">("idle");
+ const [mushafVisible,setMushafVisible]=useState(true);
+ const [heardText,setHeardText]=useState("");
+ const [speechMessage,setSpeechMessage]=useState("التعرّف المباشر على الكلمات يعمل في متصفح يدعمه فقط، ولا يُعدّ تصحيحًا للتلاوة.");
+ const [speechRecognition,setSpeechRecognition]=useState<any>(null);
+
+ function startLiveWords(){
+  const browser = globalThis as unknown as { SpeechRecognition?: new () => any; webkitSpeechRecognition?: new () => any };
+  const SpeechRecognitionClass = browser.SpeechRecognition || browser.webkitSpeechRecognition;
+  if(!SpeechRecognitionClass){
+   setSpeechMessage("التعرّف المباشر على الكلمات غير مدعوم في هذا المتصفح/الجهاز. التسجيل الصوتي وحده لا يستطيع تحديد الكلمات المنطوقة.");
+   return;
+  }
+  try{
+   const recognition = new SpeechRecognitionClass();
+   recognition.lang = "ar-SA";
+   recognition.continuous = true;
+   recognition.interimResults = true;
+   recognition.onresult = (event:any) => {
+    let combined = "";
+    for(let i=0;i<event.results.length;i++) combined += event.results[i][0]?.transcript || "";
+    setHeardText(combined.trim());
+    setSpeechMessage("الكلمات الظاهرة تعرّفٌ صوتي مبدئي وقد يخطئ؛ ليست مطابقة للمصحف ولا حكمًا على التجويد.");
+   };
+   recognition.onerror = () => setSpeechMessage("توقف التعرّف على الكلمات أو لم يحصل على إذن الميكروفون. التسجيل الصوتي منفصل عنه.");
+   recognition.onend = () => setSpeechRecognition(null);
+   recognition.start();
+   setSpeechRecognition(recognition);
+   setSpeechMessage("جارٍ التقاط الكلمات من المتصفح؛ قد تظهر أخطاء في نص التعرّف.");
+  }catch{
+   setSpeechMessage("تعذر تشغيل التعرّف المباشر في هذا المتصفح. يمكنك متابعة التسجيل دون عرض كلمات غير مؤكدة.");
+  }
+ }
+
+ function stopLiveWords(){
+  try{ speechRecognition?.stop?.(); }catch{}
+  setSpeechRecognition(null);
+ }
 
  async function toggleRecording(){
   try{
@@ -34,6 +71,7 @@ export default function Recite(){
     return;
    }
    if(state.isRecording){
+    stopLiveWords();
     await recorder.stop();
     setRecorded(true);
     setSessionStatus("recorded");
@@ -43,6 +81,8 @@ export default function Recite(){
    const permission=await requestRecordingPermissionsAsync();
    if(!permission.granted){setMessage("يجب السماح بالميكروفون لبدء التلاوة");return;}
    setRecorded(false);
+   setHeardText("");
+   startLiveWords();
    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
    await recorder.prepareToRecordAsync();
    recorder.record();
@@ -74,10 +114,19 @@ export default function Recite(){
    <Text style={s.riwayaTitle}>اختر الرواية من القراءات العشر</Text>
    <View style={s.riwayaList}>{riwayat.map((item)=><Pressable key={item} onPress={()=>setRiwaya(item)} style={[s.riwayaChip,riwaya===item&&s.riwayaChipActive]}><Text style={[s.riwayaChipText,riwaya===item&&s.riwayaChipTextActive]}>{item}</Text></Pressable>)}</View>
 
-   <View style={s.ayah}>
+   <View style={s.mushafToolbar}>
+    <View><Text style={s.mushafToolbarTitle}>المصحف أثناء التسميع</Text><Text style={s.mushafToolbarSub}>النص الموثّق — سورة {selectedSurah}</Text></View>
+    <Pressable onPress={()=>setMushafVisible(v=>!v)} style={s.hideButton}><Text style={s.hideButtonText}>{mushafVisible?"إخفاء المصحف":"إظهار المصحف"}</Text></Pressable>
+   </View>
+   {mushafVisible&&<View style={s.ayah}>
     <View style={s.ayahTop}><Text style={s.referenceBadge}>مرجع موثّق</Text><Text style={s.ayahNumber}>{referenceLabel}</Text></View>
     {riwaya==="حفص عن عاصم"?<Text style={s.ayahText}>{referenceText}</Text>:<Text style={s.riwayaUnavailable}>لم نضف بعدُ قاعدة المصحف المحققة لهذه الرواية. لن نعرض نص حفص على أنه نص رواية أخرى، ولن نحلل التلاوة بهذه الرواية قبل توثيق نصها وقواعدها.</Text>}
     <Text style={s.reference}>{riwaya==="حفص عن عاصم"?"النص القرآني ثابت من قاعدة موثّقة ولا يتم توليده بالذكاء الاصطناعي.":"اختيار الرواية متاح للمعاينة، لكن التلاوة والتحليل الفعليين لهذه الرواية غير مفعّلين حتى إضافة مرجع موثوق."}</Text>
+   </View>}
+   <View style={s.liveWordsCard}>
+    <Text style={s.liveWordsTitle}>{mushafVisible?"الكلمات التي يلتقطها الميكروفون":"التسميع دون عرض المصحف"}</Text>
+    <Text style={s.liveWordsNote}>{speechMessage}</Text>
+    {heardText.length>0?<Text style={s.heardText}>{heardText}</Text>:<Text style={s.heardPlaceholder}>{state.isRecording?"بانتظار التعرّف على الكلمات…":"ابدأ التسميع لتظهر الكلمات هنا إذا كان المتصفح يدعم التعرّف الصوتي."}</Text>}
    </View>
 
    <View style={s.liveCard}>
