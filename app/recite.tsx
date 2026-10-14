@@ -7,9 +7,10 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 const C={navy:"#071A33",navy2:"#102746",cyan:"#22C7D8",soft:"#E4F9FB",ink:"#152A42",muted:"#7B8B9E",surface:"#F7F9FC",white:"#FFFFFF"};
 
 export default function Recite(){
- const params=useLocalSearchParams<{surah?:string;ayah?:string}>();
+ const params=useLocalSearchParams<{surah?:string;ayah?:string;scope?:string}>();
  const selectedSurah=Math.max(1,Math.min(114,Number(params.surah)||1));
  const selectedAyah=Math.max(1,Number(params.ayah)||1);
+ const fullSurahMode=params.scope==="surah";
  const [referenceText,setReferenceText]=useState("جاري تحميل الآية الموثقة…");
  const [referenceLabel,setReferenceLabel]=useState("الآية");
  const [riwaya,setRiwaya]=useState("حفص عن عاصم");
@@ -17,8 +18,13 @@ export default function Recite(){
 
  useEffect(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
    const corpus=m.default as {ayahs:{surah:number;ayah:number;text:string}[]};
-   const hit=corpus.ayahs.find(x=>x.surah===selectedSurah&&x.ayah===selectedAyah);
-   if(hit){setReferenceText(hit.text);setReferenceLabel(`الآية ${hit.ayah}`);}
+   if(fullSurahMode){
+    const hits=corpus.ayahs.filter(x=>x.surah===selectedSurah);
+    if(hits.length){setReferenceText(hits.map(x=>x.text+` ﴿${x.ayah}﴾`).join(" "));setReferenceLabel(`السورة كاملة • ${hits.length} آيات`);}
+   }else{
+    const hit=corpus.ayahs.find(x=>x.surah===selectedSurah&&x.ayah===selectedAyah);
+    if(hit){setReferenceText(hit.text);setReferenceLabel(`الآية ${hit.ayah}`);}
+   }
  }).catch(()=>setReferenceText("سيظهر النص بعد تجهيز نسخة المصحف داخل التطبيق.")); });
  const recorder=useAudioRecorder(RecordingPresets.HIGH_QUALITY);
  const state=useAudioRecorderState(recorder);
@@ -68,6 +74,7 @@ export default function Recite(){
 
  async function analyzeRecording(uri:string|undefined){
   if(!uri){setMessage("التسجيل تم، لكن لم يُرجع الجهاز مسار الملف لتحليله.");return;}
+  if(fullSurahMode){setSessionStatus("recorded");setMessage("تم تسجيل السورة كاملة. تحليل هذا التسجيل متعدد الآيات غير مفعّل بعد؛ خادم التحليل الحالي يقارن آية واحدة فقط، لذلك لن نعرض نتيجة مضللة.");return;}
   const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"https://ijazah-mobile-preview-profit-guard2.vercel.app").replace(/\/$/,"");
   if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
   setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
@@ -134,7 +141,7 @@ export default function Recite(){
     <Pressable onPress={()=>setMode("live")} style={[s.mode,mode==="live"&&s.modeActive]}><Text style={[s.modeText,mode==="live"&&s.modeTextActive]}>مباشر</Text></Pressable>
    </View>
 
-   <View style={s.surahRow}><View><Text style={s.surah}>موضع التسميع</Text><Text style={s.meta}>{`سورة رقم ${selectedSurah} • ${referenceLabel} • ${riwaya}`}</Text></View><View style={s.badge}><Text style={s.badgeText}>{selectedSurah}</Text></View></View>
+   <View style={s.surahRow}><View><Text style={s.surah}>{fullSurahMode?"تسميع السورة كاملة":"موضع التسميع"}</Text><Text style={s.meta}>{`سورة رقم ${selectedSurah} • ${referenceLabel} • ${riwaya}`}</Text></View><View style={s.badge}><Text style={s.badgeText}>{selectedSurah}</Text></View></View>
 
    <Text style={s.riwayaTitle}>اختر الرواية من القراءات العشر</Text>
    <View style={s.riwayaList}>{riwayat.map((item)=><Pressable key={item} onPress={()=>setRiwaya(item)} style={[s.riwayaChip,riwaya===item&&s.riwayaChipActive]}><Text style={[s.riwayaChipText,riwaya===item&&s.riwayaChipTextActive]}>{item}</Text></Pressable>)}</View>
@@ -181,7 +188,7 @@ export default function Recite(){
     </View>
    </View>
 
-   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام.</Text></View>
+   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>{fullSurahMode?"يمكنك تسجيل السورة كاملة في مقطع واحد. تحليل التسجيل متعدد الآيات لم يُفعّل بعد، لذلك لن ننسب إليه نتيجة تحليل غير موجودة.":"المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام."}</Text></View>
 
    <Text style={s.sectionTitle}>خط أنابيب التحليل</Text>
    <View style={s.steps}>
