@@ -27,4 +27,4 @@ jobs:
       - name: Verify ten-qiraat registry safety gate
         run: node scripts/verify-riwayah-registry.mjs
       - name: Validate Android bundle
-        run: npx expo export:embed --platform android --entry-file node_modules/expo-router/entry.js
+        run: npx expo export --platform android
