@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
+import { ScrollView, StyleSheet, Text, View, Pressable, Image, useWindowDimensions } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 
@@ -35,7 +35,7 @@ export default function Home() {
       <ScrollView contentContainerStyle={[s.content, wide && s.wideContent]}>
         <View style={s.header}>
           <View style={s.brand}>
-            <View style={s.logo}><Text style={s.logoMark}>إ</Text><View style={s.logoBook} /></View>
+            <Image source={require("../Ijazah profile picture.jpeg")} style={s.logoImage} resizeMode="contain" accessibilityLabel="شعار إجازة" />
             <View>
               <Text style={[s.brandName, { color: text }]}>{t("إجازة", "IJAAZAH")}</Text>
               <Text style={[s.brandSub, { color: muted }]}>{t("الأكاديمية الإلكترونية للقرآن", "ONLINE QURAN ACADEMY")}</Text>
@@ -181,6 +181,7 @@ const s = StyleSheet.create({
   wideContent: { paddingHorizontal: 34, paddingTop: 30 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
   brand: { flexDirection: "row", alignItems: "center", gap: 11 },
+  logoImage: { width: 52, height: 52 },
   logo: { width: 47, height: 47, borderRadius: 16, backgroundColor: C.green, alignItems: "center", justifyContent: "center", shadowColor: C.greenDeep, shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
   logoMark: { color: "#FFFFFF", fontSize: 27, fontWeight: "900" },
   logoBook: { position: "absolute", bottom: 8, width: 25, height: 7, borderTopWidth: 2, borderColor: "#B7E8F6", transform: [{ rotate: "-8deg" }] },
