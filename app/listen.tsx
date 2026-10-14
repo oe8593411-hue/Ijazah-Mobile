@@ -4,9 +4,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
-const NAVY = "#092A59";
-const CYAN = "#39A9D0";
-const PALE = "#EAF7FC";
+const NAVY = "#071A33";
+const CYAN = "#35C7DE";
+const PALE = "#E5F8FC";
 const SURAH_NAMES = [
 "الفاتحة","البقرة","آل عمران","النساء","المائدة","الأنعام","الأعراف","الأنفال","التوبة","يونس",
 "هود","يوسف","الرعد","إبراهيم","الحجر","النحل","الإسراء","الكهف","مريم","طه",
@@ -138,7 +138,7 @@ export default function Listen() {
 function formatTime(value?: number) { const n = Number.isFinite(value) ? Math.max(0,Math.floor(value||0)) : 0; return `${Math.floor(n/60)}:${String(n%60).padStart(2,"0")}`; }
 
 const s = StyleSheet.create({
- root:{flex:1,backgroundColor:"#F5FAFD"},
+ root:{flex:1,backgroundColor:"#F4F8FC"},
  head:{paddingTop:54,paddingHorizontal:18,paddingBottom:18,backgroundColor:NAVY,flexDirection:"row",alignItems:"center",gap:12},
  backButton:{width:35,alignItems:"center"},back:{color:"#fff",fontSize:34,lineHeight:36},
  headCopy:{flex:1,alignItems:"flex-end"},title:{color:"#fff",fontSize:18,fontWeight:"900"},subtitle:{color:"#B7E8F6",fontSize:10,marginTop:4},
@@ -147,10 +147,10 @@ const s = StyleSheet.create({
  intro:{backgroundColor:"#E8F6FC",borderRadius:22,padding:19,marginBottom:20,borderWidth:1,borderColor:"#C9E9F5"},
  introTitle:{color:NAVY,fontSize:20,fontWeight:"900",textAlign:"right"},introSub:{color:"#526F83",fontSize:12,lineHeight:20,textAlign:"right",marginTop:7},
  label:{color:NAVY,fontSize:14,fontWeight:"900",textAlign:"right",marginTop:12,marginBottom:9},
- searchInput:{height:45,backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#DCEAF1",borderRadius:14,paddingHorizontal:13,color:NAVY,fontSize:12},
+ searchInput:{height:45,backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E0EAF2",borderRadius:14,paddingHorizontal:13,color:NAVY,fontSize:12},
  reciterCount:{color:"#6E879B",fontSize:10,textAlign:"right",marginTop:7,marginBottom:8},
  surahList:{gap:7,marginTop:10},
- surahListItem:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E1ECF2",borderRadius:14,paddingHorizontal:12,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:11},
+ surahListItem:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E0EAF2",borderRadius:14,paddingHorizontal:12,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:11},
  surahListItemActive:{backgroundColor:"#EAF7FC",borderColor:CYAN},
  surahListNum:{width:34,height:34,borderRadius:12,backgroundColor:"#F0F6FA",alignItems:"center",justifyContent:"center"},
  surahListNumActive:{backgroundColor:NAVY},
@@ -163,15 +163,15 @@ const s = StyleSheet.create({
  surahListAction:{color:"#6E879B",fontSize:10,fontWeight:"800"},
  noSurahs:{textAlign:"center",color:"#6E879B",fontSize:12,padding:18},
  reciterList:{gap:8},
- reciter:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E1ECF2",borderRadius:15,paddingHorizontal:13,paddingVertical:12,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
+ reciter:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E0EAF2",borderRadius:15,paddingHorizontal:13,paddingVertical:12,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
  selected:{backgroundColor:NAVY,borderColor:NAVY},unavailable:{opacity:0.5},
  reciterName:{color:"#213C59",fontSize:12,fontWeight:"800"},reciterState:{color:"#6E879B",fontSize:10},
  selectedText:{color:"#FFFFFF"},
- surahPicker:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E1ECF2",borderRadius:17,padding:12,flexDirection:"row",alignItems:"center",gap:12},
+ surahPicker:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E0EAF2",borderRadius:17,padding:12,flexDirection:"row",alignItems:"center",gap:12},
  surahInput:{width:52,height:46,backgroundColor:PALE,borderRadius:12,textAlign:"center",color:NAVY,fontWeight:"900",fontSize:17},
  surahNameWrap:{flex:1,alignItems:"flex-end"},surahName:{color:NAVY,fontSize:16,fontWeight:"900"},surahMeta:{color:"#6E879B",fontSize:10,marginTop:4},
  stepper:{gap:5},step:{width:27,height:24,borderRadius:8,backgroundColor:PALE,alignItems:"center",justifyContent:"center"},stepText:{color:NAVY,fontWeight:"900"},
- playerCard:{backgroundColor:"#FFFFFF",borderRadius:24,padding:20,alignItems:"center",marginTop:20,borderWidth:1,borderColor:"#DCEAF1"},
+ playerCard:{backgroundColor:"#FFFFFF",borderRadius:24,padding:20,alignItems:"center",marginTop:20,borderWidth:1,borderColor:"#E0EAF2"},
  soundIcon:{width:64,height:64,borderRadius:22,backgroundColor:PALE,alignItems:"center",justifyContent:"center"},soundIconText:{fontSize:30,color:CYAN},
  nowPlaying:{color:"#6D899A",fontSize:10,fontWeight:"800",marginTop:13},nowTitle:{color:NAVY,fontSize:22,fontWeight:"900",marginTop:5},nowMeta:{color:"#70889B",fontSize:11,marginTop:5,textAlign:"center"},
  progressTrack:{height:5,width:"100%",backgroundColor:"#E5EFF4",borderRadius:5,marginTop:20,overflow:"hidden"},progressFill:{height:5,backgroundColor:CYAN,borderRadius:5},
