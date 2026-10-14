@@ -17,7 +17,7 @@ function normalizeArabic(value: string) {
     .trim();
 }
 
-async function readRawBody(req: AsyncIterable<Uint8Array>) {
+async function readRawBody(req: AsyncIterable<Uint8Array | string>) {
   const chunks: Uint8Array[] = [];
   let total = 0;
   for await (const chunk of req) {
@@ -78,7 +78,7 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
     };
   }
   const form = new FormData();
-  form.append("file", new Blob([audioBytes], { type: contentType || "audio/m4a" }), "recitation.m4a");
+  form.append("file", new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: contentType || "audio/m4a" }), "recitation.m4a");
   form.append("surah", String(surah));
   form.append("ayah", String(ayah));
   form.append("riwaya", "hafs");
@@ -134,7 +134,7 @@ export default async function handler(req: any, res: any) {
   try {
     const audioBytes = await readRawBody(req);
     if (audioBytes.byteLength < 1024) return res.status(400).json({ error: "audio_too_short", message: "التسجيل قصير جدًا للتحليل." });
-    const audioBlob = new Blob([audioBytes], { type: req.headers["content-type"] || "audio/m4a" });
+    const audioBlob = new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: String(req.headers["content-type"] || "audio/m4a") });
     const form = new FormData();
     form.append("file", audioBlob, "recitation.m4a");
     form.append("model", "gpt-4o-mini-transcribe");
@@ -157,7 +157,7 @@ export default async function handler(req: any, res: any) {
     const matchRate = Math.max(0, Math.round(100 * (1 - alignment.editDistance / Math.max(1, alignment.expectedWords, alignment.recognizedWords))));
     const contentGate = matchRate >= 80 ? "passed_preliminary" : "blocked_low_text_confidence";
     const tajweed = contentGate === "passed_preliminary"
-      ? await runSpecializedTajweedEngine(audioBytes, req.headers["content-type"] || "audio/m4a", surah, ayah)
+      ? await runSpecializedTajweedEngine(audioBytes, String(req.headers["content-type"] || "audio/m4a"), surah, ayah)
       : { status: "blocked_by_content_guard", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "أوقفنا تقييم التجويد لأن تطابق الكلمات أقل من الحد الأولي؛ يجب التأكد من النص قبل تقييم الأحكام." };
     const engines = {
       speechRecognition: { status: transcript ? "completed_preliminary" : "failed", model: "gpt-4o-mini-transcribe" },
