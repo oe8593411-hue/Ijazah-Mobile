@@ -9,7 +9,7 @@ if (riwayat.length !== 20) errors.push(`Expected 20 riwayat, found ${riwayat.len
 if (new Set(riwayat).size !== 20) errors.push("Riwayah names must be unique");
 if (!riwayat.includes("ابن جمّاز عن أبي جعفر")) errors.push("Abu Jafar second narrator must be Ibn Jammaz");
 if (riwayat.includes("عبيد بن الصباح عن أبي جعفر")) errors.push("Unexpected/incorrect Abu Jafar narrator entry");
-if (!source.includes('name === "حفص عن عاصم" ? "verified_hafs_only" : "not_verified"')) errors.push("Only Hafs may be marked available");
+if (!source.includes('name === "حفص عن عاصم" ? "verified_hafs_only" as const : "not_verified" as const')) errors.push("Only Hafs may be marked available");
 if (!source.includes('name === "حفص عن عاصم" ? "tanzil-uthmani-hafs-v1.1" : null')) errors.push("Corpus identity must be explicit and Hafs-only");
 if (errors.length) {
   console.error("Riwayah registry validation failed:");
