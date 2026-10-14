@@ -16,7 +16,7 @@ export default function Recite(){
  const [referenceLabel,setReferenceLabel]=useState("الآية");
  const [riwaya,setRiwayaState]=useState(getSelectedRiwayah());
  const setRiwaya=(value:string)=>{setSelectedRiwayah(value);setRiwayaState(value);setMessage(value==="حفص عن عاصم"?"تم اختيار حفص عن عاصم؛ النص الموثق والتسجيل والتحليل النصي المبدئي متاحون.":`تم اختيار ${value}. الاختيار محفوظ أثناء التنقل داخل التطبيق، لكن نص المصحف والتحليل لهذه الرواية غير مفعّلين قبل توثيق مصدرها.`);};
- const riwayat=["حفص عن عاصم","شعبة عن عاصم","ورش عن نافع","قالون عن نافع","البزي عن ابن كثير","قنبل عن ابن كثير","الدوري عن أبي عمرو","السوسي عن أبي عمرو","هشام عن ابن عامر","ابن ذكوان عن ابن عامر","خلف عن حمزة","خلاد عن حمزة","أبو الحارث عن الكسائي","الدوري عن الكسائي","رويس عن يعقوب","روح عن يعقوب","إسحاق عن خلف العاشر","إدريس عن خلف العاشر","عبيد بن الصباح عن أبي جعفر","ابن وردان عن أبي جعفر"];
+ const riwayat=["حفص عن عاصم","شعبة عن عاصم","قالون عن نافع","ورش عن نافع","البزي عن ابن كثير","قنبل عن ابن كثير","الدوري عن أبي عمرو","السوسي عن أبي عمرو","هشام عن ابن عامر","ابن ذكوان عن ابن عامر","خلف عن حمزة","خلاد عن حمزة","أبو الحارث عن الكسائي","الدوري عن الكسائي","ابن وردان عن أبي جعفر","ابن جمّاز عن أبي جعفر","رويس عن يعقوب","روح عن يعقوب","إسحاق عن خلف العاشر","إدريس عن خلف العاشر"];
 
  useEffect(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
    const corpus=m.default as {ayahs:{surah:number;ayah:number;text:string}[]};
@@ -85,7 +85,7 @@ export default function Recite(){
    const audioResponse=await fetch(uri);
    if(!audioResponse.ok) throw new Error("تعذر قراءة ملف التسجيل");
    const audioBlob=await audioResponse.blob();
-   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&ayah="+selectedAyah,{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
+   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&ayah="+selectedAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
    const result=await response.json();
    if(!response.ok) throw new Error(result?.message||"تعذر إكمال التحليل");
    setAnalysis(result); setSessionStatus("recorded");
