@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "status": "source_candidates_only",
+  "upstreamRepository": "quran-ws/quran-text",
+  "upstreamCommit": "b7c62daa3ac4c9ec37a398b35b8f246cee5bb217",
+  "upstreamCatalogPath": "data/catalog.json",
+  "upstreamCatalogGitBlobSha": "b950f08266f3a99dfafc816bd9b1951b9c468df5",
+  "upstreamCatalogGenerated": "2026-09-08",
+  "note": "Metadata only. No Quran text is included here and no entry is enabled. Counts are upstream expectations, not this app's validation results. Import requires downloading pinned files, checking published SHA-256 and license terms, independently comparing text, and qualified specialist review.",
+  "riwayat": [
+    {
+      "key": "hafs",
+      "name": "حفص عن عاصم",
+      "reader": "عاصم الكوفي",
+      "expectedAyahCount": 6236,
+      "expectedWordCount": 77432,
+      "countingSystem": "kufi",
+      "upstreamFile": "data/mushaf/hafs.json",
+      "source": "UthmanicHafs-v-3.0.zip :: UthmanicHafs-v-3.0.docx",
+      "crosscheckSource": "UthmanicHafs_v2-0.zip :: UthmanicHafs_v2-0 data/hafsData_v2-0.csv",
+      "status": "candidate_not_enabled"
+    },
+    {
+      "key": "shubah",
+      "name": "شعبة عن عاصم",
+      "reader": "عاصم الكوفي",
+      "expectedAyahCount": 6236,
+      "expectedWordCount": 77432,
+      "countingSystem": "kufi",
+      "upstreamFile": "data/mushaf/shubah.json",
+      "source": "UthmanicShubah-v-3.0.zip :: UthmanicShubah-v-3.0.docx",
+      "crosscheckSource": "UthmanicShuba_v2-0.zip :: UthmanicShuba_v2-0 data/shubaData_v2-0.csv",
+      "status": "candidate_not_enabled"
+    },
+    {
+      "key": "warsh",
+      "name": "ورش عن نافع",
+      "reader": "نافع المدني",
+      "expectedAyahCount": 6214,
+      "expectedWordCount": 77431,
+      "countingSystem": "madani-last",
+      "upstreamFile": "data/mushaf/warsh.json",
+      "source": "UthmanicWarsh-v-3.0.zip :: UthmanicWarsh-v-3.0.docx",
+      "crosscheckSource": "UthmanicWarsh_v2-1.zip :: UthmanicWarsh_v2-1 data/warshData_v2-1.csv",
+      "status": "candidate_not_enabled"
+    },
+    {
+      "key": "qalun",
+      "name": "قالون عن نافع",
+      "reader": "نافع المدني",
+      "expectedAyahCount": 6214,
+      "expectedWordCount": 77431,
+      "countingSystem": "madani-last",
+      "upstreamFile": "data/mushaf/qalun.json",
+      "source": "UthmanicQaloun-v-3.0.zip :: UthmanicQaloun-v-3.0.docx",
+      "crosscheckSource": "UthmanicQaloun_v2-1.zip :: UthmanicQaloun_v2-1 data/QalounData_v2-1.csv",
+      "status": "candidate_not_enabled"
+    },
+    {
+      "key": "duri",
+      "name": "الدوري عن أبي عمرو",
+      "reader": "أبو عمرو البصري",
+      "expectedAyahCount": 6217,
+      "expectedWordCount": 77431,
+      "countingSystem": "madani-first",
+      "upstreamFile": "data/mushaf/duri.json",
+      "source": "UthmanicDouri_V20.zip :: UthmanicDouri V20.docx",
+      "crosscheckSource": "UthmanicDouri_v2-0.zip :: UthmanicDouri_v2-0 data/DouriData_v2-0.csv",
+      "status": "candidate_not_enabled"
+    },
+    {
+      "key": "susi",
+      "name": "السوسي عن أبي عمرو",
+      "reader": "أبو عمرو البصري",
+      "expectedAyahCount": 6218,
+      "expectedWordCount": 77431,
+      "countingSystem": "madani-first",
+      "upstreamFile": "data/mushaf/susi.json",
+      "source": "UthmanicSousi-v-3.0.zip :: UthmanicSousi-v-3.0.docx",
+      "crosscheckSource": "UthmanicSousi_v2-0.zip :: UthmanicSousi_v2-0 data/SousiData_v2-0.csv",
+      "status": "candidate_not_enabled"
+    },
+    {
+      "key": "bazzi",
+      "name": "البزي عن ابن كثير",
+      "reader": "ابن كثير المكي",
+      "expectedAyahCount": 6220,
+      "expectedWordCount": 77432,
+      "countingSystem": "makki",
+      "upstreamFile": "data/mushaf/bazzi.json",
+      "source": "UthmanicBazzi-v-3.0.zip :: UthmanicBazzi-v-3.0.docx",
+      "crosscheckSource": null,
+      "status": "candidate_not_enabled"
+    }
+  ]
+}
