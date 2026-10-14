@@ -42,7 +42,6 @@ export default function Listen() {
  const [playingSurah, setPlayingSurah] = useState(0);
  const [loading, setLoading] = useState(false);
  const [message, setMessage] = useState("اختر القارئ والسورة ثم اضغط تشغيل.");
- const [availableSurahEditions, setAvailableSurahEditions] = useState<string[]>([]);
  const [progressWidth, setProgressWidth] = useState(1);
  const player = useAudioPlayer(null);
  const status = useAudioPlayerStatus(player);
@@ -52,31 +51,12 @@ export default function Listen() {
  const visibleReciters = useMemo(() => reciters.filter(r => r.name.toLocaleLowerCase().includes(reciterSearch.trim().toLocaleLowerCase()) || r.id.toLocaleLowerCase().includes(reciterSearch.trim().toLocaleLowerCase())).slice(0, 80), [reciters, reciterSearch]);
 
  useEffect(() => {
-   let active = true;
-   fetch("https://cdn.islamic.network/quran/info/by-surah/info.json")
-     .then(r => { if (!r.ok) throw new Error("audio edition list unavailable"); return r.json(); })
-     .then(json => {
-       const rows = Array.isArray(json) ? json : (json?.data ?? json?.editions ?? []);
-       const available = Array.isArray(rows) ? rows.map((x: {identifier?:string; id?:string; edition?:string}) => x.identifier || x.id || x.edition).filter((id: unknown): id is string => typeof id === "string") : [];
-       if (active) setAvailableSurahEditions(available);
-     })
-     .catch(() => { if (active) setAvailableSurahEditions(RECITERS.map(r => r.id)); });
-   return () => { active = false; };
- }, []);
-
- const supported = true;
-
- useEffect(() => {
    if (!status.didJustFinish) return;
    setPlayingSurah(0);
    setMessage("اكتمل الاستماع إلى سورة " + SURAH_NAMES[currentSurah - 1] + " كاملة.");
  }, [status.didJustFinish, currentSurah]);
 
  async function playSurah() {
-   if (!supported) {
-     setMessage("هذا التسجيل غير متاح حاليًا من مصدر الصوت. اختر قارئًا آخر من القائمة.");
-     return;
-   }
    setLoading(true);
    setMessage("جارٍ تحميل تسجيل السورة الكاملة…");
    try {
@@ -140,7 +120,7 @@ export default function Listen() {
     <Text style={s.nowMeta}>{selectedReciter.name} · التسجيل الصوتي المتاح لهذا القارئ</Text>
     <Pressable accessibilityRole="adjustable" accessibilityLabel="موضع التشغيل في السورة" onLayout={(event) => setProgressWidth(Math.max(1, event.nativeEvent.layout.width))} onPress={(event) => { if (status.duration > 0) { const ratio = Math.min(1, Math.max(0, event.nativeEvent.locationX / progressWidth)); player.seekTo(status.duration * ratio); } }} style={s.progressTrack}><View style={[s.progressFill,{width:status.duration>0?`${Math.min(100,Math.max(0,status.currentTime/status.duration*100))}%`:"0%"}]} /></Pressable>
     <View style={s.times}><Text>{formatTime(status.currentTime)}</Text><Text>{formatTime(status.duration)}</Text></View>
-    <Pressable style={s.playButton} onPress={pauseOrResume} disabled={loading || !supported}>
+    <Pressable style={s.playButton} onPress={pauseOrResume} disabled={loading}>
       {loading ? <ActivityIndicator color={NAVY}/> : <Text style={s.playIcon}>{status.playing?"Ⅱ":"▶"}</Text>}
       <Text style={s.playLabel}>{status.playing?"إيقاف مؤقت":"تشغيل السورة كاملة"}</Text>
     </Pressable>
