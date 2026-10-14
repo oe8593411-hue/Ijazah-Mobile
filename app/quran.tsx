@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, ScrollView } from "react-
 import { router } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
 
-const C = { navy:"#071A33", cyan:"#22C7D8", surface:"#F7F9FC", ink:"#152A42", muted:"#8391A3", white:"#FFFFFF" };
+const C = { navy:"#0B3528", cyan:"#C69A42", surface:"#F7F5EE", ink:"#163A2B", muted:"#718174", white:"#FFFFFF" };
 
 export default function Quran() {
   const [query, setQuery] = useState("");
@@ -70,12 +70,12 @@ const s = StyleSheet.create({
   input:{flex:1,height:50,color:C.ink,fontSize:13,paddingHorizontal:10},
   placeholder:{color:"#9BA8B5"},
   list:{paddingHorizontal:16,paddingBottom:36,gap:10},
-  sourceCard:{backgroundColor:"#E9F8FA",borderRadius:18,padding:15,borderWidth:1,borderColor:"#BDEDF1",marginBottom:3},
-  sourceTitle:{color:"#087E8B",fontWeight:"900",fontSize:13,textAlign:"right"},
-  sourceText:{color:"#52707D",fontSize:10,lineHeight:17,marginTop:5,textAlign:"right"},
+  sourceCard:{backgroundColor:"#E3F1E7",borderRadius:18,padding:15,borderWidth:1,borderColor:"#D9E7D7",marginBottom:3},
+  sourceTitle:{color:"#176B4D",fontWeight:"900",fontSize:13,textAlign:"right"},
+  sourceText:{color:"#637768",fontSize:10,lineHeight:17,marginTop:5,textAlign:"right"},
   item:{backgroundColor:C.white,borderRadius:19,padding:14,flexDirection:"row",alignItems:"center",gap:12},
   num:{width:42,height:42,borderRadius:14,backgroundColor:"#E8FAFC",alignItems:"center",justifyContent:"center"},
-  numText:{color:"#087E8B",fontWeight:"900",fontSize:13},
+  numText:{color:"#176B4D",fontWeight:"900",fontSize:13},
   copy:{flex:1},
   name:{color:C.navy,fontSize:18,fontWeight:"900",textAlign:"right"},
   sub:{color:C.muted,fontSize:10,marginTop:4,textAlign:"right"},
