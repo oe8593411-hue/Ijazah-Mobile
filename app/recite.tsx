@@ -163,7 +163,7 @@ export default function Recite(){
      <Text style={s.engineTitle}>حالة محركات AI4X</Text>
      <Text style={s.engineRow}>١. فهم الصوت: {analysis.engines?.speechRecognition?.status==="completed_preliminary"?"اكتمل مبدئيًا":"لم يكتمل"}</Text>
      <Text style={s.engineRow}>٢. مطابقة الآية: {analysis.engines?.quranAlignment?.status==="completed"?"اكتملت":"لم تكتمل"}</Text>
-     <Text style={s.engineRow}>٣. تحليل التجويد: {analysis.engines?.acousticTajweed?.status==="not_configured"?"المحرك المتخصص غير موصول":analysis.engines?.acousticTajweed?.status==="blocked_by_content_guard"?"متوقف لحماية دقة النص":analysis.engines?.acousticTajweed?.status==="preliminary"?"نتيجة صوتية أولية":"غير متاح"}</Text>
+     <Text style={s.engineRow}>٣. تحليل التجويد: {analysis.engines?.acousticTajweed?.status==="not_configured"?"المحرك المتخصص غير موصول":analysis.engines?.acousticTajweed?.status==="blocked_by_content_guard"?"متوقف لحماية دقة النص":analysis.engines?.acousticTajweed?.status==="unavailable"?"الخدمة غير متاحة":analysis.engines?.acousticTajweed?.status==="invalid_response"?"استجابة غير صالحة":"نتيجة صوتية أولية"}</Text>
      <Text style={s.engineRow}>٤. بوابة الثقة: {analysis.engines?.confidenceGate?.status==="passed_preliminary"?"اجتازت الحد النصي الأولي فقط":"أوقفت تقييم التجويد"}</Text>
     </View>
     {(analysis.tajweed?.findings||[]).slice(0,8).map((item:any,index:number)=><Text key={"tajweed-"+index} style={s.analysisError}>{typeof item==="string"?item:JSON.stringify(item)}</Text>)}
@@ -175,7 +175,7 @@ export default function Recite(){
     <View style={s.wave}>{[10,18,28,16,34,22,40,25,14,31,20,37,16,27,12,24].map((h,i)=><View key={i} style={[s.bar,{height:h}]}/>)}</View>
     <View style={s.metrics}>
       <Metric label="التسجيل" value={state.isRecording?"يعمل":"جاهز"}/>
-      <Metric label="محرك التجويد" value={analysis?.engines?.acousticTajweed?.status==="preliminary"?"متاح":analysis?.engines?.acousticTajweed?.status==="not_configured"?"غير موصول":"بانتظار التحليل"}/>
+      <Metric label="محرك التجويد" value={analysis?.engines?.acousticTajweed?.status==="not_configured"?"غير موصول":analysis?.engines?.acousticTajweed?.status==="blocked_by_content_guard"?"موقوف للحماية":analysis?.engines?.acousticTajweed?.status==="unavailable"?"غير متاح":analysis?.engines?.acousticTajweed?.status?"فُحص":"بانتظار التحليل"}/>
       <Metric label="الجلسة" value={sessionStatus==="recording"?"تسجيل":sessionStatus==="recorded"?"جاهزة":"—"}/>
       <Metric label="تطابق النص" value={analysis?analysis.matchRate+"%":"—"}/>
     </View>
