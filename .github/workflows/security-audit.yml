@@ -21,18 +21,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: true
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - name: Generate reproducible dependency lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Apply non-breaking security fixes
-        run: npm audit fix --no-fund
+        run: |
+          set +e
+          npm audit fix --no-fund
+          fix_status=$?
+          echo "npm audit fix exit code: $fix_status (remaining findings will be reported by the final audit step)"
+          exit 0
       - name: Install exact locked dependency tree
         run: npm ci --no-audit --no-fund
       - name: Check Expo compatibility
