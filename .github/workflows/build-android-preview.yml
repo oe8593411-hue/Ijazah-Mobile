@@ -2,6 +2,8 @@ name: Build Ijazah Android Preview
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -25,6 +27,9 @@ jobs:
 
       - name: Validate Expo project
         run: npx expo-doctor
+
+      - name: Export web bundle to verify app routes and TypeScript bundling
+        run: npx expo export --platform web
 
       - name: Link or initialize EAS project
         run: npx eas-cli@latest init --account ijazah-omar --non-interactive
