@@ -69,6 +69,10 @@ function alignWords(target: string, spoken: string) {
 export default async function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  // Keep public transcription spending disabled until app authentication and per-user rate limits are wired in.
+  if (process.env.IJAZAH_ANALYSIS_ENABLED !== "true") {
+    return res.status(503).json({ error: "analysis_not_enabled", message: "خدمة التحليل لم تُفعّل بعد؛ يجب إكمال المصادقة وحدود الاستخدام قبل فتحها للمستخدمين." });
+  }
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "analysis_not_configured", message: "خادم التحليل يحتاج إلى ضبط مفتاح مزود الذكاء الاصطناعي." });
   const surah = Number(req.query.surah);
