@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
@@ -34,7 +34,8 @@ const RECITERS = [
 ];
 
 export default function Listen() {
- const [surah, setSurah] = useState("1");
+ const params = useLocalSearchParams<{surah?: string}>();
+ const [surah, setSurah] = useState(typeof params.surah === "string" ? params.surah : "1");
  const [surahSearch, setSurahSearch] = useState("");
  const [reciterId, setReciterId] = useState(RECITERS[0].id);
  const [reciters] = useState(RECITERS);
@@ -45,6 +46,7 @@ export default function Listen() {
  const [progressWidth, setProgressWidth] = useState(1);
  const player = useAudioPlayer(null);
  const status = useAudioPlayerStatus(player);
+ useEffect(() => { if (typeof params.surah === "string") setSurah(params.surah); }, [params.surah]);
  const currentSurah = Math.max(1, Math.min(114, Number.parseInt(surah, 10) || 1));
  const visibleSurahs = useMemo(() => { const q = surahSearch.trim().toLocaleLowerCase(); return SURAHS.filter(item => !q || item.nameAr.includes(q) || String(item.number) === q); }, [surahSearch]);
  const selectedReciter = useMemo(() => reciters.find(r => r.id === reciterId) ?? reciters[0] ?? RECITERS[0], [reciters, reciterId]);
