@@ -4,18 +4,18 @@ import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 
 const C = {
-  ink: "#174765",
-  green: "#328DB8",
-  greenDeep: "#123B55",
-  mint: "#E5F5FC",
-  mint2: "#F1FAFE",
-  gold: "#C69A42",
-  paper: "#F7F5EE",
+  ink: "#142A43",
+  green: "#35C7DE",
+  greenDeep: "#071A33",
+  mint: "#E5F8FC",
+  mint2: "#F1F7FB",
+  gold: "#D5AA53",
+  paper: "#F4F8FC",
   white: "#FFFFFF",
-  muted: "#627F90",
-  line: "#D8EAF2",
-  purple: "#5C9CC2",
-  blue: "#B78A37",
+  muted: "#788BA0",
+  line: "#E0EAF2",
+  purple: "#4F9BB5",
+  blue: "#35AFC7",
 };
 
 export default function Home() {
@@ -25,7 +25,7 @@ export default function Home() {
   const wide = width >= 760;
   const t = (ar: string, en: string) => english ? en : ar;
   const bg = dark ? "#0D2A3D" : C.paper;
-  const surface = dark ? "#123B55" : C.white;
+  const surface = dark ? "#102B49" : C.white;
   const text = dark ? "#F3FAFD" : C.ink;
   const muted = dark ? "#A8D8EF" : C.muted;
 
@@ -66,7 +66,7 @@ export default function Home() {
           </View>
         </View>
 
-        <View style={[s.streakPanel, { backgroundColor: dark ? "#123B55" : "#FFFFFF", borderColor: dark ? "#245C7B" : "#D8EAF2" }]}>
+        <View style={[s.streakPanel, { backgroundColor: dark ? "#102B49" : "#FFFFFF", borderColor: dark ? "#245C7B" : "#E0EAF2" }]}>
           <View style={s.streakHead}>
             <View style={s.streakBadge}><Text style={s.streakBadgeText}>✦</Text></View>
             <View style={{ flex: 1 }}>
@@ -149,10 +149,10 @@ function Action({ title, sub, icon, tone, route, surface, text, muted }: {
   route: "/quran" | "/smart-test" | "/tajweed" | "/progress";
   surface: string; text: string; muted: string;
 }) {
-  const tones = { green: "#328DB8", purple: "#5C9CC2", gold: "#B78A37", blue: "#C69A42" };
-  const pale = { green: "#EAF7FC", purple: "#E5F5FC", gold: "#EAF7FC", blue: "#EAF7FC" };
+  const tones = { green: "#35C7DE", purple: "#4F9BB5", gold: "#B78A37", blue: "#D5AA53" };
+  const pale = { green: "#EAF7FC", purple: "#E5F8FC", gold: "#EAF7FC", blue: "#EAF7FC" };
   return (
-    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#D8EAF2" }]} onPress={() => router.push(route)}>
+    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#E0EAF2" }]} onPress={() => router.push(route)}>
       <View style={[s.actionIconBox, { backgroundColor: pale[tone] }]}><Text style={[s.actionIcon, { color: tones[tone] }]}>{icon}</Text></View>
       <Text style={[s.actionTitle, { color: text }]}>{title}</Text>
       <Text style={[s.actionSub, { color: muted }]}>{sub}</Text>
@@ -163,17 +163,17 @@ function Action({ title, sub, icon, tone, route, surface, text, muted }: {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
-  streakPanel: { borderRadius: 22, padding: 17, marginBottom: 22, borderWidth: 1, shadowColor: "#174765", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
+  streakPanel: { borderRadius: 22, padding: 17, marginBottom: 22, borderWidth: 1, shadowColor: "#071A33", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
   streakHead: { flexDirection: "row", alignItems: "center", gap: 11 },
   streakBadge: { width: 42, height: 42, borderRadius: 15, backgroundColor: "#F4EBD7", alignItems: "center", justifyContent: "center" },
   streakBadgeText: { color: "#A57A2C", fontSize: 22, fontWeight: "900" },
   streakTitle: { fontSize: 13, fontWeight: "900", textAlign: "right" },
   streakSubtitle: { fontSize: 10, marginTop: 4, textAlign: "right" },
-  streakCount: { minWidth: 52, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 13, backgroundColor: "#E5F5FC", alignItems: "center" },
-  streakCountNum: { color: "#328DB8", fontSize: 18, fontWeight: "900" },
+  streakCount: { minWidth: 52, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 13, backgroundColor: "#E5F8FC", alignItems: "center" },
+  streakCountNum: { color: "#168DA5", fontSize: 18, fontWeight: "900" },
   streakCountLabel: { color: "#5C9CC2", fontSize: 8, fontWeight: "800", marginTop: 1 },
   streakTrack: { height: 6, backgroundColor: "#DCEEF6", borderRadius: 8, overflow: "hidden", marginTop: 16 },
-  streakTrackFill: { width: "18%", height: 6, borderRadius: 8, backgroundColor: "#C69A42" },
+  streakTrackFill: { width: "18%", height: 6, borderRadius: 8, backgroundColor: "#D5AA53" },
   streakFoot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 },
   streakFootText: { fontSize: 10, textAlign: "right", flex: 1 },
   streakFootMark: { color: "#A57A2C", fontSize: 10, fontWeight: "900" },
@@ -214,17 +214,17 @@ const s = StyleSheet.create({
   livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#164B6A" },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#80D6F0" },
   liveText: { color: "#B7E8F6", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  heroDecoration: { color: "#C69A42", fontSize: 32 },
+  heroDecoration: { color: "#D5AA53", fontSize: 32 },
   heroTitle: { color: "#FFFFFF", fontSize: 25, lineHeight: 35, fontWeight: "900", textAlign: "right", marginTop: 16, maxWidth: 430, alignSelf: "flex-end" },
   heroSub: { color: "#C5E4F1", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
   heroBottom: { marginTop: 20, gap: 14 },
   progressWrap: { gap: 8 },
   progressTrack: { height: 5, backgroundColor: "#246A8C", borderRadius: 5, overflow: "hidden" },
-  progressFill: { width: "8%", height: 5, backgroundColor: "#C69A42", borderRadius: 5 },
+  progressFill: { width: "8%", height: 5, backgroundColor: "#D5AA53", borderRadius: 5 },
   progressLabel: { color: "#B7D7E8", fontSize: 10, textAlign: "right" },
   heroActions: { flexDirection: "row", flexWrap: "wrap", gap: 9, justifyContent: "flex-end" },
-  primaryButton: { backgroundColor: "#C69A42", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
-  primaryButtonText: { color: "#174765", fontSize: 12, fontWeight: "900" },
+  primaryButton: { backgroundColor: "#D5AA53", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
+  primaryButtonText: { color: "#071A33", fontSize: 12, fontWeight: "900" },
   listenButton: { borderColor: "#80D6F0", borderWidth: 1, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 14, alignSelf: "flex-end" },
   listenButtonText: { color: "#E7F7FD", fontSize: 12, fontWeight: "900" },
   heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#247CA5", opacity: 0.35, right: -92, top: 54 },
@@ -246,16 +246,16 @@ const s = StyleSheet.create({
   dailyRef: { fontSize: 10, textAlign: "center", marginTop: 7 },
   goldLine: { height: 1, backgroundColor: "#A8DDED", width: 54, alignSelf: "center", marginTop: 15 },
   dailyNote: { fontSize: 11, lineHeight: 19, textAlign: "center", marginTop: 13 },
-  premium: { backgroundColor: "#174765", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
+  premium: { backgroundColor: "#071A33", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
   premiumTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  premiumCrown: { color: "#C69A42", fontSize: 24 },
-  premiumLabel: { color: "#C69A42", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
+  premiumCrown: { color: "#D5AA53", fontSize: 24 },
+  premiumLabel: { color: "#D5AA53", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
   premiumTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", textAlign: "right", marginTop: 13, lineHeight: 28 },
   premiumSub: { color: "#D1E5EE", fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 7 },
-  premiumLink: { backgroundColor: "#C69A42", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
-  premiumLinkText: { color: "#174765", fontSize: 11, fontWeight: "900" },
+  premiumLink: { backgroundColor: "#D5AA53", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
+  premiumLinkText: { color: "#071A33", fontSize: 11, fontWeight: "900" },
   trustCard: { borderRadius: 18, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
-  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#E5F5FC", color: "#328DB8", fontWeight: "900", fontSize: 18, paddingTop: 4 },
+  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#E5F8FC", color: "#168DA5", fontWeight: "900", fontSize: 18, paddingTop: 4 },
   trustTitle: { fontSize: 12, fontWeight: "900", textAlign: "right" },
   trustSub: { fontSize: 10, lineHeight: 16, textAlign: "right", marginTop: 3 },
   footer: { fontSize: 10, textAlign: "center", marginTop: 28 }
