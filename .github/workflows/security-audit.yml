@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "package.json"
+      - "package-lock.json"
       - ".github/workflows/security-audit.yml"
 
 permissions:
@@ -27,18 +28,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - name: Generate reproducible dependency lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Commit lockfile if it changed
+      - name: Apply non-breaking security fixes
+        run: npm audit fix --no-fund
+      - name: Install exact locked dependency tree
+        run: npm ci --no-audit --no-fund
+      - name: Check Expo compatibility
+        run: npx expo-doctor
+      - name: Verify Android bundle export
+        run: npx expo export --platform android
+      - name: Commit validated lockfile changes
         run: |
           if [ -f package-lock.json ] && [ -n "$(git status --porcelain -- package-lock.json)" ]; then
             git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.email "41898282+users.noreply.github.com"
             git add package-lock.json
-            git commit -m "Add reproducible npm dependency lockfile"
+            git commit -m "Apply compatible dependency security fixes"
             git push
           fi
-      - name: Audit dependency tree and report vulnerable packages
+      - name: Audit dependency tree and enforce security gate
         shell: bash
         run: |
           set +e
