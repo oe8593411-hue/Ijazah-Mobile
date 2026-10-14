@@ -1,4 +1,3 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import corpus from "../src/quran/verified-corpus.json";
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
@@ -67,7 +66,7 @@ function alignWords(target: string, spoken: string) {
   return { expectedWords: n, recognizedWords: m, editDistance: dp[n][m], errors: errors.slice(0, 20) };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
   const apiKey = process.env.OPENAI_API_KEY;
