@@ -28,6 +28,9 @@ jobs:
       - name: Validate Expo project
         run: npx expo-doctor
 
+      - name: Type-check application and AI4X API
+        run: npx tsc --noEmit
+
       - name: Export web bundle to verify app routes and TypeScript bundling
         run: npx expo export --platform web
 
