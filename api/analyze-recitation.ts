@@ -124,6 +124,15 @@ export default async function handler(req: any, res: any) {
   }
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "analysis_not_configured", message: "خادم التحليل يحتاج إلى ضبط مفتاح مزود الذكاء الاصطناعي." });
+  const requestedRiwaya = String(req.query.riwaya || "");
+  // Fail closed: only the verified Hafs corpus is currently supported.
+  // Never compare another riwayah against Hafs text.
+  if (requestedRiwaya !== "hafs") {
+    return res.status(409).json({
+      error: "riwayah_not_verified",
+      message: "هذه الرواية غير مفعّلة للتحليل؛ لا يجوز مقارنتها بنص حفص."
+    });
+  }
   const surah = Number(req.query.surah);
   const ayah = Number(req.query.ayah);
   if (!Number.isInteger(surah) || surah < 1 || surah > 114 || !Number.isInteger(ayah) || ayah < 1) {
