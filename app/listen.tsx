@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
+import { SURAHS } from "../src/quran/surahs";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 
 const NAVY = "#092A59";
@@ -34,6 +35,7 @@ const RECITERS = [
 
 export default function Listen() {
  const [surah, setSurah] = useState("1");
+ const [surahSearch, setSurahSearch] = useState("");
  const [reciterId, setReciterId] = useState(RECITERS[0].id);
  const [reciters, setReciters] = useState(RECITERS);
  const [reciterSearch, setReciterSearch] = useState("");
@@ -47,6 +49,7 @@ export default function Listen() {
  const player = useAudioPlayer(null);
  const status = useAudioPlayerStatus(player);
  const currentSurah = Math.max(1, Math.min(114, Number.parseInt(surah, 10) || 1));
+ const visibleSurahs = useMemo(() => { const q = surahSearch.trim().toLocaleLowerCase(); return SURAHS.filter(item => !q || item.nameAr.includes(q) || String(item.number) === q); }, [surahSearch]);
  const selectedReciter = useMemo(() => reciters.find(r => r.id === reciterId) ?? reciters[0] ?? RECITERS[0], [reciters, reciterId]);
  const visibleReciters = useMemo(() => reciters.filter(r => r.name.toLocaleLowerCase().includes(reciterSearch.trim().toLocaleLowerCase()) || r.id.toLocaleLowerCase().includes(reciterSearch.trim().toLocaleLowerCase())).slice(0, 80), [reciters, reciterSearch]);
 
@@ -154,6 +157,16 @@ export default function Listen() {
     <View style={s.surahNameWrap}><Text style={s.surahName}>{SURAH_NAMES[currentSurah-1]}</Text><Text style={s.surahMeta}>السورة رقم {currentSurah}</Text></View>
     <View style={s.stepper}><Pressable onPress={()=>setSurah(String(Math.min(114,currentSurah+1)))} style={s.step}><Text style={s.stepText}>＋</Text></Pressable><Pressable onPress={()=>setSurah(String(Math.max(1,currentSurah-1)))} style={s.step}><Text style={s.stepText}>−</Text></Pressable></View>
    </View>
+   <Text style={s.label}>قائمة السور كاملة</Text>
+   <TextInput value={surahSearch} onChangeText={setSurahSearch} placeholder="ابحث باسم السورة أو رقمها..." placeholderTextColor="#7A91A2" style={s.searchInput} textAlign="right" />
+   <View style={s.surahList}>
+    {visibleSurahs.map(item => <Pressable key={item.number} onPress={() => { setSurah(String(item.number)); setMessage("تم اختيار سورة " + item.nameAr + ". اضغط تشغيل السورة كاملة."); }} style={[s.surahListItem, currentSurah === item.number && s.surahListItemActive]}>
+      <View style={[s.surahListNum, currentSurah === item.number && s.surahListNumActive]}><Text style={[s.surahListNumText, currentSurah === item.number && s.surahListNumTextActive]}>{item.number}</Text></View>
+      <View style={s.surahListCopy}><Text style={[s.surahListName, currentSurah === item.number && s.surahListNameActive]}>{item.nameAr}</Text><Text style={[s.surahListMeta, currentSurah === item.number && s.surahListNameActive]}>{item.ayahCount} آية</Text></View>
+      <Text style={[s.surahListAction, currentSurah === item.number && s.surahListNameActive]}>{currentSurah === item.number ? "✓ محددة" : "اختيار"}</Text>
+    </Pressable>)}
+    {visibleSurahs.length === 0 && <Text style={s.noSurahs}>لا توجد سورة مطابقة للبحث.</Text>}
+   </View>
    <View style={s.playerCard}>
     <View style={s.soundIcon}><Text style={s.soundIconText}>♫</Text></View>
     <Text style={s.nowPlaying}>{status.playing ? "يتم التشغيل الآن" : "مشغّل إجازة"}</Text>
@@ -188,6 +201,19 @@ const s = StyleSheet.create({
  label:{color:NAVY,fontSize:14,fontWeight:"900",textAlign:"right",marginTop:12,marginBottom:9},
  searchInput:{height:45,backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#DCEAF1",borderRadius:14,paddingHorizontal:13,color:NAVY,fontSize:12},
  reciterCount:{color:"#6E879B",fontSize:10,textAlign:"right",marginTop:7,marginBottom:8},
+ surahList:{gap:7,marginTop:10},
+ surahListItem:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E1ECF2",borderRadius:14,paddingHorizontal:12,paddingVertical:10,flexDirection:"row",alignItems:"center",gap:11},
+ surahListItemActive:{backgroundColor:"#EAF7FC",borderColor:CYAN},
+ surahListNum:{width:34,height:34,borderRadius:12,backgroundColor:"#F0F6FA",alignItems:"center",justifyContent:"center"},
+ surahListNumActive:{backgroundColor:NAVY},
+ surahListNumText:{color:NAVY,fontSize:11,fontWeight:"900"},
+ surahListNumTextActive:{color:"#FFFFFF"},
+ surahListCopy:{flex:1,alignItems:"flex-end"},
+ surahListName:{color:NAVY,fontSize:13,fontWeight:"900"},
+ surahListNameActive:{color:NAVY},
+ surahListMeta:{color:"#6E879B",fontSize:9,marginTop:3},
+ surahListAction:{color:"#6E879B",fontSize:10,fontWeight:"800"},
+ noSurahs:{textAlign:"center",color:"#6E879B",fontSize:12,padding:18},
  reciterList:{gap:8},
  reciter:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E1ECF2",borderRadius:15,paddingHorizontal:13,paddingVertical:12,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
  selected:{backgroundColor:NAVY,borderColor:NAVY},unavailable:{opacity:0.5},
