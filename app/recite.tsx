@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
-import { Audio, RecordingPresets, useAudioRecorder, useAudioRecorderState } from "expo-audio";
+import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 
 const C={navy:"#071A33",navy2:"#102746",cyan:"#22C7D8",soft:"#E4F9FB",ink:"#152A42",muted:"#7B8B9E",surface:"#F7F9FC",white:"#FFFFFF"};
 
@@ -40,9 +40,10 @@ export default function Recite(){
     setMessage("تم حفظ التسجيل مؤقتًا على الجهاز. محرك التحليل غير متصل؛ لن نعرض تصحيحًا أو درجة وهمية.");
     return;
    }
-   const permission=await Audio.requestRecordingPermissionsAsync();
+   const permission=await requestRecordingPermissionsAsync();
    if(!permission.granted){setMessage("يجب السماح بالميكروفون لبدء التلاوة");return;}
    setRecorded(false);
+   await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
    await recorder.prepareToRecordAsync();
    recorder.record();
    setSessionStatus("recording");
@@ -68,7 +69,7 @@ export default function Recite(){
     <Pressable onPress={()=>setMode("live")} style={[s.mode,mode==="live"&&s.modeActive]}><Text style={[s.modeText,mode==="live"&&s.modeTextActive]}>مباشر</Text></Pressable>
    </View>
 
-   <View style={s.surahRow}><View><Text style={s.surah}>موضع التسميع</Text><Text style={s.meta}>سورة رقم ${selectedSurah} • ${referenceLabel} • ${riwaya}</Text></View><View style={s.badge}><Text style={s.badgeText}>{selectedSurah}</Text></View></View>
+   <View style={s.surahRow}><View><Text style={s.surah}>موضع التسميع</Text><Text style={s.meta}>{`سورة رقم ${selectedSurah} • ${referenceLabel} • ${riwaya}`}</Text></View><View style={s.badge}><Text style={s.badgeText}>{selectedSurah}</Text></View></View>
 
    <Text style={s.riwayaTitle}>اختر الرواية من القراءات العشر</Text>
    <View style={s.riwayaList}>{riwayat.map((item)=><Pressable key={item} onPress={()=>setRiwaya(item)} style={[s.riwayaChip,riwaya===item&&s.riwayaChipActive]}><Text style={[s.riwayaChipText,riwaya===item&&s.riwayaChipTextActive]}>{item}</Text></Pressable>)}</View>
