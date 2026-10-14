@@ -1,4 +1,16 @@
-import { Pressable, StyleSheet, Text, View } from "react-native"; import { router } from "expo-router";
-export default function Progress(){return <View style={s.root}><View style={s.head}><Pressable onPress={()=>router.back()}><Text style={s.back}>‹</Text></Pressable><Text style={s.title}>تقدمي</Text><View style={{width:28}}/></View><View style={s.body}><Text style={s.big}>٧</Text><Text style={s.label}>أيام متواصلة</Text><View style={s.row}><Stat n="٤٥٪" t="ورد اليوم"/><Stat n="٣٢" t="آية محفوظة"/><Stat n="١٨" t="جلسة"/></View><View style={s.card}><Text style={s.ct}>هدف الأسبوع</Text><Text style={s.cs}>٤ من ٧ جلسات مكتملة</Text><View style={s.track}><View style={s.fill}/></View></View></View></View>}
-function Stat({n,t}:{n:string;t:string}){return <View style={s.stat}><Text style={s.n}>{n}</Text><Text style={s.t}>{t}</Text></View>}
-const s=StyleSheet.create({root:{flex:1,backgroundColor:"#F7F9FC"},head:{paddingTop:58,paddingHorizontal:20,paddingBottom:18,backgroundColor:"#071A33",flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{color:"#fff",fontSize:34},title:{color:"#fff",fontSize:19,fontWeight:"800"},body:{padding:24,alignItems:"center"},big:{fontSize:64,fontWeight:"900",color:"#22C7D8",marginTop:30},label:{color:"#52677D"},row:{flexDirection:"row",gap:10,marginTop:30,width:"100%"},stat:{flex:1,backgroundColor:"#fff",borderRadius:20,padding:16,alignItems:"center"},n:{fontSize:21,fontWeight:"900",color:"#071A33"},t:{fontSize:10,color:"#8291A2",marginTop:5},card:{backgroundColor:"#fff",width:"100%",borderRadius:22,padding:20,marginTop:14},ct:{textAlign:"right",fontWeight:"800",color:"#071A33"},cs:{textAlign:"right",color:"#7B8C9E",marginTop:6},track:{height:8,backgroundColor:"#E4EAF0",borderRadius:8,marginTop:16},fill:{height:8,width:"57%",backgroundColor:"#22C7D8",borderRadius:8}});
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+
+export default function Progress(){
+ return <View style={s.root}>
+  <View style={s.head}><Pressable onPress={()=>router.back()}><Text style={s.back}>‹</Text></Pressable><Text style={s.title}>تقدمي</Text><View style={{width:28}}/></View>
+  <View style={s.body}>
+   <Text style={s.icon}>◔</Text><Text style={s.big}>رحلتك تبدأ هنا</Text>
+   <Text style={s.label}>لم نسجل جلسات مكتملة بعد، لذلك لن نعرض إحصائيات تقديرية على أنها بيانات حقيقية.</Text>
+   <View style={s.card}><Text style={s.ct}>كيف تبدأ؟</Text><Text style={s.cs}>ابدأ جلسة تسميع أو اختبار حفظ. ستظهر الإحصائيات هنا عندما يتم ربط تسجيل الجلسات وتخزينها بشكل موثوق.</Text></View>
+   <Pressable style={s.button} onPress={()=>router.push("/recite")}><Text style={s.buttonText}>ابدأ التسميع</Text></Pressable>
+   <Pressable style={s.secondary} onPress={()=>router.push("/premium")}><Text style={s.secondaryText}>اكتشف بريميوم 👑</Text></Pressable>
+  </View>
+ </View>
+}
+const s=StyleSheet.create({root:{flex:1,backgroundColor:"#F7F9FC"},head:{paddingTop:58,paddingHorizontal:20,paddingBottom:18,backgroundColor:"#071A33",flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{color:"#fff",fontSize:34},title:{color:"#fff",fontSize:19,fontWeight:"800"},body:{padding:24,alignItems:"center"},icon:{fontSize:54,color:"#22C7D8",marginTop:55},big:{fontSize:21,fontWeight:"900",color:"#071A33",marginTop:18,textAlign:"center"},label:{color:"#52677D",fontSize:13,lineHeight:22,textAlign:"center",marginTop:10},card:{backgroundColor:"#fff",width:"100%",borderRadius:22,padding:20,marginTop:28},ct:{textAlign:"right",fontWeight:"800",color:"#071A33",fontSize:15},cs:{textAlign:"right",color:"#7B8C9E",marginTop:8,lineHeight:21,fontSize:12},button:{width:"100%",backgroundColor:"#22C7D8",borderRadius:16,padding:15,alignItems:"center",marginTop:18},buttonText:{color:"#071A33",fontWeight:"900"},secondary:{width:"100%",borderWidth:1,borderColor:"#D6E0E9",borderRadius:16,padding:15,alignItems:"center",marginTop:9},secondaryText:{color:"#071A33",fontWeight:"800"}});
