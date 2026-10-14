@@ -63,3 +63,11 @@ jobs:
           summary_status=$?
           echo "npm audit exit code: $audit_status"
           exit "$summary_status"
+      - name: Preserve machine-readable security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ijazah-npm-audit-report
+          path: npm-audit-report.json
+          if-no-files-found: ignore
+          retention-days: 14
