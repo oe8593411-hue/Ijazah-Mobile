@@ -82,10 +82,10 @@ export default function Recite(){
    if(!permission.granted){setMessage("يجب السماح بالميكروفون لبدء التلاوة");return;}
    setRecorded(false);
    setHeardText("");
-   startLiveWords();
    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
    await recorder.prepareToRecordAsync();
    recorder.record();
+   startLiveWords();
    setSessionStatus("recording");
    setMessage("جاري الاستماع… اقرأ الآية بهدوء");
   }catch(error){
