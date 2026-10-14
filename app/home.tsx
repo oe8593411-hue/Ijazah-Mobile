@@ -4,18 +4,18 @@ import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 
 const C = {
-  ink: "#173B35",
-  green: "#0D6B5D",
-  greenDeep: "#073D36",
-  mint: "#DDF3EA",
-  mint2: "#EFF8F3",
-  gold: "#D6A64B",
-  paper: "#F7F8F3",
+  ink: "#092A59",
+  green: "#0B477A",
+  greenDeep: "#061A3A",
+  mint: "#DDF4FB",
+  mint2: "#EFF9FC",
+  gold: "#39A9D0",
+  paper: "#F5FAFD",
   white: "#FFFFFF",
-  muted: "#788A82",
-  line: "#E4EAE4",
-  purple: "#7561B8",
-  blue: "#3D83A6",
+  muted: "#647F91",
+  line: "#DCEAF1",
+  purple: "#287CA7",
+  blue: "#39A9D0",
 };
 
 export default function Home() {
@@ -24,8 +24,8 @@ export default function Home() {
   const { width } = useWindowDimensions();
   const wide = width >= 760;
   const t = (ar: string, en: string) => english ? en : ar;
-  const bg = dark ? "#0D1E1A" : C.paper;
-  const surface = dark ? "#142B25" : C.white;
+  const bg = dark ? "#061326" : C.paper;
+  const surface = dark ? "#102746" : C.white;
   const text = dark ? "#F2F7F3" : C.ink;
   const muted = dark ? "#A7BBB1" : C.muted;
 
@@ -35,17 +35,17 @@ export default function Home() {
       <ScrollView contentContainerStyle={[s.content, wide && s.wideContent]}>
         <View style={s.header}>
           <View style={s.brand}>
-            <View style={s.logo}><Text style={s.logoMark}>۞</Text></View>
+            <View style={s.logo}><Text style={s.logoMark}>إ</Text><View style={s.logoBook} /></View>
             <View>
-              <Text style={[s.brandName, { color: text }]}>{t("إجازة", "Ijazah")}</Text>
-              <Text style={[s.brandSub, { color: muted }]}>{t("رحلتك مع القرآن", "Your Quran journey")}</Text>
+              <Text style={[s.brandName, { color: text }]}>{t("إجازة", "IJAAZAH")}</Text>
+              <Text style={[s.brandSub, { color: muted }]}>{t("الأكاديمية الإلكترونية للقرآن", "ONLINE QURAN ACADEMY")}</Text>
             </View>
           </View>
           <View style={s.controls}>
-            <Pressable accessibilityLabel="Language" onPress={() => setEnglish(!english)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#29473D" : C.line }]}>
+            <Pressable accessibilityLabel="Language" onPress={() => setEnglish(!english)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#234A68" : C.line }]}>
               <Text style={[s.controlText, { color: text }]}>{english ? "عربي" : "EN"}</Text>
             </Pressable>
-            <Pressable accessibilityLabel="Toggle appearance" onPress={() => setDark(!dark)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#29473D" : C.line }]}>
+            <Pressable accessibilityLabel="Toggle appearance" onPress={() => setDark(!dark)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#234A68" : C.line }]}>
               <Text style={s.controlText}>{dark ? "☀️" : "☾"}</Text>
             </Pressable>
             <View style={s.avatar}><Text style={s.avatarText}>ع</Text></View>
@@ -80,7 +80,10 @@ export default function Home() {
                   <View style={s.progressTrack}><View style={s.progressFill} /></View>
                   <Text style={s.progressLabel}>{t("رحلتك تبدأ بجلسة واحدة", "Your journey starts with one session")}</Text>
                 </View>
-                <Pressable style={s.primaryButton} onPress={() => router.push("/recite")}><Text style={s.primaryButtonText}>{t("ابدأ التسميع  ←", "Start reciting  →")}</Text></Pressable>
+                <View style={s.heroActions}>
+                  <Pressable style={s.primaryButton} onPress={() => router.push("/recite")}><Text style={s.primaryButtonText}>{t("ابدأ التسميع  ←", "Start reciting  →")}</Text></Pressable>
+                  <Pressable style={s.listenButton} onPress={() => router.push("/listen")}><Text style={s.listenButtonText}>{t("استمع للقرآن  ♫", "Listen to Quran  ♫")}</Text></Pressable>
+                </View>
               </View>
               <View style={s.heroGlow} />
             </View>
@@ -98,7 +101,7 @@ export default function Home() {
           </View>
 
           <View style={[s.sideColumn, wide && { flex: 0.8 }]}>
-            <View style={[s.dailyCard, { backgroundColor: surface, borderColor: dark ? "#29473D" : C.line }]}>
+            <View style={[s.dailyCard, { backgroundColor: surface, borderColor: dark ? "#234A68" : C.line }]}>
               <View style={s.dailyHeader}><Text style={s.dailyIcon}>☀</Text><Text style={[s.dailyTitle, { color: text }]}>{t("وقفة اليوم", "A moment for today")}</Text></View>
               <Text style={[s.dailyArabic, { color: text }]}>{t("وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا", "Recite the Quran with measured recitation")}</Text>
               <Text style={[s.dailyRef, { color: muted }]}>{t("سورة المزمل · ٤", "Al-Muzzammil · 4")}</Text>
@@ -113,7 +116,7 @@ export default function Home() {
               <View style={s.premiumLink}><Text style={s.premiumLinkText}>{t("اكتشف المزايا  ←", "Explore features  →")}</Text></View>
             </Pressable>
 
-            <View style={[s.trustCard, { backgroundColor: dark ? "#17362D" : C.mint2 }]}>
+            <View style={[s.trustCard, { backgroundColor: dark ? "#102746" : C.mint2 }]}>
               <Text style={s.trustIcon}>✓</Text>
               <View style={{ flex: 1 }}>
                 <Text style={[s.trustTitle, { color: text }]}>{t("القرآن أولًا", "Quran comes first")}</Text>
@@ -133,8 +136,8 @@ function Action({ title, sub, icon, tone, route, surface, text, muted }: {
   route: "/quran" | "/smart-test" | "/tajweed" | "/progress";
   surface: string; text: string; muted: string;
 }) {
-  const tones = { green: "#0D7967", purple: "#7965BD", gold: "#B9892F", blue: "#3D83A6" };
-  const pale = { green: "#E2F3EC", purple: "#EEE9FA", gold: "#FBF1D9", blue: "#E5F1F7" };
+  const tones = { green: "#0B477A", purple: "#287CA7", gold: "#248DB5", blue: "#39A9D0" };
+  const pale = { green: "#EAF7FC", purple: "#DDF4FB", gold: "#EAF7FC", blue: "#EAF7FC" };
   return (
     <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#E6ECE6" }]} onPress={() => router.push(route)}>
       <View style={[s.actionIconBox, { backgroundColor: pale[tone] }]}><Text style={[s.actionIcon, { color: tones[tone] }]}>{icon}</Text></View>
@@ -152,7 +155,8 @@ const s = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
   brand: { flexDirection: "row", alignItems: "center", gap: 11 },
   logo: { width: 47, height: 47, borderRadius: 16, backgroundColor: C.green, alignItems: "center", justifyContent: "center", shadowColor: C.greenDeep, shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
-  logoMark: { color: "#FFFFFF", fontSize: 29 },
+  logoMark: { color: "#FFFFFF", fontSize: 27, fontWeight: "900" },
+  logoBook: { position: "absolute", bottom: 8, width: 25, height: 7, borderTopWidth: 2, borderColor: "#B7E8F6", transform: [{ rotate: "-8deg" }] },
   brandName: { fontSize: 21, fontWeight: "900", textAlign: "right" },
   brandSub: { fontSize: 10, marginTop: 2, textAlign: "right" },
   controls: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -168,8 +172,8 @@ const s = StyleSheet.create({
   intro: { fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 6 },
   ornament: { width: 102, height: 102, borderRadius: 34, backgroundColor: C.mint, alignItems: "center", justifyContent: "center", overflow: "hidden", transform: [{ rotate: "-5deg" }] },
   ornamentWide: { width: 128, height: 128, borderRadius: 42 },
-  orbitOne: { position: "absolute", width: 92, height: 92, borderWidth: 1, borderColor: "#9DCDBB", borderRadius: 28, transform: [{ rotate: "35deg" }] },
-  orbitTwo: { position: "absolute", width: 67, height: 67, borderWidth: 1, borderColor: "#B3D9C8", borderRadius: 23, transform: [{ rotate: "55deg" }] },
+  orbitOne: { position: "absolute", width: 92, height: 92, borderWidth: 1, borderColor: "#7ABED8", borderRadius: 28, transform: [{ rotate: "35deg" }] },
+  orbitTwo: { position: "absolute", width: 67, height: 67, borderWidth: 1, borderColor: "#B7E8F6", borderRadius: 23, transform: [{ rotate: "55deg" }] },
   bookEmoji: { fontSize: 39 },
   sparkle: { position: "absolute", top: 9, right: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
   sparkleText: { color: "#FFFFFF", fontSize: 14 },
@@ -179,20 +183,23 @@ const s = StyleSheet.create({
   sideColumn: { gap: 14, marginTop: 0 },
   hero: { backgroundColor: C.greenDeep, borderRadius: 28, padding: 23, minHeight: 255, overflow: "hidden", borderWidth: 1, borderColor: "#1D5A4C" },
   heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#174F43" },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#A6E7C5" },
-  liveText: { color: "#BEE9D5", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#123B65" },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#80D6F0" },
+  liveText: { color: "#B7E8F6", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
   heroDecoration: { color: "#D6B86E", fontSize: 32 },
   heroTitle: { color: "#FFFFFF", fontSize: 25, lineHeight: 35, fontWeight: "900", textAlign: "right", marginTop: 16, maxWidth: 430, alignSelf: "flex-end" },
-  heroSub: { color: "#C5DDD2", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
+  heroSub: { color: "#C5E4F1", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
   heroBottom: { marginTop: 20, gap: 14 },
   progressWrap: { gap: 8 },
-  progressTrack: { height: 5, backgroundColor: "#315F52", borderRadius: 5, overflow: "hidden" },
+  progressTrack: { height: 5, backgroundColor: "#1B446A", borderRadius: 5, overflow: "hidden" },
   progressFill: { width: "8%", height: 5, backgroundColor: "#D6B86E", borderRadius: 5 },
-  progressLabel: { color: "#B7D0C5", fontSize: 10, textAlign: "right" },
-  primaryButton: { backgroundColor: "#D8B76B", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
-  primaryButtonText: { color: "#163B31", fontSize: 12, fontWeight: "900" },
-  heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#145B49", opacity: 0.35, right: -92, top: 54 },
+  progressLabel: { color: "#B7D7E8", fontSize: 10, textAlign: "right" },
+  heroActions: { flexDirection: "row", flexWrap: "wrap", gap: 9, justifyContent: "flex-end" },
+  primaryButton: { backgroundColor: "#39A9D0", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
+  primaryButtonText: { color: "#092A59", fontSize: 12, fontWeight: "900" },
+  listenButton: { borderColor: "#80D6F0", borderWidth: 1, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 14, alignSelf: "flex-end" },
+  listenButtonText: { color: "#E7F7FD", fontSize: 12, fontWeight: "900" },
+  heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#144F7C", opacity: 0.35, right: -92, top: 54 },
   sectionHeader: { marginTop: 26, marginBottom: 13, gap: 4, alignItems: "flex-end" },
   sectionTitle: { fontSize: 18, fontWeight: "900" },
   sectionHint: { fontSize: 11 },
@@ -211,16 +218,16 @@ const s = StyleSheet.create({
   dailyRef: { fontSize: 10, textAlign: "center", marginTop: 7 },
   goldLine: { height: 1, backgroundColor: "#E8D6A6", width: 54, alignSelf: "center", marginTop: 15 },
   dailyNote: { fontSize: 11, lineHeight: 19, textAlign: "center", marginTop: 13 },
-  premium: { backgroundColor: "#201B2D", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#57472F" },
+  premium: { backgroundColor: "#092A59", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
   premiumTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  premiumCrown: { color: "#E6C16C", fontSize: 24 },
-  premiumLabel: { color: "#E6C16C", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
+  premiumCrown: { color: "#39A9D0", fontSize: 24 },
+  premiumLabel: { color: "#39A9D0", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
   premiumTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", textAlign: "right", marginTop: 13, lineHeight: 28 },
-  premiumSub: { color: "#D1C9BD", fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 7 },
-  premiumLink: { backgroundColor: "#E6C16C", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
-  premiumLinkText: { color: "#282113", fontSize: 11, fontWeight: "900" },
+  premiumSub: { color: "#D1E5EE", fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 7 },
+  premiumLink: { backgroundColor: "#39A9D0", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
+  premiumLinkText: { color: "#092A59", fontSize: 11, fontWeight: "900" },
   trustCard: { borderRadius: 18, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
-  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#C4E9D7", color: "#0D6B5D", fontWeight: "900", fontSize: 18, paddingTop: 4 },
+  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#DDF4FB", color: "#0B477A", fontWeight: "900", fontSize: 18, paddingTop: 4 },
   trustTitle: { fontSize: 12, fontWeight: "900", textAlign: "right" },
   trustSub: { fontSize: 10, lineHeight: 16, textAlign: "right", marginTop: 3 },
   footer: { fontSize: 10, textAlign: "center", marginTop: 28 }
