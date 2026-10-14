@@ -4,18 +4,18 @@ import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 
 const C = {
-  ink: "#092A59",
-  green: "#0B477A",
-  greenDeep: "#061A3A",
-  mint: "#DDF4FB",
-  mint2: "#EFF9FC",
-  gold: "#39A9D0",
-  paper: "#F5FAFD",
+  ink: "#163A2B",
+  green: "#176B4D",
+  greenDeep: "#0B3528",
+  mint: "#E3F1E7",
+  mint2: "#F0F6EF",
+  gold: "#C69A42",
+  paper: "#F7F5EE",
   white: "#FFFFFF",
-  muted: "#647F91",
-  line: "#DCEAF1",
-  purple: "#287CA7",
-  blue: "#39A9D0",
+  muted: "#718174",
+  line: "#E2E8DC",
+  purple: "#54785F",
+  blue: "#B78A37",
 };
 
 export default function Home() {
@@ -24,8 +24,8 @@ export default function Home() {
   const { width } = useWindowDimensions();
   const wide = width >= 760;
   const t = (ar: string, en: string) => english ? en : ar;
-  const bg = dark ? "#061326" : C.paper;
-  const surface = dark ? "#102746" : C.white;
+  const bg = dark ? "#071C16" : C.paper;
+  const surface = dark ? "#102B21" : C.white;
   const text = dark ? "#F3FAFD" : C.ink;
   const muted = dark ? "#A8C9D9" : C.muted;
 
@@ -64,6 +64,19 @@ export default function Home() {
             <Text style={s.bookEmoji}>📖</Text>
             <View style={s.sparkle}><Text style={s.sparkleText}>✦</Text></View>
           </View>
+        </View>
+
+        <View style={[s.streakPanel, { backgroundColor: dark ? "#102B21" : "#FFFFFF", borderColor: dark ? "#2A4B3A" : "#E2E8DC" }]}>
+          <View style={s.streakHead}>
+            <View style={s.streakBadge}><Text style={s.streakBadgeText}>✦</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.streakTitle, { color: text }]}>{t("خطوتك اليوم", "YOUR DAILY JOURNEY")}</Text>
+              <Text style={[s.streakSubtitle, { color: muted }]}>{t("ابدأ بالقليل، وداوم عليه", "Start small. Stay consistent.")}</Text>
+            </View>
+            <View style={s.streakCount}><Text style={s.streakCountNum}>١</Text><Text style={s.streakCountLabel}>{t("جلسة", "SESSION")}</Text></View>
+          </View>
+          <View style={s.streakTrack}><View style={s.streakTrackFill} /></View>
+          <View style={s.streakFoot}><Text style={[s.streakFootText, { color: muted }]}>{t("هدف مقترح: ١٠ دقائق قرآن اليوم", "Suggested goal: 10 minutes of Quran today")}</Text><Text style={s.streakFootMark}>بِسْمِ اللَّهِ</Text></View>
         </View>
 
         <View style={[s.mainGrid, wide && s.mainGridWide]}>
@@ -136,10 +149,10 @@ function Action({ title, sub, icon, tone, route, surface, text, muted }: {
   route: "/quran" | "/smart-test" | "/tajweed" | "/progress";
   surface: string; text: string; muted: string;
 }) {
-  const tones = { green: "#0B477A", purple: "#287CA7", gold: "#248DB5", blue: "#39A9D0" };
-  const pale = { green: "#EAF7FC", purple: "#DDF4FB", gold: "#EAF7FC", blue: "#EAF7FC" };
+  const tones = { green: "#176B4D", purple: "#54785F", gold: "#B78A37", blue: "#C69A42" };
+  const pale = { green: "#EAF7FC", purple: "#E3F1E7", gold: "#EAF7FC", blue: "#EAF7FC" };
   return (
-    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#DCEAF1" }]} onPress={() => router.push(route)}>
+    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#E2E8DC" }]} onPress={() => router.push(route)}>
       <View style={[s.actionIconBox, { backgroundColor: pale[tone] }]}><Text style={[s.actionIcon, { color: tones[tone] }]}>{icon}</Text></View>
       <Text style={[s.actionTitle, { color: text }]}>{title}</Text>
       <Text style={[s.actionSub, { color: muted }]}>{sub}</Text>
@@ -150,6 +163,20 @@ function Action({ title, sub, icon, tone, route, surface, text, muted }: {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
+  streakPanel: { borderRadius: 22, padding: 17, marginBottom: 22, borderWidth: 1, shadowColor: "#163A2B", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
+  streakHead: { flexDirection: "row", alignItems: "center", gap: 11 },
+  streakBadge: { width: 42, height: 42, borderRadius: 15, backgroundColor: "#F4EBD7", alignItems: "center", justifyContent: "center" },
+  streakBadgeText: { color: "#A57A2C", fontSize: 22, fontWeight: "900" },
+  streakTitle: { fontSize: 13, fontWeight: "900", textAlign: "right" },
+  streakSubtitle: { fontSize: 10, marginTop: 4, textAlign: "right" },
+  streakCount: { minWidth: 52, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 13, backgroundColor: "#E3F1E7", alignItems: "center" },
+  streakCountNum: { color: "#176B4D", fontSize: 18, fontWeight: "900" },
+  streakCountLabel: { color: "#54785F", fontSize: 8, fontWeight: "800", marginTop: 1 },
+  streakTrack: { height: 6, backgroundColor: "#E7ECE3", borderRadius: 8, overflow: "hidden", marginTop: 16 },
+  streakTrackFill: { width: "18%", height: 6, borderRadius: 8, backgroundColor: "#C69A42" },
+  streakFoot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 },
+  streakFootText: { fontSize: 10, textAlign: "right", flex: 1 },
+  streakFootMark: { color: "#A57A2C", fontSize: 10, fontWeight: "900" },
   content: { paddingHorizontal: 20, paddingTop: 26, paddingBottom: 40, maxWidth: 1120, width: "100%", alignSelf: "center" },
   wideContent: { paddingHorizontal: 34, paddingTop: 30 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
@@ -186,17 +213,17 @@ const s = StyleSheet.create({
   livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#123B65" },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#80D6F0" },
   liveText: { color: "#B7E8F6", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  heroDecoration: { color: "#39A9D0", fontSize: 32 },
+  heroDecoration: { color: "#C69A42", fontSize: 32 },
   heroTitle: { color: "#FFFFFF", fontSize: 25, lineHeight: 35, fontWeight: "900", textAlign: "right", marginTop: 16, maxWidth: 430, alignSelf: "flex-end" },
   heroSub: { color: "#C5E4F1", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
   heroBottom: { marginTop: 20, gap: 14 },
   progressWrap: { gap: 8 },
   progressTrack: { height: 5, backgroundColor: "#1B446A", borderRadius: 5, overflow: "hidden" },
-  progressFill: { width: "8%", height: 5, backgroundColor: "#39A9D0", borderRadius: 5 },
+  progressFill: { width: "8%", height: 5, backgroundColor: "#C69A42", borderRadius: 5 },
   progressLabel: { color: "#B7D7E8", fontSize: 10, textAlign: "right" },
   heroActions: { flexDirection: "row", flexWrap: "wrap", gap: 9, justifyContent: "flex-end" },
-  primaryButton: { backgroundColor: "#39A9D0", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
-  primaryButtonText: { color: "#092A59", fontSize: 12, fontWeight: "900" },
+  primaryButton: { backgroundColor: "#C69A42", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
+  primaryButtonText: { color: "#163A2B", fontSize: 12, fontWeight: "900" },
   listenButton: { borderColor: "#80D6F0", borderWidth: 1, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 14, alignSelf: "flex-end" },
   listenButtonText: { color: "#E7F7FD", fontSize: 12, fontWeight: "900" },
   heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#144F7C", opacity: 0.35, right: -92, top: 54 },
@@ -218,16 +245,16 @@ const s = StyleSheet.create({
   dailyRef: { fontSize: 10, textAlign: "center", marginTop: 7 },
   goldLine: { height: 1, backgroundColor: "#A8DDED", width: 54, alignSelf: "center", marginTop: 15 },
   dailyNote: { fontSize: 11, lineHeight: 19, textAlign: "center", marginTop: 13 },
-  premium: { backgroundColor: "#092A59", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
+  premium: { backgroundColor: "#163A2B", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
   premiumTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  premiumCrown: { color: "#39A9D0", fontSize: 24 },
-  premiumLabel: { color: "#39A9D0", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
+  premiumCrown: { color: "#C69A42", fontSize: 24 },
+  premiumLabel: { color: "#C69A42", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
   premiumTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", textAlign: "right", marginTop: 13, lineHeight: 28 },
   premiumSub: { color: "#D1E5EE", fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 7 },
-  premiumLink: { backgroundColor: "#39A9D0", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
-  premiumLinkText: { color: "#092A59", fontSize: 11, fontWeight: "900" },
+  premiumLink: { backgroundColor: "#C69A42", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
+  premiumLinkText: { color: "#163A2B", fontSize: 11, fontWeight: "900" },
   trustCard: { borderRadius: 18, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
-  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#DDF4FB", color: "#0B477A", fontWeight: "900", fontSize: 18, paddingTop: 4 },
+  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#E3F1E7", color: "#176B4D", fontWeight: "900", fontSize: 18, paddingTop: 4 },
   trustTitle: { fontSize: 12, fontWeight: "900", textAlign: "right" },
   trustSub: { fontSize: 10, lineHeight: 16, textAlign: "right", marginTop: 3 },
   footer: { fontSize: 10, textAlign: "center", marginTop: 28 }
