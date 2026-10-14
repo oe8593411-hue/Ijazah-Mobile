@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View, ScrollView } from "react-
 import { router } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
 
-const C = { navy:"#0B3528", cyan:"#C69A42", surface:"#F7F5EE", ink:"#163A2B", muted:"#718174", white:"#FFFFFF" };
+const C = { navy:"#174765", cyan:"#C69A42", surface:"#F7F5EE", ink:"#174765", muted:"#627F90", white:"#FFFFFF" };
 
 export default function Quran() {
   const [query, setQuery] = useState("");
@@ -62,24 +62,24 @@ const s = StyleSheet.create({
   back:{color:"#fff",fontSize:34,lineHeight:36,width:34},
   headCenter:{flex:1,alignItems:"center"},
   title:{color:"#fff",fontSize:19,fontWeight:"900"},
-  meta:{color:"#8EDFE7",fontSize:9,marginTop:4},
-  verified:{borderWidth:1,borderColor:"#2B6474",borderRadius:12,paddingHorizontal:9,paddingVertical:6},
-  verifiedText:{color:"#B8F1F4",fontSize:9,fontWeight:"900"},
-  searchBox:{margin:16,backgroundColor:C.white,borderRadius:17,paddingHorizontal:14,flexDirection:"row",alignItems:"center",borderWidth:1,borderColor:"#E3EAF0"},
+  meta:{color:"#B7E8F6",fontSize:9,marginTop:4},
+  verified:{borderWidth:1,borderColor:"#6CB5D9",borderRadius:12,paddingHorizontal:9,paddingVertical:6},
+  verifiedText:{color:"#DDF6FF",fontSize:9,fontWeight:"900"},
+  searchBox:{margin:16,backgroundColor:C.white,borderRadius:17,paddingHorizontal:14,flexDirection:"row",alignItems:"center",borderWidth:1,borderColor:"#D8EAF2"},
   searchIcon:{fontSize:25,color:C.cyan},
   input:{flex:1,height:50,color:C.ink,fontSize:13,paddingHorizontal:10},
-  placeholder:{color:"#9BA8B5"},
+  placeholder:{color:"#8BAFC0"},
   list:{paddingHorizontal:16,paddingBottom:36,gap:10},
-  sourceCard:{backgroundColor:"#E3F1E7",borderRadius:18,padding:15,borderWidth:1,borderColor:"#D9E7D7",marginBottom:3},
-  sourceTitle:{color:"#176B4D",fontWeight:"900",fontSize:13,textAlign:"right"},
-  sourceText:{color:"#637768",fontSize:10,lineHeight:17,marginTop:5,textAlign:"right"},
+  sourceCard:{backgroundColor:"#E5F5FC",borderRadius:18,padding:15,borderWidth:1,borderColor:"#D4EAF5",marginBottom:3},
+  sourceTitle:{color:"#328DB8",fontWeight:"900",fontSize:13,textAlign:"right"},
+  sourceText:{color:"#627F90",fontSize:10,lineHeight:17,marginTop:5,textAlign:"right"},
   item:{backgroundColor:C.white,borderRadius:19,padding:14,flexDirection:"row",alignItems:"center",gap:12},
-  num:{width:42,height:42,borderRadius:14,backgroundColor:"#E8FAFC",alignItems:"center",justifyContent:"center"},
-  numText:{color:"#176B4D",fontWeight:"900",fontSize:13},
+  num:{width:42,height:42,borderRadius:14,backgroundColor:"#E5F5FC",alignItems:"center",justifyContent:"center"},
+  numText:{color:"#328DB8",fontWeight:"900",fontSize:13},
   copy:{flex:1},
   name:{color:C.navy,fontSize:18,fontWeight:"900",textAlign:"right"},
   sub:{color:C.muted,fontSize:10,marginTop:4,textAlign:"right"},
-  arrow:{fontSize:24,color:"#A5B2C0",width:18},
+  arrow:{fontSize:24,color:"#8BAFC0",width:18},
   empty:{backgroundColor:C.white,borderRadius:20,padding:22,alignItems:"center"},
   emptyTitle:{color:C.navy,fontSize:15,fontWeight:"900"},
   emptyText:{color:C.muted,fontSize:11,marginTop:5}
