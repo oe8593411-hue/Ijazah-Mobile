@@ -19,7 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install pg
+      - name: Install pinned PostgreSQL client with network retries
+        run: npm install --no-save --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 pg@8.16.3
       - name: Download exact Tanzil Uthmani 1.1 source
         run: |
           curl --fail --location --retry 3 \
