@@ -35,6 +35,8 @@ const RECITERS = [
 export default function Listen() {
  const [surah, setSurah] = useState("1");
  const [reciterId, setReciterId] = useState(RECITERS[0].id);
+ const [reciters, setReciters] = useState(RECITERS);
+ const [reciterSearch, setReciterSearch] = useState("");
  const [playingSurah, setPlayingSurah] = useState(0);
  const [loading, setLoading] = useState(false);
  const [message, setMessage] = useState("اختر القارئ والسورة ثم اضغط تشغيل.");
@@ -42,15 +44,25 @@ export default function Listen() {
  const player = useAudioPlayer(null);
  const status = useAudioPlayerStatus(player);
  const currentSurah = Math.max(1, Math.min(114, Number.parseInt(surah, 10) || 1));
- const selectedReciter = useMemo(() => RECITERS.find(r => r.id === reciterId) ?? RECITERS[0], [reciterId]);
+ const selectedReciter = useMemo(() => reciters.find(r => r.id === reciterId) ?? reciters[0] ?? RECITERS[0], [reciters, reciterId]);
+ const visibleReciters = useMemo(() => reciters.filter(r => r.name.toLocaleLowerCase().includes(reciterSearch.trim().toLocaleLowerCase()) || r.id.toLocaleLowerCase().includes(reciterSearch.trim().toLocaleLowerCase())).slice(0, 80), [reciters, reciterSearch]);
 
  useEffect(() => {
    let active = true;
    fetch("https://api.alquran.cloud/v1/edition/format/audio")
      .then(r => { if (!r.ok) throw new Error("audio edition list unavailable"); return r.json(); })
      .then(json => {
-       const available = (json?.data ?? []).map((x: {identifier?:string}) => x.identifier).filter((x: unknown): x is string => typeof x === "string");
-       if (active) setEditions(available);
+       const audioReciters = (json?.data ?? [])
+         .filter((x: {language?:string; format?:string; identifier?:string}) => x.language === "ar" && x.format === "audio" && typeof x.identifier === "string")
+         .map((x: {identifier:string; name?:string; englishName?:string}) => ({ id: x.identifier, name: x.name || x.englishName || x.identifier }));
+       const available = audioReciters.map((x: {id:string}) => x.id);
+       if (active) {
+         setEditions(available);
+         if (audioReciters.length) {
+           setReciters(audioReciters);
+           if (!available.includes(reciterId)) setReciterId(available[0]);
+         }
+       }
      })
      .catch(() => { if (active) setEditions(RECITERS.map(r => r.id)); });
    return () => { active = false; };
@@ -91,8 +103,10 @@ export default function Listen() {
   </View>
   <ScrollView contentContainerStyle={s.body}>
    <View style={s.intro}><Text style={s.introTitle}>القرآن كاملًا، سورةً سورة</Text><Text style={s.introSub}>اختر من القرّاء المتاحين، واستمع إلى السورة كاملة عبر الإنترنت.</Text></View>
-   <Text style={s.label}>القارئ</Text>
-   <View style={s.reciterList}>{RECITERS.map(r => {
+   <Text style={s.label}>القارئ — ابحث باسم الشيخ</Text>
+   <TextInput value={reciterSearch} onChangeText={setReciterSearch} placeholder="اكتب اسم القارئ..." placeholderTextColor="#7A91A2" style={s.searchInput} textAlign="right" />
+   <Text style={s.reciterCount}>{reciters.length} تسجيلًا صوتيًا عربيًا متاحًا في فهرس المصدر</Text>
+   <View style={s.reciterList}>{visibleReciters.map(r => {
     const isAvailable = editions.length === 0 || editions.includes(r.id);
     return <Pressable key={r.id} onPress={() => { setReciterId(r.id); setMessage(isAvailable ? `تم اختيار ${r.name}.` : "هذا القارئ غير متاح حاليًا في مصدر الصوت."); }} style={[s.reciter, reciterId===r.id&&s.selected, !isAvailable&&s.unavailable]}>
       <Text style={[s.reciterName,reciterId===r.id&&s.selectedText]}>{r.name}</Text>
@@ -137,6 +151,8 @@ const s = StyleSheet.create({
  intro:{backgroundColor:"#E8F6FC",borderRadius:22,padding:19,marginBottom:20,borderWidth:1,borderColor:"#C9E9F5"},
  introTitle:{color:NAVY,fontSize:20,fontWeight:"900",textAlign:"right"},introSub:{color:"#526F83",fontSize:12,lineHeight:20,textAlign:"right",marginTop:7},
  label:{color:NAVY,fontSize:14,fontWeight:"900",textAlign:"right",marginTop:12,marginBottom:9},
+ searchInput:{height:45,backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#DCEAF1",borderRadius:14,paddingHorizontal:13,color:NAVY,fontSize:12},
+ reciterCount:{color:"#6E879B",fontSize:10,textAlign:"right",marginTop:7,marginBottom:8},
  reciterList:{gap:8},
  reciter:{backgroundColor:"#FFFFFF",borderWidth:1,borderColor:"#E1ECF2",borderRadius:15,paddingHorizontal:13,paddingVertical:12,flexDirection:"row",alignItems:"center",justifyContent:"space-between"},
  selected:{backgroundColor:NAVY,borderColor:NAVY},unavailable:{opacity:0.5},
