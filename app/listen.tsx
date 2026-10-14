@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
@@ -37,15 +37,13 @@ export default function Listen() {
  const [surah, setSurah] = useState("1");
  const [surahSearch, setSurahSearch] = useState("");
  const [reciterId, setReciterId] = useState(RECITERS[0].id);
- const [reciters, setReciters] = useState(RECITERS);
+ const [reciters] = useState(RECITERS);
  const [reciterSearch, setReciterSearch] = useState("");
  const [playingSurah, setPlayingSurah] = useState(0);
  const [loading, setLoading] = useState(false);
  const [message, setMessage] = useState("اختر القارئ والسورة ثم اضغط تشغيل.");
- const [editions, setEditions] = useState<string[]>([]);
- const audioQueueRef = useRef<string[]>([]);
- const queueIndexRef = useRef(0);
- const finishHandledRef = useRef(false);
+ const [availableSurahEditions, setAvailableSurahEditions] = useState<string[]>([]);
+ const [progressWidth, setProgressWidth] = useState(1);
  const player = useAudioPlayer(null);
  const status = useAudioPlayerStatus(player);
  const currentSurah = Math.max(1, Math.min(114, Number.parseInt(surah, 10) || 1));
@@ -55,48 +53,24 @@ export default function Listen() {
 
  useEffect(() => {
    let active = true;
-   fetch("https://api.alquran.cloud/v1/edition/format/audio")
+   fetch("https://cdn.islamic.network/quran/info/by-surah/info.json")
      .then(r => { if (!r.ok) throw new Error("audio edition list unavailable"); return r.json(); })
      .then(json => {
-       const audioReciters = (json?.data ?? [])
-         .filter((x: {language?:string; format?:string; identifier?:string}) => x.language === "ar" && x.format === "audio" && typeof x.identifier === "string")
-         .map((x: {identifier:string; name?:string; englishName?:string}) => ({ id: x.identifier, name: x.name || x.englishName || x.identifier }));
-       const available = audioReciters.map((x: {id:string}) => x.id);
-       if (active) {
-         setEditions(available);
-         if (audioReciters.length) {
-           setReciters(audioReciters);
-           if (!available.includes(reciterId)) setReciterId(available[0]);
-         }
-       }
+       const rows = Array.isArray(json) ? json : (json?.data ?? json?.editions ?? []);
+       const available = Array.isArray(rows) ? rows.map((x: {identifier?:string; id?:string; edition?:string}) => x.identifier || x.id || x.edition).filter((id: unknown): id is string => typeof id === "string") : [];
+       if (active) setAvailableSurahEditions(available);
      })
-     .catch(() => { if (active) setEditions(RECITERS.map(r => r.id)); });
+     .catch(() => { if (active) setAvailableSurahEditions(RECITERS.map(r => r.id)); });
    return () => { active = false; };
  }, []);
 
- const supported = editions.includes(reciterId);
+ const supported = true;
 
  useEffect(() => {
-   if (!status.didJustFinish || finishHandledRef.current) return;
-   finishHandledRef.current = true;
-   const nextIndex = queueIndexRef.current + 1;
-   const queue = audioQueueRef.current;
-   if (nextIndex < queue.length) {
-     queueIndexRef.current = nextIndex;
-     void (async () => {
-       try {
-         await player.replace({ uri: queue[nextIndex] });
-         player.play();
-       } catch {
-         setMessage("توقف تشغيل إحدى الآيات بسبب مشكلة في الاتصال. اضغط تشغيل لإعادة المحاولة.");
-         setPlayingSurah(0);
-       }
-     })();
-   } else if (queue.length > 0) {
-     setMessage("اكتمل الاستماع إلى سورة " + SURAH_NAMES[playingSurah - 1] + ".");
-     setPlayingSurah(0);
-   }
- }, [status.didJustFinish, player, playingSurah]);
+   if (!status.didJustFinish) return;
+   setPlayingSurah(0);
+   setMessage("اكتمل الاستماع إلى سورة " + SURAH_NAMES[currentSurah - 1] + " كاملة.");
+ }, [status.didJustFinish, currentSurah]);
 
  async function playSurah() {
    if (!supported) {
@@ -104,24 +78,16 @@ export default function Listen() {
      return;
    }
    setLoading(true);
-   setMessage("جارٍ تحميل آيات السورة من مصدر التلاوة…");
+   setMessage("جارٍ تحميل تسجيل السورة الكاملة…");
    try {
-     const response = await fetch("https://api.alquran.cloud/v1/surah/" + currentSurah + "/" + reciterId);
-     if (!response.ok) throw new Error("Audio source unavailable");
-     const json = await response.json();
-     const queue = (json?.data?.ayahs ?? []).map((ayah: {audio?:string}) => ayah.audio).filter((url: unknown): url is string => typeof url === "string" && url.startsWith("https://"));
-     if (queue.length === 0) throw new Error("No ayah audio returned");
-     audioQueueRef.current = queue;
-     queueIndexRef.current = 0;
-     finishHandledRef.current = false;
-     await player.replace({ uri: queue[0] });
+     const uri = "https://cdn.islamic.network/quran/audio-surah/128/" + reciterId + "/" + currentSurah + ".mp3";
+     await player.replace({ uri });
      player.play();
      setPlayingSurah(currentSurah);
-     setMessage("يُشغَّل الآن: سورة " + SURAH_NAMES[currentSurah - 1] + " كاملة بصوت " + selectedReciter.name + "، آيةً بعد آية.");
+     setMessage("يُشغَّل الآن التسجيل الكامل لسورة " + SURAH_NAMES[currentSurah - 1] + " بصوت " + selectedReciter.name + ".");
    } catch {
-     audioQueueRef.current = [];
      setPlayingSurah(0);
-     setMessage("تعذّر تحميل تسجيل السورة لهذا القارئ. جرّب قارئًا آخر أو تحقّق من الإنترنت.");
+     setMessage("التسجيل الكامل لهذا القارئ غير متاح أو تعذّر تحميله. اختر قارئًا آخر أو تحقّق من الإنترنت.");
    } finally {
      setLoading(false);
    }
@@ -172,7 +138,7 @@ export default function Listen() {
     <Text style={s.nowPlaying}>{status.playing ? "يتم التشغيل الآن" : "مشغّل إجازة"}</Text>
     <Text style={s.nowTitle}>{SURAH_NAMES[currentSurah-1]}</Text>
     <Text style={s.nowMeta}>{selectedReciter.name} · التسجيل الصوتي المتاح لهذا القارئ</Text>
-    <View style={s.progressTrack}><View style={[s.progressFill,{width:status.duration>0?`${Math.min(100,Math.max(0,status.currentTime/status.duration*100))}%`:"0%"}]} /></View>
+    <Pressable accessibilityRole="adjustable" accessibilityLabel="موضع التشغيل في السورة" onLayout={(event) => setProgressWidth(Math.max(1, event.nativeEvent.layout.width))} onPress={(event) => { if (status.duration > 0) { const ratio = Math.min(1, Math.max(0, event.nativeEvent.locationX / progressWidth)); player.seekTo(status.duration * ratio); } }} style={s.progressTrack}><View style={[s.progressFill,{width:status.duration>0?`${Math.min(100,Math.max(0,status.currentTime/status.duration*100))}%`:"0%"}]} /></Pressable>
     <View style={s.times}><Text>{formatTime(status.currentTime)}</Text><Text>{formatTime(status.duration)}</Text></View>
     <Pressable style={s.playButton} onPress={pauseOrResume} disabled={loading || !supported}>
       {loading ? <ActivityIndicator color={NAVY}/> : <Text style={s.playIcon}>{status.playing?"Ⅱ":"▶"}</Text>}
@@ -182,7 +148,7 @@ export default function Listen() {
    </View>
    <View style={s.riwayaInfo}><Text style={s.infoTitle}>القراءات والروايات</Text><Text style={s.infoText}>الصوت يُشغَّل بالرواية التي يوفرها تسجيل القارئ نفسه. لن ننسب التسجيل إلى ورش أو قالون أو غيرهما دون مصدر موثّق يثبت الرواية. دعم اختيار جميع القراءات العشر يتطلب توفير تسجيلات كاملة موثّقة لكل رواية.</Text></View>
    <Text style={s.message}>{message}</Text>
-   <Text style={s.footnote}>مصدر الصوت: Al Quran Cloud CDN. يحتاج التشغيل إلى اتصال بالإنترنت؛ قد تختلف الإتاحة حسب القارئ والسورة.</Text>
+   <Text style={s.footnote}>مصدر الصوت: Al Quran Cloud CDN، ملفات السور الكاملة. يحتاج التشغيل إلى اتصال بالإنترنت؛ الإتاحة تختلف حسب القارئ والسورة.</Text>
   </ScrollView>
  </View>;
 }
