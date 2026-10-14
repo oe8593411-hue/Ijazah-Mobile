@@ -30,6 +30,8 @@ export default function Recite(){
  const [heardText,setHeardText]=useState("");
  const [speechMessage,setSpeechMessage]=useState("التعرّف المباشر على الكلمات يعمل في متصفح يدعمه فقط، ولا يُعدّ تصحيحًا للتلاوة.");
  const [speechRecognition,setSpeechRecognition]=useState<any>(null);
+ const [analysis,setAnalysis]=useState<any>(null);
+ const [analysisBusy,setAnalysisBusy]=useState(false);
 
  function startLiveWords(){
   const browser = globalThis as unknown as { SpeechRecognition?: new () => any; webkitSpeechRecognition?: new () => any };
@@ -64,6 +66,27 @@ export default function Recite(){
   setSpeechRecognition(null);
  }
 
+ async function analyzeRecording(uri:string|undefined){
+  if(!uri){setMessage("التسجيل تم، لكن لم يُرجع الجهاز مسار الملف لتحليله.");return;}
+  const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"").replace(/\/$/,"");
+  if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
+  setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
+  setMessage("جارٍ إرسال التسجيل لتحويله إلى نص ومقارنته بالآية المرجعية…");
+  try{
+   const audioResponse=await fetch(uri);
+   if(!audioResponse.ok) throw new Error("تعذر قراءة ملف التسجيل");
+   const audioBlob=await audioResponse.blob();
+   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&ayah="+selectedAyah,{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
+   const result=await response.json();
+   if(!response.ok) throw new Error(result?.message||"تعذر إكمال التحليل");
+   setAnalysis(result); setSessionStatus("recorded");
+   setMessage("اكتملت المقارنة النصية المبدئية. هذا ليس حكمًا على التجويد أو صحة الأداء الصوتي.");
+  }catch(error){
+   const detail=error instanceof Error?error.message:"خطأ غير معروف";
+   setSessionStatus("recorded"); setMessage("تعذر إكمال التحليل: "+detail+". لم نعرض نتيجة مخمّنة.");
+  }finally{setAnalysisBusy(false);}
+ }
+
  async function toggleRecording(){
   try{
    if(riwaya !== "حفص عن عاصم"){
@@ -75,7 +98,9 @@ export default function Recite(){
     await recorder.stop();
     setRecorded(true);
     setSessionStatus("recorded");
-    setMessage("تم حفظ التسجيل مؤقتًا على الجهاز. محرك التحليل غير متصل؛ لن نعرض تصحيحًا أو درجة وهمية.");
+    setMessage("انتهى التسجيل. جارٍ تجهيز التحليل إن كان الخادم مضبوطًا.");
+    const audioUri=recorder.uri;
+    void analyzeRecording(audioUri);
     return;
    }
    const permission=await requestRecordingPermissionsAsync();
@@ -129,6 +154,14 @@ export default function Recite(){
     {heardText.length>0?<Text style={s.heardText}>{heardText}</Text>:<Text style={s.heardPlaceholder}>{state.isRecording?"بانتظار التعرّف على الكلمات…":"ابدأ التسميع لتظهر الكلمات هنا إذا كان المتصفح يدعم التعرّف الصوتي."}</Text>}
    </View>
 
+   {analysisBusy&&<View style={s.pending}><Text style={s.pendingTitle}>جارٍ تحليل التسجيل</Text><Text style={s.pendingText}>نحوّل الصوت إلى كلمات ثم نقارنها بالنص المرجعي. تحليل التجويد الصوتي يحتاج محركًا متخصصًا منفصلًا.</Text></View>}
+   {analysis&&<View style={s.analysisCard}>
+    <Text style={s.analysisTitle}>نتيجة المقارنة النصية المبدئية</Text>
+    <Text style={s.analysisTranscript}>ما تعرّف عليه النظام: {analysis.transcript}</Text>
+    <Text style={s.analysisScore}>نسبة التطابق النصي التقريبية: {analysis.matchRate}%</Text>
+    {(analysis.textAlignment?.errors||[]).length>0?(analysis.textAlignment.errors.slice(0,8).map((item:any,index:number)=><Text key={index} style={s.analysisError}>{item.type==="possible_omission"?"احتمال إسقاط":item.type==="possible_addition"?"احتمال زيادة":"احتمال اختلاف"}: {item.expected?("المتوقع «"+item.expected+"»"):""} {item.heard?("، المسموع «"+item.heard+"»"):""}</Text>)):<Text style={s.analysisError}>لم تظهر اختلافات نصية واضحة، لكن هذا لا يثبت صحة التجويد.</Text>}
+    <Text style={s.analysisDisclaimer}>{analysis.tajweed?.message||analysis.disclaimer}</Text>
+   </View>}
    <View style={s.liveCard}>
     <View style={s.liveHeader}><View><Text style={s.liveTitle}>مراقبة التلاوة</Text><Text style={s.liveSub}>{mode==="live"?"وضع مباشر — التسجيل الفعلي":"وضع التحليل العميق — بانتظار المحرك"}</Text></View><View style={s.pulse}><View style={s.pulseInner}/></View></View>
     <View style={s.wave}>{[10,18,28,16,34,22,40,25,14,31,20,37,16,27,12,24].map((h,i)=><View key={i} style={[s.bar,{height:h}]}/>)}</View>
@@ -140,7 +173,7 @@ export default function Recite(){
     </View>
    </View>
 
-   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>لن يعرض التطبيق تصحيحًا للكلمات أو التجويد قبل وصول التسجيل إلى محرك التحليل الحقيقي واجتياز بوابة الثقة. لا توجد نتائج وهمية.</Text></View>
+   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام.</Text></View>
 
    <Text style={s.sectionTitle}>خط أنابيب التحليل</Text>
    <View style={s.steps}>
@@ -158,7 +191,7 @@ export default function Recite(){
    <Text style={s.listening}>{message}</Text>
    {state.isRecording&&<Text style={s.timer}>{Math.floor((state.durationMillis||0)/1000)} ث</Text>}
 
-   {recorded&&<View style={s.pending}><Text style={s.pendingTitle}>🎙️ التسجيل تم فعليًا</Text><Text style={s.pendingText}>التسجيل موجود محليًا. لن نسميه "تحليلًا" ولن نخترع نتيجة. الخطوة التالية هي رفعه بأمان إلى خادم التحليل بعد تفعيل المصادقة ومحرك الصوت.</Text></View>}
+   {recorded&&!analysis&&!analysisBusy&&<View style={s.pending}><Text style={s.pendingTitle}>🎙️ التسجيل تم فعليًا</Text><Text style={s.pendingText}>التسجيل موجود محليًا. إذا لم يظهر تحليل، فتحقق من نشر خادم التحليل وضبط عنوانه. لن نخترع نتيجة أو تصحيحًا غير محسوب.</Text></View>}
 
    <View style={s.security}><Text style={s.securityTitle}>🔒 الأمان أولًا</Text><Text style={s.securityText}>لا توجد مفاتيح قاعدة البيانات أو مزود الذكاء الاصطناعي داخل التطبيق. التخزين الإنتاجي للتسجيلات سيكون خاصًا وبصلاحيات قصيرة العمر.</Text></View>
   </ScrollView>
