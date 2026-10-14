@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
@@ -41,6 +41,9 @@ export default function Listen() {
  const [loading, setLoading] = useState(false);
  const [message, setMessage] = useState("اختر القارئ والسورة ثم اضغط تشغيل.");
  const [editions, setEditions] = useState<string[]>([]);
+ const audioQueueRef = useRef<string[]>([]);
+ const queueIndexRef = useRef(0);
+ const finishHandledRef = useRef(false);
  const player = useAudioPlayer(null);
  const status = useAudioPlayerStatus(player);
  const currentSurah = Math.max(1, Math.min(114, Number.parseInt(surah, 10) || 1));
@@ -69,21 +72,53 @@ export default function Listen() {
  }, []);
 
  const supported = editions.includes(reciterId);
+
+ useEffect(() => {
+   if (!status.didJustFinish || finishHandledRef.current) return;
+   finishHandledRef.current = true;
+   const nextIndex = queueIndexRef.current + 1;
+   const queue = audioQueueRef.current;
+   if (nextIndex < queue.length) {
+     queueIndexRef.current = nextIndex;
+     void (async () => {
+       try {
+         await player.replace({ uri: queue[nextIndex] });
+         player.play();
+       } catch {
+         setMessage("توقف تشغيل إحدى الآيات بسبب مشكلة في الاتصال. اضغط تشغيل لإعادة المحاولة.");
+         setPlayingSurah(0);
+       }
+     })();
+   } else if (queue.length > 0) {
+     setMessage("اكتمل الاستماع إلى سورة " + SURAH_NAMES[playingSurah - 1] + ".");
+     setPlayingSurah(0);
+   }
+ }, [status.didJustFinish, player, playingSurah]);
+
  async function playSurah() {
    if (!supported) {
      setMessage("هذا التسجيل غير متاح حاليًا من مصدر الصوت. اختر قارئًا آخر من القائمة.");
      return;
    }
-   const url = `https://cdn.islamic.network/quran/audio-surah/128/${reciterId}/${currentSurah}.mp3`;
    setLoading(true);
-   setMessage("جارٍ الاتصال بمصدر التلاوة الموثوق…");
+   setMessage("جارٍ تحميل آيات السورة من مصدر التلاوة…");
    try {
-     await player.replace({ uri: url });
+     const response = await fetch("https://api.alquran.cloud/v1/surah/" + currentSurah + "/" + reciterId);
+     if (!response.ok) throw new Error("Audio source unavailable");
+     const json = await response.json();
+     const queue = (json?.data?.ayahs ?? []).map((ayah: {audio?:string}) => ayah.audio).filter((url: unknown): url is string => typeof url === "string" && url.startsWith("https://"));
+     if (queue.length === 0) throw new Error("No ayah audio returned");
+     audioQueueRef.current = queue;
+     queueIndexRef.current = 0;
+     finishHandledRef.current = false;
+     await player.replace({ uri: queue[0] });
      player.play();
      setPlayingSurah(currentSurah);
-     setMessage(`يُشغَّل الآن: سورة ${SURAH_NAMES[currentSurah - 1]} بصوت ${selectedReciter.name}.`);
+     setMessage("يُشغَّل الآن: سورة " + SURAH_NAMES[currentSurah - 1] + " كاملة بصوت " + selectedReciter.name + "، آيةً بعد آية.");
    } catch {
-     setMessage("تعذّر تشغيل هذا الملف الآن. تحقّق من الإنترنت أو اختر قارئًا آخر.");
+     audioQueueRef.current = [];
+     setPlayingSurah(0);
+     setMessage("تعذّر تحميل تسجيل السورة لهذا القارئ. جرّب قارئًا آخر أو تحقّق من الإنترنت.");
    } finally {
      setLoading(false);
    }
@@ -123,7 +158,7 @@ export default function Listen() {
     <View style={s.soundIcon}><Text style={s.soundIconText}>♫</Text></View>
     <Text style={s.nowPlaying}>{status.playing ? "يتم التشغيل الآن" : "مشغّل إجازة"}</Text>
     <Text style={s.nowTitle}>{SURAH_NAMES[currentSurah-1]}</Text>
-    <Text style={s.nowMeta}>{selectedReciter.name} · رواية التسجيل المتاح</Text>
+    <Text style={s.nowMeta}>{selectedReciter.name} · التسجيل الصوتي المتاح لهذا القارئ</Text>
     <View style={s.progressTrack}><View style={[s.progressFill,{width:status.duration>0?`${Math.min(100,Math.max(0,status.currentTime/status.duration*100))}%`:"0%"}]} /></View>
     <View style={s.times}><Text>{formatTime(status.currentTime)}</Text><Text>{formatTime(status.duration)}</Text></View>
     <Pressable style={s.playButton} onPress={pauseOrResume} disabled={loading || !supported}>
