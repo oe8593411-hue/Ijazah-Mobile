@@ -51,3 +51,19 @@ The identified official source lead covers Hafs, Warsh, and Qalun. The Quran.ws 
 - Quran.ws Quran Text: https://text.quran.ws/
 - Quran.ws riwayah notes: https://quran.ws/docs/concepts/riwayat/
 - Tanzil usage terms for the existing Hafs corpus: https://tanzil.net/download/
+
+## Pinned upstream metadata inspected
+
+The repository `quran-ws/quran-text` was inspected at commit `b7c62daa3ac4c9ec37a398b35b8f246cee5bb217`; its `data/catalog.json` blob is pinned as `b950f08266f3a99dfafc816bd9b1951b9c468df5`. The catalog generated date is 2026-09-08. The app now records metadata for seven source candidates in `src/quran/riwayah-source-candidates.json`.
+
+| Candidate | Upstream ayah count | Counting system |
+|---|---:|---|
+| Hafs | 6,236 | Kufi |
+| Shu’bah | 6,236 | Kufi |
+| Warsh | 6,214 | Last Madani |
+| Qalun | 6,214 | Last Madani |
+| Duri (Abu Amr) | 6,217 | First Madani |
+| Susi | 6,218 | First Madani |
+| Bazzi | 6,220 | Makki |
+
+These are metadata reported by the upstream catalog, not counts independently verified by Ijazah. All seven remain `candidate_not_enabled`. This manifest does not ship or display their Quran text. The next corpus-ingestion step must fetch the pinned exact bytes, check the upstream-published SHA-256 and the applicable KFGQPC terms, validate the full data structure and ayah boundaries, compare against an independent authoritative source, and obtain qualified review before any status changes.
