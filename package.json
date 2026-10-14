@@ -26,5 +26,10 @@
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
     "@expo/metro-runtime": "~6.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
   }
 }
