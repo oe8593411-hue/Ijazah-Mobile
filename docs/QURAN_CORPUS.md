@@ -103,3 +103,20 @@ Status: source selected; production import must be verified before release.
 The text shown in the application must never be copied from an AI response, chat message, translation, search result, or arbitrary website.
 
 For production, the source file and its license notice must be obtained directly from the cited source and verified before insertion into the database.
+
+
+## Ten qiraat implementation status (safety gate)
+
+The selector inventory is not evidence that a riwayah corpus is available. At present, only Hafs an Asim is backed by the existing Tanzil Uthmani 1.1 corpus. All other entries remain unavailable for Quran display and recitation analysis until separately verified.
+
+Before adding any riwayah corpus:
+- identify a qualified, traceable source specifically for that riwayah and edition;
+- confirm its license permits the intended app distribution;
+- preserve the source verbatim and its attribution;
+- record source, version, riwayah, script, numbering and SHA-256 checksums;
+- verify all surahs and ayahs against an independent authoritative reference;
+- document orthographic and ayah-numbering differences rather than normalizing them away;
+- require review by a qualified Qur’an specialist;
+- add regression tests proving the analyzer cannot compare a riwayah against another riwayah’s text.
+
+The analysis API fails closed unless the request explicitly identifies Hafs. It must never infer or silently substitute Hafs when another riwayah is selected.
