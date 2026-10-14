@@ -21,9 +21,9 @@ export default function Home() {
         <View style={styles.hero}>
           <View style={styles.quranMark}><Text style={styles.quran}>﴾﴿</Text></View>
           <Text style={styles.heroTitle}>وردك اليوم</Text>
-          <Text style={styles.heroSub}>أكمل مراجعتك وقرّبك من الإتقان</Text>
-          <View style={styles.progressTrack}><View style={styles.progress} /></View>
-          <View style={styles.progressRow}><Text style={styles.muted}>٤٥٪ من الورد</Text><Text style={styles.white}>١٢ دقيقة</Text></View>
+          <Text style={styles.heroSub}>ابدأ وردك اليوم، وتابع تقدمك مع كل جلسة</Text>
+          <View style={styles.progressTrack}><View style={[styles.progress,{width:"0%"}]} /></View>
+          <View style={styles.progressRow}><Text style={styles.muted}>لم يبدأ الورد بعد</Text><Text style={styles.white}>ابدأ أول جلسة</Text></View>
           <Pressable style={styles.primary} onPress={() => router.push("/recite")}>
             <Text style={styles.primaryText}>ابدأ التلاوة</Text>
           </Pressable>
@@ -31,17 +31,17 @@ export default function Home() {
 
         <Text style={styles.section}>اختصارات</Text>
         <View style={styles.grid}>
-          <Action title="القرآن" sub="قراءة وحفظ" icon="۞" />
-          <Action title="المراجعة" sub="خطة اليوم" icon="↻" />
-          <Action title="التجويد" sub="تعلّم القواعد" icon="✦" />
-          <Action title="تقدمي" sub="إحصائيات دقيقة" icon="◔" />
+          <Action title="القرآن" sub="قراءة وحفظ" icon="۞" route="/quran" />
+          <Action title="المراجعة" sub="اختبار الحفظ" icon="↻" route="/smart-test" />
+          <Action title="التجويد" sub="قواعد التلاوة" icon="✦" route="/tajweed" />
+          <Action title="تقدمي" sub="سجل الجلسات" icon="◔" route="/progress" />
           <Pressable style={styles.card} onPress={() => router.push("/smart-test")}><Text style={styles.icon}>🧠</Text><Text style={styles.cardTitle}>الاختبار الذكي</Text><Text style={styles.cardSub}>اختبار حفظ Premium</Text></Pressable>
         </View>
 
         <View style={styles.streak}>
           <Text style={styles.streakIcon}>🔥</Text>
-          <View style={{flex:1}}><Text style={styles.streakTitle}>سلسلة متواصلة</Text><Text style={styles.muted}>٧ أيام من الالتزام</Text></View>
-          <Text style={styles.days}>٧</Text>
+          <View style={{flex:1}}><Text style={styles.streakTitle}>ابدأ سلسلة إنجازك</Text><Text style={styles.muted}>ستظهر بياناتك بعد تسجيل الجلسات</Text></View>
+          <Text style={styles.days}>٠</Text>
         </View>
       </ScrollView>
     </View>
