@@ -26,8 +26,8 @@ export default function Home() {
   const t = (ar: string, en: string) => english ? en : ar;
   const bg = dark ? "#061326" : C.paper;
   const surface = dark ? "#102746" : C.white;
-  const text = dark ? "#F2F7F3" : C.ink;
-  const muted = dark ? "#A7BBB1" : C.muted;
+  const text = dark ? "#F3FAFD" : C.ink;
+  const muted = dark ? "#A8C9D9" : C.muted;
 
   return (
     <View style={[s.root, { backgroundColor: bg }]}>
@@ -139,7 +139,7 @@ function Action({ title, sub, icon, tone, route, surface, text, muted }: {
   const tones = { green: "#0B477A", purple: "#287CA7", gold: "#248DB5", blue: "#39A9D0" };
   const pale = { green: "#EAF7FC", purple: "#DDF4FB", gold: "#EAF7FC", blue: "#EAF7FC" };
   return (
-    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#E6ECE6" }]} onPress={() => router.push(route)}>
+    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#DCEAF1" }]} onPress={() => router.push(route)}>
       <View style={[s.actionIconBox, { backgroundColor: pale[tone] }]}><Text style={[s.actionIcon, { color: tones[tone] }]}>{icon}</Text></View>
       <Text style={[s.actionTitle, { color: text }]}>{title}</Text>
       <Text style={[s.actionSub, { color: muted }]}>{sub}</Text>
@@ -181,18 +181,18 @@ const s = StyleSheet.create({
   mainGridWide: { flexDirection: "row", alignItems: "flex-start", gap: 24 },
   primaryColumn: { flex: 1 },
   sideColumn: { gap: 14, marginTop: 0 },
-  hero: { backgroundColor: C.greenDeep, borderRadius: 28, padding: 23, minHeight: 255, overflow: "hidden", borderWidth: 1, borderColor: "#1D5A4C" },
+  hero: { backgroundColor: C.greenDeep, borderRadius: 28, padding: 23, minHeight: 255, overflow: "hidden", borderWidth: 1, borderColor: "#1B4D72" },
   heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#123B65" },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#80D6F0" },
   liveText: { color: "#B7E8F6", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  heroDecoration: { color: "#D6B86E", fontSize: 32 },
+  heroDecoration: { color: "#39A9D0", fontSize: 32 },
   heroTitle: { color: "#FFFFFF", fontSize: 25, lineHeight: 35, fontWeight: "900", textAlign: "right", marginTop: 16, maxWidth: 430, alignSelf: "flex-end" },
   heroSub: { color: "#C5E4F1", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
   heroBottom: { marginTop: 20, gap: 14 },
   progressWrap: { gap: 8 },
   progressTrack: { height: 5, backgroundColor: "#1B446A", borderRadius: 5, overflow: "hidden" },
-  progressFill: { width: "8%", height: 5, backgroundColor: "#D6B86E", borderRadius: 5 },
+  progressFill: { width: "8%", height: 5, backgroundColor: "#39A9D0", borderRadius: 5 },
   progressLabel: { color: "#B7D7E8", fontSize: 10, textAlign: "right" },
   heroActions: { flexDirection: "row", flexWrap: "wrap", gap: 9, justifyContent: "flex-end" },
   primaryButton: { backgroundColor: "#39A9D0", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
@@ -216,7 +216,7 @@ const s = StyleSheet.create({
   dailyTitle: { fontSize: 15, fontWeight: "900" },
   dailyArabic: { fontSize: 21, fontWeight: "900", textAlign: "center", lineHeight: 38, marginTop: 18 },
   dailyRef: { fontSize: 10, textAlign: "center", marginTop: 7 },
-  goldLine: { height: 1, backgroundColor: "#E8D6A6", width: 54, alignSelf: "center", marginTop: 15 },
+  goldLine: { height: 1, backgroundColor: "#A8DDED", width: 54, alignSelf: "center", marginTop: 15 },
   dailyNote: { fontSize: 11, lineHeight: 19, textAlign: "center", marginTop: 13 },
   premium: { backgroundColor: "#092A59", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
   premiumTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
