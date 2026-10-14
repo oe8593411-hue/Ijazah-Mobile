@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
+import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
 
 const C={navy:"#071A33",navy2:"#102746",cyan:"#22C7D8",soft:"#E4F9FB",ink:"#152A42",muted:"#7B8B9E",surface:"#F7F9FC",white:"#FFFFFF"};
 
@@ -13,7 +14,8 @@ export default function Recite(){
  const fullSurahMode=params.scope==="surah";
  const [referenceText,setReferenceText]=useState("جاري تحميل الآية الموثقة…");
  const [referenceLabel,setReferenceLabel]=useState("الآية");
- const [riwaya,setRiwaya]=useState("حفص عن عاصم");
+ const [riwaya,setRiwayaState]=useState(getSelectedRiwayah());
+ const setRiwaya=(value:string)=>{setSelectedRiwayah(value);setRiwayaState(value);setMessage(value==="حفص عن عاصم"?"تم اختيار حفص عن عاصم؛ النص الموثق والتسجيل والتحليل النصي المبدئي متاحون.":`تم اختيار ${value}. الاختيار محفوظ أثناء التنقل داخل التطبيق، لكن نص المصحف والتحليل لهذه الرواية غير مفعّلين قبل توثيق مصدرها.`);};
  const riwayat=["حفص عن عاصم","شعبة عن عاصم","ورش عن نافع","قالون عن نافع","البزي عن ابن كثير","قنبل عن ابن كثير","الدوري عن أبي عمرو","السوسي عن أبي عمرو","هشام عن ابن عامر","ابن ذكوان عن ابن عامر","خلف عن حمزة","خلاد عن حمزة","أبو الحارث عن الكسائي","الدوري عن الكسائي","رويس عن يعقوب","روح عن يعقوب","إسحاق عن خلف العاشر","إدريس عن خلف العاشر","عبيد بن الصباح عن أبي جعفر","ابن وردان عن أبي جعفر"];
 
  useEffect(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
