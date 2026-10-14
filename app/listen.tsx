@@ -126,7 +126,7 @@ export default function Listen() {
       {loading ? <ActivityIndicator color={NAVY}/> : <Text style={s.playIcon}>{status.playing?"Ⅱ":"▶"}</Text>}
       <Text style={s.playLabel}>{status.playing?"إيقاف مؤقت":"تشغيل السورة كاملة"}</Text>
     </Pressable>
-    <Pressable style={s.restart} onPress={()=>{void playSurah();}} disabled={loading || !supported}><Text style={s.restartText}>↻ إعادة تشغيل السورة</Text></Pressable>
+    <Pressable style={s.restart} onPress={()=>{void playSurah();}} disabled={loading}><Text style={s.restartText}>↻ إعادة تشغيل السورة</Text></Pressable>
    </View>
    <View style={s.riwayaInfo}><Text style={s.infoTitle}>القراءات والروايات</Text><Text style={s.infoText}>الصوت يُشغَّل بالرواية التي يوفرها تسجيل القارئ نفسه. لن ننسب التسجيل إلى ورش أو قالون أو غيرهما دون مصدر موثّق يثبت الرواية. دعم اختيار جميع القراءات العشر يتطلب توفير تسجيلات كاملة موثّقة لكل رواية.</Text></View>
    <Text style={s.message}>{message}</Text>
