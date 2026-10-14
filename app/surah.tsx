@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
@@ -15,7 +15,7 @@ export default function SurahScreen(){
  const [corpus,setCorpus]=useState<Corpus|null>(null);
  const [error,setError]=useState("");
  
- useMemo(()=>{
+ useEffect(()=>{
    let active=true;
    import("../src/quran/verified-corpus.json").then((m)=>{
      if(active) setCorpus(m.default as Corpus);
