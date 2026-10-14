@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/quran/riwayah.ts", import.meta.url), "utf8");
+const errors = [];
 const candidateManifest = JSON.parse(await readFile(new URL("../src/quran/riwayah-source-candidates.json", import.meta.url), "utf8"));
 
 if (candidateManifest.status !== "source_candidates_only") errors.push("Source candidate manifest must remain disabled");
@@ -18,7 +19,6 @@ for (const [key, count] of Object.entries(expectedCounts)) {
 }
 const readers = [...source.matchAll(/\{ reader: "([^"]+)", riwayat: \[([^\]]+)\] \}/g)];
 const riwayat = readers.flatMap((match) => [...match[2].matchAll(/"([^"]+)"/g)].map((item) => item[1]));
-const errors = [];
 if (readers.length !== 10) errors.push(`Expected 10 qiraat, found ${readers.length}`);
 if (riwayat.length !== 20) errors.push(`Expected 20 riwayat, found ${riwayat.length}`);
 if (new Set(riwayat).size !== 20) errors.push("Riwayah names must be unique");
