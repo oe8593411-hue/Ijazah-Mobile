@@ -68,7 +68,7 @@ export default function Recite(){
 
  async function analyzeRecording(uri:string|undefined){
   if(!uri){setMessage("التسجيل تم، لكن لم يُرجع الجهاز مسار الملف لتحليله.");return;}
-  const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"").replace(/\/$/,"");
+  const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"https://ijazah-mobile-preview-profit-guard2.vercel.app").replace(/\/$/,"");
   if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
   setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
   setMessage("جارٍ إرسال التسجيل لتحويله إلى نص ومقارنته بالآية المرجعية…");
