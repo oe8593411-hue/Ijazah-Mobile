@@ -1,9 +1,8 @@
 name: Build Ijazah Android Preview
 
 on:
+  # Run manually while the Expo free monthly Android-build quota is exhausted.
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
