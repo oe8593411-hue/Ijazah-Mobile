@@ -89,9 +89,9 @@ export default function Listen() {
    <View style={s.intro}><Text style={s.introTitle}>القرآن كاملًا، سورةً سورة</Text><Text style={s.introSub}>اختر من القرّاء المتاحين، واستمع إلى السورة كاملة عبر الإنترنت.</Text></View>
    <Text style={s.label}>القارئ — ابحث باسم الشيخ</Text>
    <TextInput value={reciterSearch} onChangeText={setReciterSearch} placeholder="اكتب اسم القارئ..." placeholderTextColor="#7A91A2" style={s.searchInput} textAlign="right" />
-   <Text style={s.reciterCount}>{reciters.length} تسجيلًا صوتيًا عربيًا متاحًا في فهرس المصدر</Text>
+   <Text style={s.reciterCount}>{reciters.length} قرّاء في القائمة — تختلف إتاحة التسجيل الكامل حسب القارئ والسورة</Text>
    <View style={s.reciterList}>{visibleReciters.map(r => {
-    const isAvailable = editions.length === 0 || editions.includes(r.id);
+    const isAvailable = true;
     return <Pressable key={r.id} onPress={() => { setReciterId(r.id); setMessage(isAvailable ? `تم اختيار ${r.name}.` : "هذا القارئ غير متاح حاليًا في مصدر الصوت."); }} style={[s.reciter, reciterId===r.id&&s.selected, !isAvailable&&s.unavailable]}>
       <Text style={[s.reciterName,reciterId===r.id&&s.selectedText]}>{r.name}</Text>
       <Text style={[s.reciterState,reciterId===r.id&&s.selectedText]}>{!isAvailable?"غير متاح حاليًا":reciterId===r.id?"✓ محدد":"اختيار"}</Text>
