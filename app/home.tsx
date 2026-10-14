@@ -1,19 +1,227 @@
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
-const navy="#071A33", cyan="#22C7D8";
-export default function Home(){
- const [dark,setDark]=useState(false),[english,setEnglish]=useState(false);
- const t=(ar:string,en:string)=>english?en:ar;
- return <View style={[s.root,dark&&s.dark]}><StatusBar style={dark?"light":"dark"}/><ScrollView contentContainerStyle={s.content}>
- <View style={s.header}><View style={{flex:1}}><Text style={s.kicker}>إجازة</Text><Text style={[s.title,dark&&s.light]}>{t("السلام عليكم 👋","Assalamu Alaikum 👋")}</Text></View>
- <View style={s.controls}><Pressable accessibilityLabel="Language" onPress={()=>setEnglish(!english)} style={[s.control,dark&&s.controlDark]}><Text style={[s.controlText,dark&&s.light]}>{english?"عربي":"EN"}</Text></Pressable><Pressable accessibilityLabel="Toggle appearance" onPress={()=>setDark(!dark)} style={[s.control,dark&&s.controlDark]}><Text style={[s.controlText,dark&&s.light]}>{dark?"☀️":"🌙"}</Text></Pressable><View style={s.avatar}><Text style={s.avatarText}>ع</Text></View></View></View>
- <View style={[s.hero,dark&&s.heroDark]}><Text style={s.mark}>﴾﴿</Text><Text style={s.heroTitle}>{t("وردك اليوم","Today’s wird")}</Text><Text style={s.sub}>{t("ابدأ وردك اليوم، وتابع تقدمك مع كل جلسة","Start today’s recitation and track each session")}</Text><Text style={s.small}>{t("لم يبدأ الورد بعد","No session started yet")}</Text><Pressable style={s.primary} onPress={()=>router.push("/recite")}><Text style={s.primaryText}>{t("ابدأ التلاوة","Start reciting")}</Text></Pressable></View>
- <Text style={[s.section,dark&&s.light]}>{t("اختصارات","Quick access")}</Text><View style={s.grid}>
- <Action title={t("القرآن","Quran")} sub={t("قراءة وحفظ","Read and memorize")} icon="۞" route="/quran" dark={dark}/><Action title={t("المراجعة","Review")} sub={t("اختبار الحفظ","Memorization test")} icon="↻" route="/smart-test" dark={dark}/><Action title={t("التجويد","Tajweed")} sub={t("قواعد التلاوة","Recitation rules")} icon="✦" route="/tajweed" dark={dark}/><Action title={t("تقدمي","Progress")} sub={t("سجل الجلسات","Session history")} icon="◔" route="/progress" dark={dark}/></View>
- <Pressable style={s.premium} onPress={()=>router.push("/premium")}><Text style={s.badge}>PREMIUM 👑</Text><Text style={s.premiumTitle}>{t("ارتقِ برحلتك مع القرآن","Level up your Quran journey")}</Text><Text style={s.premiumSub}>{t("اختبارات حفظ ذكية • مراجعة نقاط الضعف • تجربة متقدمة","Smart tests • Weakness review • Advanced tools")}</Text><View style={s.pill}><Text style={s.pillText}>{t("اكتشف إجازة بريميوم ←","Explore Ijazah Premium ←")}</Text></View></Pressable>
- </ScrollView></View>;
+
+const C = {
+  ink: "#173B35",
+  green: "#0D6B5D",
+  greenDeep: "#073D36",
+  mint: "#DDF3EA",
+  mint2: "#EFF8F3",
+  gold: "#D6A64B",
+  paper: "#F7F8F3",
+  white: "#FFFFFF",
+  muted: "#788A82",
+  line: "#E4EAE4",
+  purple: "#7561B8",
+  blue: "#3D83A6",
+};
+
+export default function Home() {
+  const [dark, setDark] = useState(false);
+  const [english, setEnglish] = useState(false);
+  const { width } = useWindowDimensions();
+  const wide = width >= 760;
+  const t = (ar: string, en: string) => english ? en : ar;
+  const bg = dark ? "#0D1E1A" : C.paper;
+  const surface = dark ? "#142B25" : C.white;
+  const text = dark ? "#F2F7F3" : C.ink;
+  const muted = dark ? "#A7BBB1" : C.muted;
+
+  return (
+    <View style={[s.root, { backgroundColor: bg }]}>
+      <StatusBar style={dark ? "light" : "dark"} />
+      <ScrollView contentContainerStyle={[s.content, wide && s.wideContent]}>
+        <View style={s.header}>
+          <View style={s.brand}>
+            <View style={s.logo}><Text style={s.logoMark}>۞</Text></View>
+            <View>
+              <Text style={[s.brandName, { color: text }]}>{t("إجازة", "Ijazah")}</Text>
+              <Text style={[s.brandSub, { color: muted }]}>{t("رحلتك مع القرآن", "Your Quran journey")}</Text>
+            </View>
+          </View>
+          <View style={s.controls}>
+            <Pressable accessibilityLabel="Language" onPress={() => setEnglish(!english)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#29473D" : C.line }]}>
+              <Text style={[s.controlText, { color: text }]}>{english ? "عربي" : "EN"}</Text>
+            </Pressable>
+            <Pressable accessibilityLabel="Toggle appearance" onPress={() => setDark(!dark)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#29473D" : C.line }]}>
+              <Text style={s.controlText}>{dark ? "☀️" : "☾"}</Text>
+            </Pressable>
+            <View style={s.avatar}><Text style={s.avatarText}>ع</Text></View>
+          </View>
+        </View>
+
+        <View style={[s.welcomeRow, wide && s.welcomeWide]}>
+          <View style={s.welcomeCopy}>
+            <Text style={[s.eyebrow, { color: C.green }]}>{t("بِسْمِ اللَّهِ", "YOUR QURAN SPACE")}</Text>
+            <Text style={[s.greeting, { color: text }]}>{t("السلام عليكم 👋", "Assalamu Alaikum 👋")}</Text>
+            <Text style={[s.intro, { color: muted }]}>{t("خطوة صغيرة كل يوم، وأثر يبقى مدى العمر.", "A small step every day. A lifelong impact.")}</Text>
+          </View>
+          <View style={[s.ornament, wide && s.ornamentWide]}>
+            <View style={s.orbitOne} />
+            <View style={s.orbitTwo} />
+            <Text style={s.bookEmoji}>📖</Text>
+            <View style={s.sparkle}><Text style={s.sparkleText}>✦</Text></View>
+          </View>
+        </View>
+
+        <View style={[s.mainGrid, wide && s.mainGridWide]}>
+          <View style={[s.primaryColumn, wide && { flex: 1.2 }]}>
+            <View style={s.hero}>
+              <View style={s.heroTop}>
+                <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>{t("ورد اليوم", "TODAY'S WIRD")}</Text></View>
+                <Text style={s.heroDecoration}>✧</Text>
+              </View>
+              <Text style={s.heroTitle}>{t("اجعل للقرآن موعدًا اليوم", "Make time for Quran today")}</Text>
+              <Text style={s.heroSub}>{t("ابدأ التلاوة، وامضِ بثبات في رحلتك.", "Begin reciting and keep moving forward.")}</Text>
+              <View style={s.heroBottom}>
+                <View style={s.progressWrap}>
+                  <View style={s.progressTrack}><View style={s.progressFill} /></View>
+                  <Text style={s.progressLabel}>{t("رحلتك تبدأ بجلسة واحدة", "Your journey starts with one session")}</Text>
+                </View>
+                <Pressable style={s.primaryButton} onPress={() => router.push("/recite")}><Text style={s.primaryButtonText}>{t("ابدأ التسميع  ←", "Start reciting  →")}</Text></Pressable>
+              </View>
+              <View style={s.heroGlow} />
+            </View>
+
+            <View style={s.sectionHeader}>
+              <Text style={[s.sectionTitle, { color: text }]}>{t("مساحتك اليومية", "Your daily space")}</Text>
+              <Text style={[s.sectionHint, { color: muted }]}>{t("اختر من أين تبدأ", "Choose where to begin")}</Text>
+            </View>
+            <View style={s.actionGrid}>
+              <Action title={t("القرآن الكريم", "The Holy Quran")} sub={t("تصفّح السور والآيات", "Browse surahs and ayahs")} icon="۞" tone="green" route="/quran" surface={surface} text={text} muted={muted} />
+              <Action title={t("مراجعة الحفظ", "Review memorization")} sub={t("ثبّت ما حفظته", "Strengthen what you know")} icon="↻" tone="purple" route="/smart-test" surface={surface} text={text} muted={muted} />
+              <Action title={t("أحكام التجويد", "Tajweed rules")} sub={t("تعلّم خطوة بخطوة", "Learn step by step")} icon="✧" tone="gold" route="/tajweed" surface={surface} text={text} muted={muted} />
+              <Action title={t("تقدّمي", "My progress")} sub={t("تابع رحلتك وإنجازاتك", "Track your journey")} icon="◔" tone="blue" route="/progress" surface={surface} text={text} muted={muted} />
+            </View>
+          </View>
+
+          <View style={[s.sideColumn, wide && { flex: 0.8 }]}>
+            <View style={[s.dailyCard, { backgroundColor: surface, borderColor: dark ? "#29473D" : C.line }]}>
+              <View style={s.dailyHeader}><Text style={s.dailyIcon}>☀</Text><Text style={[s.dailyTitle, { color: text }]}>{t("وقفة اليوم", "A moment for today")}</Text></View>
+              <Text style={[s.dailyArabic, { color: text }]}>{t("وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا", "Recite the Quran with measured recitation")}</Text>
+              <Text style={[s.dailyRef, { color: muted }]}>{t("سورة المزمل · ٤", "Al-Muzzammil · 4")}</Text>
+              <View style={s.goldLine} />
+              <Text style={[s.dailyNote, { color: muted }]}>{t("خذ وقتك في التلاوة، فالجودة والطمأنينة أهم من السرعة.", "Take your time. Presence and care matter more than speed.")}</Text>
+            </View>
+
+            <Pressable style={s.premium} onPress={() => router.push("/premium")}>
+              <View style={s.premiumTop}><Text style={s.premiumCrown}>♛</Text><Text style={s.premiumLabel}>IJAZAH PREMIUM</Text></View>
+              <Text style={s.premiumTitle}>{t("رحلة أعمق، بخطتك أنت", "A deeper journey, your way")}</Text>
+              <Text style={s.premiumSub}>{t("اختبارات مخصصة • مراجعة ذكية • أدوات متقدمة", "Personalized tests • Smart review • Advanced tools")}</Text>
+              <View style={s.premiumLink}><Text style={s.premiumLinkText}>{t("اكتشف المزايا  ←", "Explore features  →")}</Text></View>
+            </Pressable>
+
+            <View style={[s.trustCard, { backgroundColor: dark ? "#17362D" : C.mint2 }]}>
+              <Text style={s.trustIcon}>✓</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.trustTitle, { color: text }]}>{t("القرآن أولًا", "Quran comes first")}</Text>
+                <Text style={[s.trustSub, { color: muted }]}>{t("نص موثّق وتجربة مصممة باحترام ووضوح.", "Verified text and a thoughtful, transparent experience.")}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <Text style={[s.footer, { color: muted }]}>إجازة · {t("خطوتك القادمة تبدأ الآن", "Your next step starts now")}</Text>
+      </ScrollView>
+    </View>
+  );
 }
-function Action({title,sub,icon,route,dark}:{title:string;sub:string;icon:string;route:"/quran"|"/smart-test"|"/tajweed"|"/progress";dark:boolean}){return <Pressable style={[s.card,dark&&s.cardDark]} onPress={()=>router.push(route)}><Text style={s.icon}>{icon}</Text><Text style={[s.cardTitle,dark&&s.light]}>{title}</Text><Text style={s.cardSub}>{sub}</Text></Pressable>}
-const s=StyleSheet.create({root:{flex:1,backgroundColor:"#F6F8FB"},dark:{backgroundColor:"#061326"},content:{padding:20,paddingTop:62,paddingBottom:40},header:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",marginBottom:24},controls:{flexDirection:"row",alignItems:"center",gap:7},control:{height:40,minWidth:40,paddingHorizontal:8,borderRadius:13,backgroundColor:"#E8F1F7",alignItems:"center",justifyContent:"center"},controlDark:{backgroundColor:"#19314A"},controlText:{color:navy,fontSize:12,fontWeight:"900"},light:{color:"#F3F7FB"},kicker:{fontSize:14,color:cyan,fontWeight:"800",textAlign:"right"},title:{fontSize:23,fontWeight:"800",color:navy,textAlign:"right",marginTop:5},avatar:{width:40,height:40,borderRadius:20,backgroundColor:navy,alignItems:"center",justifyContent:"center"},avatarText:{color:"white",fontWeight:"800"},hero:{backgroundColor:navy,borderRadius:26,padding:22},heroDark:{backgroundColor:"#102746"},mark:{fontSize:28,color:cyan},heroTitle:{fontSize:23,fontWeight:"900",color:"#fff",textAlign:"right",marginTop:12},sub:{color:"#B5C6D8",fontSize:13,textAlign:"right",marginTop:8,lineHeight:21},small:{color:"#DDEAF6",fontSize:12,textAlign:"right",marginTop:18},primary:{backgroundColor:cyan,borderRadius:15,padding:15,alignItems:"center",marginTop:18},primaryText:{color:navy,fontWeight:"900"},section:{fontSize:19,fontWeight:"900",color:navy,textAlign:"right",marginTop:25,marginBottom:12},grid:{flexDirection:"row",flexWrap:"wrap",gap:12},card:{width:"48%",minHeight:125,backgroundColor:"#fff",borderRadius:20,padding:15},cardDark:{backgroundColor:"#10233B"},icon:{fontSize:26,color:cyan,textAlign:"right"},cardTitle:{fontSize:15,fontWeight:"900",color:navy,textAlign:"right",marginTop:9},cardSub:{fontSize:11,color:"#8090A1",textAlign:"right",marginTop:5},premium:{marginTop:18,backgroundColor:"#102746",borderRadius:24,padding:20,borderWidth:1,borderColor:"#1B5570"},badge:{color:cyan,fontSize:11,fontWeight:"900"},premiumTitle:{color:"#fff",fontSize:20,fontWeight:"900",textAlign:"right",marginTop:13},premiumSub:{color:"#B7C9DB",fontSize:12,lineHeight:20,textAlign:"right",marginTop:7},pill:{marginTop:15,backgroundColor:cyan,borderRadius:14,padding:13,alignItems:"center"},pillText:{color:navy,fontSize:13,fontWeight:"900"}});
+
+function Action({ title, sub, icon, tone, route, surface, text, muted }: {
+  title: string; sub: string; icon: string; tone: "green" | "purple" | "gold" | "blue";
+  route: "/quran" | "/smart-test" | "/tajweed" | "/progress";
+  surface: string; text: string; muted: string;
+}) {
+  const tones = { green: "#0D7967", purple: "#7965BD", gold: "#B9892F", blue: "#3D83A6" };
+  const pale = { green: "#E2F3EC", purple: "#EEE9FA", gold: "#FBF1D9", blue: "#E5F1F7" };
+  return (
+    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#E6ECE6" }]} onPress={() => router.push(route)}>
+      <View style={[s.actionIconBox, { backgroundColor: pale[tone] }]}><Text style={[s.actionIcon, { color: tones[tone] }]}>{icon}</Text></View>
+      <Text style={[s.actionTitle, { color: text }]}>{title}</Text>
+      <Text style={[s.actionSub, { color: muted }]}>{sub}</Text>
+      <Text style={[s.actionArrow, { color: tones[tone] }]}>↗</Text>
+    </Pressable>
+  );
+}
+
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 26, paddingBottom: 40, maxWidth: 1120, width: "100%", alignSelf: "center" },
+  wideContent: { paddingHorizontal: 34, paddingTop: 30 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
+  brand: { flexDirection: "row", alignItems: "center", gap: 11 },
+  logo: { width: 47, height: 47, borderRadius: 16, backgroundColor: C.green, alignItems: "center", justifyContent: "center", shadowColor: C.greenDeep, shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
+  logoMark: { color: "#FFFFFF", fontSize: 29 },
+  brandName: { fontSize: 21, fontWeight: "900", textAlign: "right" },
+  brandSub: { fontSize: 10, marginTop: 2, textAlign: "right" },
+  controls: { flexDirection: "row", alignItems: "center", gap: 7 },
+  control: { height: 39, minWidth: 39, paddingHorizontal: 9, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  controlText: { color: C.ink, fontSize: 12, fontWeight: "900" },
+  avatar: { width: 39, height: 39, borderRadius: 14, backgroundColor: C.mint, alignItems: "center", justifyContent: "center", marginLeft: 2 },
+  avatarText: { color: C.green, fontWeight: "900", fontSize: 16 },
+  welcomeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 24, minHeight: 118 },
+  welcomeWide: { paddingHorizontal: 6, minHeight: 150 },
+  welcomeCopy: { flex: 1, alignItems: "flex-end" },
+  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5, marginBottom: 7 },
+  greeting: { fontSize: 27, fontWeight: "900", textAlign: "right" },
+  intro: { fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 6 },
+  ornament: { width: 102, height: 102, borderRadius: 34, backgroundColor: C.mint, alignItems: "center", justifyContent: "center", overflow: "hidden", transform: [{ rotate: "-5deg" }] },
+  ornamentWide: { width: 128, height: 128, borderRadius: 42 },
+  orbitOne: { position: "absolute", width: 92, height: 92, borderWidth: 1, borderColor: "#9DCDBB", borderRadius: 28, transform: [{ rotate: "35deg" }] },
+  orbitTwo: { position: "absolute", width: 67, height: 67, borderWidth: 1, borderColor: "#B3D9C8", borderRadius: 23, transform: [{ rotate: "55deg" }] },
+  bookEmoji: { fontSize: 39 },
+  sparkle: { position: "absolute", top: 9, right: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
+  sparkleText: { color: "#FFFFFF", fontSize: 14 },
+  mainGrid: { gap: 22 },
+  mainGridWide: { flexDirection: "row", alignItems: "flex-start", gap: 24 },
+  primaryColumn: { flex: 1 },
+  sideColumn: { gap: 14, marginTop: 0 },
+  hero: { backgroundColor: C.greenDeep, borderRadius: 28, padding: 23, minHeight: 255, overflow: "hidden", borderWidth: 1, borderColor: "#1D5A4C" },
+  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#174F43" },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#A6E7C5" },
+  liveText: { color: "#BEE9D5", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  heroDecoration: { color: "#D6B86E", fontSize: 32 },
+  heroTitle: { color: "#FFFFFF", fontSize: 25, lineHeight: 35, fontWeight: "900", textAlign: "right", marginTop: 16, maxWidth: 430, alignSelf: "flex-end" },
+  heroSub: { color: "#C5DDD2", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
+  heroBottom: { marginTop: 20, gap: 14 },
+  progressWrap: { gap: 8 },
+  progressTrack: { height: 5, backgroundColor: "#315F52", borderRadius: 5, overflow: "hidden" },
+  progressFill: { width: "8%", height: 5, backgroundColor: "#D6B86E", borderRadius: 5 },
+  progressLabel: { color: "#B7D0C5", fontSize: 10, textAlign: "right" },
+  primaryButton: { backgroundColor: "#D8B76B", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
+  primaryButtonText: { color: "#163B31", fontSize: 12, fontWeight: "900" },
+  heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#145B49", opacity: 0.35, right: -92, top: 54 },
+  sectionHeader: { marginTop: 26, marginBottom: 13, gap: 4, alignItems: "flex-end" },
+  sectionTitle: { fontSize: 18, fontWeight: "900" },
+  sectionHint: { fontSize: 11 },
+  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  actionCard: { width: "48%", minHeight: 145, borderRadius: 21, padding: 15, borderWidth: 1, overflow: "hidden" },
+  actionIconBox: { width: 43, height: 43, borderRadius: 15, alignItems: "center", justifyContent: "center", alignSelf: "flex-end" },
+  actionIcon: { fontSize: 25, fontWeight: "700" },
+  actionTitle: { fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 11 },
+  actionSub: { fontSize: 10, textAlign: "right", marginTop: 5, lineHeight: 16 },
+  actionArrow: { fontSize: 16, fontWeight: "900", position: "absolute", bottom: 13, left: 14 },
+  dailyCard: { borderRadius: 23, padding: 19, borderWidth: 1 },
+  dailyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
+  dailyIcon: { color: C.gold, fontSize: 20 },
+  dailyTitle: { fontSize: 15, fontWeight: "900" },
+  dailyArabic: { fontSize: 21, fontWeight: "900", textAlign: "center", lineHeight: 38, marginTop: 18 },
+  dailyRef: { fontSize: 10, textAlign: "center", marginTop: 7 },
+  goldLine: { height: 1, backgroundColor: "#E8D6A6", width: 54, alignSelf: "center", marginTop: 15 },
+  dailyNote: { fontSize: 11, lineHeight: 19, textAlign: "center", marginTop: 13 },
+  premium: { backgroundColor: "#201B2D", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#57472F" },
+  premiumTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  premiumCrown: { color: "#E6C16C", fontSize: 24 },
+  premiumLabel: { color: "#E6C16C", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
+  premiumTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", textAlign: "right", marginTop: 13, lineHeight: 28 },
+  premiumSub: { color: "#D1C9BD", fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 7 },
+  premiumLink: { backgroundColor: "#E6C16C", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
+  premiumLinkText: { color: "#282113", fontSize: 11, fontWeight: "900" },
+  trustCard: { borderRadius: 18, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
+  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#C4E9D7", color: "#0D6B5D", fontWeight: "900", fontSize: 18, paddingTop: 4 },
+  trustTitle: { fontSize: 12, fontWeight: "900", textAlign: "right" },
+  trustSub: { fontSize: 10, lineHeight: 16, textAlign: "right", marginTop: 3 },
+  footer: { fontSize: 10, textAlign: "center", marginTop: 28 }
+});
