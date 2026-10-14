@@ -2,7 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 
-const C={navy:"#071A33",navy2:"#102746",cyan:"#22C7D8",bg:"#F6F8FB",ink:"#152A42",muted:"#7B8B9E",white:"#FFFFFF",gold:"#F5D27A"};
+const C={navy:"#071A33",navy2:"#102746",cyan:"#35C7DE",bg:"#F4F8FC",ink:"#142A43",muted:"#788BA0",white:"#FFFFFF",gold:"#F5D27A"};
 
 const features=[
  {icon:"🎯",title:"اختبار حفظ مخصص",desc:"حدد السورة أو نطاق الآيات وابدأ اختبارًا يناسب هدفك."},
