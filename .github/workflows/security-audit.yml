@@ -1,0 +1,50 @@
+name: Ijazah dependency security audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - ".github/workflows/security-audit.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ijazah-security-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate reproducible dependency lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfile if it changed
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "Add reproducible npm dependency lockfile"
+            git push
+          fi
+      - name: Audit dependency tree and report vulnerable packages
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > npm-audit-report.json
+          audit_status=$?
+          node -e 'const fs=require("fs");let a;try{a=JSON.parse(fs.readFileSync("npm-audit-report.json","utf8"))}catch{console.error("npm audit did not return valid JSON");process.exit(2)};const v=a.metadata?.vulnerabilities||{};console.log("Dependency vulnerability summary:");for(const s of ["info","low","moderate","high","critical"])console.log(`${s}: ${v[s]||0}`);for(const [name,item] of Object.entries(a.vulnerabilities||{}))console.log(`- ${name}: ${item.severity}; direct=${item.isDirect}; fixAvailable=${JSON.stringify(item.fixAvailable)}`);if((v.high||0)>0||(v.critical||0)>0)process.exit(1)'
+          summary_status=$?
+          echo "npm audit exit code: $audit_status"
+          exit "$summary_status"
