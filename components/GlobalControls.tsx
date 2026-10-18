@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { APP_LANGUAGES, usePreferences } from "../src/preferences";
 
 export default function GlobalControls() {
@@ -14,7 +14,7 @@ export default function GlobalControls() {
     <>
       <View style={[s.header, { backgroundColor: bg, borderBottomColor: border }]}>
         <View style={s.brand}>
-          <View style={s.logo}><Text style={s.logoText}>إ</Text></View>
+          <Image source={require("../Ijazah profile picture.jpeg")} style={s.logoImage} resizeMode="contain" accessibilityLabel="شعار إجازة" />
           <View>
             <Text style={[s.brandName, { color: ink }]}>إجازة | IJAZAH</Text>
             <Text style={[s.subtitle, { color: dark ? "#A8D8EF" : "#788BA0" }]}>القرآن الكريم</Text>
@@ -56,8 +56,7 @@ export default function GlobalControls() {
 const s = StyleSheet.create({
   header: { minHeight: 72, paddingHorizontal: 18, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, gap: 10 },
   brand: { flexDirection: "row", alignItems: "center", gap: 9 },
-  logo: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#35C7DE" },
-  logoText: { color: "#071A33", fontSize: 24, fontWeight: "900" },
+  logoImage: { width: 42, height: 42, borderRadius: 12 },
   brandName: { fontSize: 14, fontWeight: "900" },
   subtitle: { fontSize: 10, marginTop: 2 },
   actions: { flexDirection: "row", alignItems: "center", gap: 7 },
