@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { getLocales } from "expo-localization";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const APP_LANGUAGES = [
   { code: "ar", name: "العربية", native: "العربية", rtl: true },
@@ -42,16 +43,17 @@ type Preferences = {
 };
 const PreferencesContext = createContext<Preferences | null>(null);
 
-function readStored(key: string, fallback: string) {
+async function readStored(key: string, fallback: string) {
   try {
     if (typeof localStorage !== "undefined") return localStorage.getItem(key) || fallback;
   } catch {}
-  return fallback;
+  try { return (await AsyncStorage.getItem(key)) || fallback; } catch { return fallback; }
 }
-function writeStored(key: string, value: string) {
+async function writeStored(key: string, value: string) {
   try {
-    if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
+    if (typeof localStorage !== "undefined") { localStorage.setItem(key, value); return; }
   } catch {}
+  try { await AsyncStorage.setItem(key, value); } catch {}
 }
 
 function detectDeviceLanguage() {
@@ -70,16 +72,22 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const [language, setLanguageState] = useState("ar");
   const [dark, setDarkState] = useState(false);
   useEffect(() => {
-    setLanguageState(readStored("ijazah-language", "") || detectDeviceLanguage());
-    setDarkState(readStored("ijazah-dark-mode", "false") === "true");
+    let active = true;
+    void (async () => {
+      const [savedLanguage, savedDark] = await Promise.all([readStored("ijazah-language", ""), readStored("ijazah-dark-mode", "false")]);
+      if (!active) return;
+      setLanguageState(savedLanguage || detectDeviceLanguage());
+      setDarkState(savedDark === "true");
+    })();
+    return () => { active = false; };
   }, []);
   const setLanguage = (value: string) => {
     setLanguageState(value);
-    writeStored("ijazah-language", value);
+    void writeStored("ijazah-language", value);
   };
   const setDark = (value: boolean) => {
     setDarkState(value);
-    writeStored("ijazah-dark-mode", String(value));
+    void writeStored("ijazah-dark-mode", String(value));
   };
   const value = useMemo(() => ({ language, setLanguage, dark, setDark }), [language, dark]);
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
