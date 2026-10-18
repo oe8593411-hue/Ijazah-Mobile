@@ -1,0 +1,32 @@
+name: Ijazah Web Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Check Expo configuration
+        run: npx expo-doctor
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Build web preview
+        run: npx expo export --platform web
