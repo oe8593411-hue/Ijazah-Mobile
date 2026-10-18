@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View, Pressable, Image, useWindowDimensions } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
+import { usePreferences } from "../src/preferences";
 
 const C = {
   ink: "#142A43",
@@ -19,8 +19,8 @@ const C = {
 };
 
 export default function Home() {
-  const [dark, setDark] = useState(false);
-  const [english, setEnglish] = useState(false);
+  const { language, dark } = usePreferences();
+  const english = language !== "ar";
   const { width } = useWindowDimensions();
   const wide = width >= 760;
   const t = (ar: string, en: string) => english ? en : ar;
@@ -40,15 +40,6 @@ export default function Home() {
               <Text style={[s.brandName, { color: text }]}>{t("إجازة", "IJAAZAH")}</Text>
               <Text style={[s.brandSub, { color: muted }]}>{t("الأكاديمية الإلكترونية للقرآن", "ONLINE QURAN ACADEMY")}</Text>
             </View>
-          </View>
-          <View style={s.controls}>
-            <Pressable accessibilityLabel="Language" onPress={() => setEnglish(!english)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#245C7B" : C.line }]}>
-              <Text style={[s.controlText, { color: text }]}>{english ? "عربي" : "EN"}</Text>
-            </Pressable>
-            <Pressable accessibilityLabel="Toggle appearance" onPress={() => setDark(!dark)} style={[s.control, { backgroundColor: surface, borderColor: dark ? "#245C7B" : C.line }]}>
-              <Text style={s.controlText}>{dark ? "☀️" : "☾"}</Text>
-            </Pressable>
-            <View style={s.avatar}><Text style={s.avatarText}>ع</Text></View>
           </View>
         </View>
 
