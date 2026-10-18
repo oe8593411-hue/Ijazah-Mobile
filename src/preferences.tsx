@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { getLocales } from "expo-localization";
 
 export const APP_LANGUAGES = [
   { code: "ar", name: "العربية", native: "العربية", rtl: true },
@@ -53,11 +54,23 @@ function writeStored(key: string, value: string) {
   } catch {}
 }
 
+function detectDeviceLanguage() {
+  try {
+    const locale = getLocales()[0]?.languageCode?.toLowerCase();
+    if (locale && APP_LANGUAGES.some((item) => item.code === locale)) return locale;
+  } catch {}
+  try {
+    const locale = typeof navigator !== "undefined" ? navigator.language?.split("-")[0]?.toLowerCase() : undefined;
+    if (locale && APP_LANGUAGES.some((item) => item.code === locale)) return locale;
+  } catch {}
+  return "ar";
+}
+
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState("ar");
   const [dark, setDarkState] = useState(false);
   useEffect(() => {
-    setLanguageState(readStored("ijazah-language", "ar"));
+    setLanguageState(readStored("ijazah-language", "") || detectDeviceLanguage());
     setDarkState(readStored("ijazah-dark-mode", "false") === "true");
   }, []);
   const setLanguage = (value: string) => {
