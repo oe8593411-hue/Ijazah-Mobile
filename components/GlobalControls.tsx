@@ -36,7 +36,7 @@ export default function GlobalControls() {
               <Text style={[s.modalTitle, { color: ink }]}>اختَر لغة التطبيق</Text>
               <Pressable onPress={() => setLanguagePickerVisible(false)}><Text style={[s.close, { color: ink }]}>✕</Text></Pressable>
             </View>
-            <Text style={[s.modalNote, { color: dark ? "#A8D8EF" : "#788BA0" }]}>اختر اللغة المطلوبة. سيظل اختيارك محفوظًا في المتصفح.</Text>
+            <Text style={[s.modalNote, { color: dark ? "#A8D8EF" : "#788BA0" }]}>اختر اللغة المطلوبة. سيُحفظ اختيارك على هذا الجهاز، في التطبيق أو المتصفح.</Text>
             <ScrollView style={s.languageList} keyboardShouldPersistTaps="handled">
               {APP_LANGUAGES.map((item) => (
                 <Pressable key={item.code} onPress={() => { setLanguage(item.code); setLanguagePickerVisible(false); }} style={[s.languageRow, { borderBottomColor: border, backgroundColor: item.code === language ? (dark ? "#163752" : "#E5F8FC") : "transparent" }]}>
