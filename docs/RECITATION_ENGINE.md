@@ -58,6 +58,20 @@ The live path is optimized for latency and only surfaces findings that meet stri
 ## Deep analysis mode
 The post-session path may use more compute and broader acoustic context to improve alignment and Tajweed analysis.
 
+## Current implementation boundary (important)
+The application currently contains a Quran-context rule planner and a guarded adapter for a separately hosted acoustic model. The planner marks possible rule locations from the verified Hafs text; it does not hear audio and must not be described as detecting a mistake. Acoustic findings are accepted only when the provider returns a rule ID present in the contextual candidates, confidence >= 0.80, explicit evidence, and valid optional time offsets. Accepted findings remain preliminary until benchmarked and reviewed by qualified teachers.
+
+### Acoustic provider contract
+Configure only on the server:
+- `IJAZAH_TAJWEED_ENGINE_URL`: private HTTPS endpoint for the specialist model.
+- `IJAZAH_TAJWEED_ENGINE_TOKEN`: bearer token stored as a server secret.
+- `IJAZAH_ANALYSIS_ENABLED=true` and `OPENAI_API_KEY` are separate requirements for the current transcription route; do not enable public paid analysis until authentication and per-user rate limits are implemented.
+
+The provider receives multipart fields `file`, `surah`, `ayah`, `riwaya=hafs`, `referenceText`, `expectedRuleChecks`, and `responseContract`. It must return JSON with `rulesEvaluated: string[]`, `findings: {ruleId, confidence, evidence, startMs?, endMs?}[]`, and optional `message` / `confidence`. Findings that do not meet the server-side allowlist and confidence checks are discarded. A provider URL/token alone is not evidence that the model is accurate; run a labeled benchmark before enabling it for users.
+
+### Rule-planner limitations
+The text planner currently proposes review locations for common patterns (noon sakinah/tanween, selected meem-sakinah contexts, visible sukun on qalqalah letters, and possible madd letters). Orthographic marks and word-boundary cases vary; the list is a candidate checklist, not a complete Tajweed parser. It cannot judge ghunnah duration, madd duration, articulation, tafkhim/tarqiq, or whether a reciter actually performed a rule correctly. Do not convert candidates into errors or a score.
+
 ## Evaluation gate
 No production claim of superiority is allowed until benchmark results are collected for:
 - word error rate;
