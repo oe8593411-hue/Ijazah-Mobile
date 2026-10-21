@@ -26,6 +26,8 @@ jobs:
         run: npm install
       - name: Check Expo configuration
         run: npx expo-doctor
+      - name: Verify recitation safety invariants
+        run: node scripts/verify-recitation-safety.mjs
       - name: Type-check
         run: npx tsc --noEmit
       - name: Build web preview
