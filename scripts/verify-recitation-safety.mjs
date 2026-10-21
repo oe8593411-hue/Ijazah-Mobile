@@ -8,7 +8,7 @@ const [recite, api, riwayah] = await Promise.all([
 ]);
 const errors = [];
 
-if (!recite.includes(String.raw`replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ")`)) {
+if (!recite.includes('replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ")')) {
   errors.push("Client Arabic normalization must preserve whitespace and collapse repeated spaces.");
 }
 const toggle = recite.slice(recite.indexOf("async function toggleRecording"), recite.indexOf(" return <View style={s.root}>"));
