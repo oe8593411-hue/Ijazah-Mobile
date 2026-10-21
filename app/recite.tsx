@@ -8,7 +8,7 @@ import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
 const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A43",muted:"#788BA0",surface:"#F4F8FC",white:"#FFFFFF"};
 
 function normalizeArabicForCompare(value:string){
- return value.normalize("NFC").replace(/[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ").trim();
+ return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\\s]/g," ").replace(/\\s+/g," ").trim();
 }
 function compareRecognizedWords(expectedText:string, spokenText:string){
  const expected=normalizeArabicForCompare(expectedText).split(" ").filter(Boolean);
