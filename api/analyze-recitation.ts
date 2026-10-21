@@ -110,12 +110,31 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
       message: "استجابة محرك التجويد لم تجتز التحقق البنيوي."
     };
   }
+  // Fail closed: only accept findings linked to a rule candidate from the verified
+  // reference, with strong confidence and explicit acoustic evidence.
+  const allowedRuleIds = new Set(expectedChecks.map(check => check.ruleId));
+  const findings = result.findings.filter((item): item is Record<string, unknown> => {
+    if (!item || typeof item !== "object") return false;
+    const finding = item as Record<string, unknown>;
+    return typeof finding.ruleId === "string"
+      && allowedRuleIds.has(finding.ruleId)
+      && typeof finding.confidence === "number"
+      && finding.confidence >= 0.8
+      && typeof finding.evidence === "string"
+      && finding.evidence.trim().length >= 8
+      && (finding.startMs === undefined || (typeof finding.startMs === "number" && finding.startMs >= 0))
+      && (finding.endMs === undefined || (typeof finding.endMs === "number" && finding.endMs >= 0))
+      && !(typeof finding.startMs === "number" && typeof finding.endMs === "number" && finding.endMs < finding.startMs);
+  }).slice(0, 20);
+  const evaluatedRules = result.rulesEvaluated.filter((ruleId): ruleId is string => typeof ruleId === "string" && allowedRuleIds.has(ruleId));
   return {
-    status: result.status || "preliminary",
-    rulesEvaluated: result.rulesEvaluated,
-    findings: result.findings,
+    status: findings.length > 0 ? "preliminary_findings" : "completed_no_confirmed_findings",
+    rulesEvaluated: evaluatedRules,
+    findings,
     confidence: typeof result.confidence === "number" ? Math.max(0, Math.min(1, result.confidence)) : null,
-    message: result.message || "نتائج تجويد آلية أولية؛ يلزم التحقق منها قبل اعتمادها."
+    message: findings.length > 0
+      ? "اقتراحات صوتية أولية اجتازت حد الثقة البنيوي؛ يلزم تأكيد معلّم التجويد."
+      : "لم تظهر نتيجة صوتية مؤكدة اجتازت بوابة الثقة؛ لا يعني ذلك خلو التلاوة من الأخطاء."
   };
 }
 
