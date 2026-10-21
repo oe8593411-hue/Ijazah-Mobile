@@ -7,6 +7,29 @@ import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
 
 const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A43",muted:"#788BA0",surface:"#F4F8FC",white:"#FFFFFF"};
 
+function normalizeArabicForCompare(value:string){
+ return value.normalize("NFC").replace(/[\\u064B-\\u065F\\u0670\\u06D6-\\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ").trim();
+}
+function compareRecognizedWords(expectedText:string, spokenText:string){
+ const expected=normalizeArabicForCompare(expectedText).split(" ").filter(Boolean);
+ const actual=normalizeArabicForCompare(spokenText).split(" ").filter(Boolean);
+ const dp=Array.from({length:expected.length+1},()=>Array<number>(actual.length+1).fill(0));
+ for(let i=0;i<=expected.length;i++)dp[i][0]=i;
+ for(let j=0;j<=actual.length;j++)dp[0][j]=j;
+ for(let i=1;i<=expected.length;i++)for(let j=1;j<=actual.length;j++)dp[i][j]=expected[i-1]===actual[j-1]?dp[i-1][j-1]:Math.min(dp[i-1][j-1]+1,dp[i-1][j]+1,dp[i][j-1]+1);
+ const errors:{type:string;expected?:string;heard?:string}[]=[];
+ let i=expected.length,j=actual.length;
+ while(i>0||j>0){
+  if(i>0&&j>0&&expected[i-1]===actual[j-1]){i--;j--;continue;}
+  const sub=i>0&&j>0?dp[i-1][j-1]+1:Infinity,del=i>0?dp[i-1][j]+1:Infinity,ins=j>0?dp[i][j-1]+1:Infinity;
+  if(sub<=del&&sub<=ins){errors.push({type:"possible_substitution",expected:expected[i-1],heard:actual[j-1]});i--;j--;}
+  else if(del<=ins){errors.push({type:"possible_omission",expected:expected[i-1]});i--;}
+  else{errors.push({type:"possible_addition",heard:actual[j-1]});j--;}
+ }
+ const distance=dp[expected.length][actual.length];
+ return {matchRate:Math.max(0,Math.round(100*(1-distance/Math.max(1,expected.length,actual.length)))),textAlignment:{expectedWords:expected.length,recognizedWords:actual.length,editDistance:distance,errors:errors.reverse().slice(0,20)}};
+}
+
 export default function Recite(){
  const params=useLocalSearchParams<{surah?:string;ayah?:string;scope?:string}>();
  const selectedSurah=Math.max(1,Math.min(114,Number(params.surah)||1));
@@ -92,7 +115,30 @@ export default function Recite(){
    setMessage("اكتملت المقارنة النصية المبدئية. هذا ليس حكمًا على التجويد أو صحة الأداء الصوتي.");
   }catch(error){
    const detail=error instanceof Error?error.message:"خطأ غير معروف";
-   setSessionStatus("recorded"); setMessage("تعذر إكمال التحليل: "+detail+". لم نعرض نتيجة مخمّنة.");
+   // Safe local fallback: compare only browser-recognized words with the verified reference.
+   // This is explicitly preliminary and never presented as tajweed analysis.
+   if(heardText.trim() && referenceText && !referenceText.startsWith("جاري تحميل")){
+    const local=compareRecognizedWords(referenceText,heardText);
+    setAnalysis({
+     transcript:heardText.trim(),
+     matchRate:local.matchRate,
+     textAlignment:local.textAlignment,
+     confidence:"low",
+     analysisLevel:"browser_speech_to_text_alignment",
+     engines:{
+      speechRecognition:{status:"completed_preliminary",model:"browser-speech-recognition"},
+      quranAlignment:{status:"completed",matchRate:local.matchRate,editDistance:local.textAlignment.editDistance},
+      acousticTajweed:{status:"not_configured",rulesEvaluated:[]},
+      confidenceGate:{status:"blocked_low_text_confidence"}
+     },
+     tajweed:{status:"not_configured",findings:[],rulesEvaluated:[],message:"هذه مقارنة نصية محلية أولية من تعرّف المتصفح؛ محرك التجويد الصوتي المتخصص غير موصول."},
+     disclaimer:"النسبة تقريبية وتعتمد على دقة التعرّف الصوتي في المتصفح؛ لا تقيس مخارج الحروف أو أحكام التجويد."
+    });
+    setMessage("تعذّر خادم التحليل؛ عُرضت مقارنة محلية مبدئية من كلمات المتصفح فقط، دون حكم على التجويد.");
+   }else{
+    setMessage("تعذر إكمال التحليل: "+detail+". لم نعرض نتيجة مخمّنة.");
+   }
+   setSessionStatus("recorded");
   }finally{setAnalysisBusy(false);}
  }
 
