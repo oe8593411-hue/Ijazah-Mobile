@@ -1,3 +1,4 @@
+import { findExpectedTajweedChecks } from "../src/recitation/tajweed-rules";
 import corpus from "../src/quran/verified-corpus.json";
 
 export const config = { api: { bodyParser: false }, maxDuration: 60 };
@@ -66,7 +67,7 @@ function alignWords(target: string, spoken: string) {
   return { expectedWords: n, recognizedWords: m, editDistance: dp[n][m], errors: errors.slice(0, 20) };
 }
 
-async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: string, surah: number, ayah: number) {
+async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: string, surah: number, ayah: number, referenceText: string, expectedChecks: ReturnType<typeof findExpectedTajweedChecks>) {
   const engineUrl = process.env.IJAZAH_TAJWEED_ENGINE_URL;
   const engineToken = process.env.IJAZAH_TAJWEED_ENGINE_TOKEN;
   if (!engineUrl || !engineToken) {
@@ -82,6 +83,9 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
   form.append("surah", String(surah));
   form.append("ayah", String(ayah));
   form.append("riwaya", "hafs");
+  form.append("referenceText", referenceText);
+  form.append("expectedRuleChecks", JSON.stringify(expectedChecks));
+  form.append("responseContract", "Return only acoustically-supported findings. Each finding must include ruleId, confidence from 0 to 1, evidence, and optional startMs/endMs. Never infer a pronunciation error from text alone. Do not return findings when confidence is below 0.8.");
   const response = await fetch(engineUrl, {
     method: "POST",
     headers: { Authorization: "Bearer " + engineToken },
@@ -165,8 +169,9 @@ export default async function handler(req: any, res: any) {
     const alignment = alignWords(target.text, transcript);
     const matchRate = Math.max(0, Math.round(100 * (1 - alignment.editDistance / Math.max(1, alignment.expectedWords, alignment.recognizedWords))));
     const contentGate = matchRate >= 80 ? "passed_preliminary" : "blocked_low_text_confidence";
+    const expectedRuleChecks = findExpectedTajweedChecks(target.text);
     const tajweed = contentGate === "passed_preliminary"
-      ? await runSpecializedTajweedEngine(audioBytes, String(req.headers["content-type"] || "audio/m4a"), surah, ayah)
+      ? await runSpecializedTajweedEngine(audioBytes, String(req.headers["content-type"] || "audio/m4a"), surah, ayah, target.text, expectedRuleChecks)
       : { status: "blocked_by_content_guard", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "أوقفنا تقييم التجويد لأن تطابق الكلمات أقل من الحد الأولي؛ يجب التأكد من النص قبل تقييم الأحكام." };
     const engines = {
       speechRecognition: { status: transcript ? "completed_preliminary" : "failed", model: "gpt-4o-mini-transcribe" },
@@ -183,6 +188,7 @@ export default async function handler(req: any, res: any) {
       analysisLevel: "speech_to_text_alignment",
       engines,
       tajweed,
+      expectedRuleChecks,
       disclaimer: "معدل التطابق هو تطابق نصي تقريبي وليس درجة تجويد. لا تُعتمد النتائج الصوتية الآلية كإجازة أو بديل عن المعلّم؛ تعتمد دقتها على المحرك الصوتي والبيانات التي اختُبر عليها."
     });
   } catch (error) {
