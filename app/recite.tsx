@@ -8,7 +8,7 @@ import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
 const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A43",muted:"#788BA0",surface:"#F4F8FC",white:"#FFFFFF"};
 
 function normalizeArabicForCompare(value:string){
- return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\\s]/g," ").replace(/\\s+/g," ").trim();
+ return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim();
 }
 function compareRecognizedWords(expectedText:string, spokenText:string){
  const expected=normalizeArabicForCompare(expectedText).split(" ").filter(Boolean);
@@ -153,9 +153,17 @@ export default function Recite(){
     await recorder.stop();
     setRecorded(true);
     setSessionStatus("recorded");
-    setMessage("انتهى التسجيل. جارٍ تجهيز التحليل إن كان الخادم مضبوطًا.");
-    const audioUri=recorder.uri;
-    void analyzeRecording(audioUri ?? undefined);
+    if(fullSurahMode){
+     setAnalysis(null);
+     setMessage("تم تسجيل السورة كاملة. تحليل التسجيل متعدد الآيات غير مفعّل بعد؛ احتفظنا بالتسجيل دون إصدار نتيجة مضللة.");
+    }else if(mode==="deep"){
+     setMessage("انتهى التسجيل. جارٍ تجهيز المقارنة النصية المبدئية إن كان خادم التحليل متاحًا.");
+     const audioUri=recorder.uri;
+     void analyzeRecording(audioUri ?? undefined);
+    }else{
+     setAnalysis(null);
+     setMessage("انتهى التسجيل. الوضع المباشر يعرض تعرّف المتصفح على الكلمات فقط؛ لا يصدر حكمًا على صحة التلاوة أو التجويد. اختر التحليل العميق للمقارنة النصية بعد التسجيل.");
+    }
     return;
    }
    const permission=await requestRecordingPermissionsAsync();
@@ -227,7 +235,7 @@ export default function Recite(){
     <Text style={s.analysisDisclaimer}>{analysis.tajweed?.message||analysis.disclaimer}</Text>
    </View>}
    <View style={s.liveCard}>
-    <View style={s.liveHeader}><View><Text style={s.liveTitle}>مراقبة التلاوة</Text><Text style={s.liveSub}>{mode==="live"?"وضع مباشر — التسجيل الفعلي":"وضع التحليل العميق — بانتظار المحرك"}</Text></View><View style={s.pulse}><View style={s.pulseInner}/></View></View>
+    <View style={s.liveHeader}><View><Text style={s.liveTitle}>مراقبة التلاوة</Text><Text style={s.liveSub}>{mode==="live"?"مباشر — تعرّف مبدئي على الكلمات فقط":"تحليل عميق — مقارنة نصية بعد التسجيل"}</Text></View><View style={s.pulse}><View style={s.pulseInner}/></View></View>
     <View style={s.wave}>{[10,18,28,16,34,22,40,25,14,31,20,37,16,27,12,24].map((h,i)=><View key={i} style={[s.bar,{height:h}]}/>)}</View>
     <View style={s.metrics}>
       <Metric label="التسجيل" value={state.isRecording?"يعمل":"جاهز"}/>
