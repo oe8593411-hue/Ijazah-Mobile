@@ -85,7 +85,7 @@ export default function Home() {
                   <Text style={s.progressLabel}>{t("رحلتك تبدأ بجلسة واحدة", "Your journey starts with one session")}</Text>
                 </View>
                 <View style={s.heroActions}>
-                  <Pressable style={s.primaryButton} onPress={() => router.push("/recite")}><Text style={s.primaryButtonText}>{t("ابدأ التسميع  ←", "Start reciting  →")}</Text></Pressable>
+                  <Pressable style={s.primaryButton} onPress={() => router.push("/journey")}><Text style={s.primaryButtonText}>{t("ابدأ رحلتك  ←", "Start your journey  →")}</Text></Pressable>
                   <Pressable style={s.listenButton} onPress={() => router.push("/listen")}><Text style={s.listenButtonText}>{t("استمع للقرآن  ♫", "Listen to Quran  ♫")}</Text></Pressable>
                 </View>
               </View>
