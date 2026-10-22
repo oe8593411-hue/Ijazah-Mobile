@@ -58,6 +58,13 @@ The live path is optimized for latency and only surfaces findings that meet stri
 ## Deep analysis mode
 The post-session path may use more compute and broader acoustic context to improve alignment and Tajweed analysis.
 
+### Full-surah recording (current guarded scope)
+- The user may submit one recording for a selected surah; the server aligns the recognized words against that surah's verified Hafs text.
+- Text differences are mapped back to the expected ayah and word position. Insertions are anchored to the nearest expected-word position and should be reviewed as suggestions.
+- This is global text alignment, not yet a robust speech-to-Quran forced-alignment model. A low or high match rate is only a preliminary text signal.
+- The full-surah path does not call the single-ayah Tajweed engine and must not report acoustic Tajweed findings.
+- The API remains disabled unless explicitly enabled; do not enable it publicly until authentication and per-user rate limiting are implemented and tested.
+
 ## Evaluation gate
 No production claim of superiority is allowed until benchmark results are collected for:
 - word error rate;

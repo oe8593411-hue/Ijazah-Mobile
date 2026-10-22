@@ -8,7 +8,7 @@ import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
 const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A43",muted:"#788BA0",surface:"#F4F8FC",white:"#FFFFFF"};
 
 function normalizeArabicForCompare(value:string){
- return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\\s]/g," ").replace(/\\s+/g," ").trim();
+ return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim();
 }
 function compareRecognizedWords(expectedText:string, spokenText:string){
  const expected=normalizeArabicForCompare(expectedText).split(" ").filter(Boolean);
@@ -99,7 +99,6 @@ export default function Recite(){
 
  async function analyzeRecording(uri:string|undefined){
   if(!uri){setMessage("التسجيل تم، لكن لم يُرجع الجهاز مسار الملف لتحليله.");return;}
-  if(fullSurahMode){setSessionStatus("recorded");setMessage("تم تسجيل السورة كاملة. تحليل هذا التسجيل متعدد الآيات غير مفعّل بعد؛ خادم التحليل الحالي يقارن آية واحدة فقط، لذلك لن نعرض نتيجة مضللة.");return;}
   const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"https://ijazah-mobile-preview-profit-guard2.vercel.app").replace(/\/$/,"");
   if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
   setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
@@ -108,7 +107,7 @@ export default function Recite(){
    const audioResponse=await fetch(uri);
    if(!audioResponse.ok) throw new Error("تعذر قراءة ملف التسجيل");
    const audioBlob=await audioResponse.blob();
-   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&ayah="+selectedAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
+   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&scope="+(fullSurahMode?"surah":"ayah")+"&ayah="+selectedAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
    const result=await response.json();
    if(!response.ok) throw new Error(result?.message||"تعذر إكمال التحليل");
    setAnalysis(result); setSessionStatus("recorded");
@@ -117,7 +116,7 @@ export default function Recite(){
    const detail=error instanceof Error?error.message:"خطأ غير معروف";
    // Safe local fallback: compare only browser-recognized words with the verified reference.
    // This is explicitly preliminary and never presented as tajweed analysis.
-   if(heardText.trim() && referenceText && !referenceText.startsWith("جاري تحميل")){
+   if(!fullSurahMode && heardText.trim() && referenceText && !referenceText.startsWith("جاري تحميل")){
     const local=compareRecognizedWords(referenceText,heardText);
     setAnalysis({
      transcript:heardText.trim(),
@@ -153,9 +152,17 @@ export default function Recite(){
     await recorder.stop();
     setRecorded(true);
     setSessionStatus("recorded");
-    setMessage("انتهى التسجيل. جارٍ تجهيز التحليل إن كان الخادم مضبوطًا.");
-    const audioUri=recorder.uri;
-    void analyzeRecording(audioUri ?? undefined);
+    if(fullSurahMode && mode!=="deep"){
+     setAnalysis(null);
+     setMessage("تم تسجيل السورة كاملة. اختر التحليل العميق لمقارنة التسجيل بآيات السورة وتحديد مواضع الاختلاف النصي.");
+    }else if(mode==="deep"){
+     setMessage("انتهى التسجيل. جارٍ تجهيز المقارنة النصية المبدئية إن كان خادم التحليل متاحًا.");
+     const audioUri=recorder.uri;
+     void analyzeRecording(audioUri ?? undefined);
+    }else{
+     setAnalysis(null);
+     setMessage("انتهى التسجيل. الوضع المباشر يعرض تعرّف المتصفح على الكلمات فقط؛ لا يصدر حكمًا على صحة التلاوة أو التجويد. اختر التحليل العميق للمقارنة النصية بعد التسجيل.");
+    }
     return;
    }
    const permission=await requestRecordingPermissionsAsync();
@@ -211,7 +218,7 @@ export default function Recite(){
 
    {analysisBusy&&<View style={s.pending}><Text style={s.pendingTitle}>جارٍ تحليل التسجيل</Text><Text style={s.pendingText}>نحوّل الصوت إلى كلمات ثم نقارنها بالنص المرجعي. تحليل التجويد الصوتي يحتاج محركًا متخصصًا منفصلًا.</Text></View>}
    {analysis&&<View style={s.analysisCard}>
-    <Text style={s.analysisTitle}>نتيجة المقارنة النصية المبدئية</Text>
+    <Text style={s.analysisTitle}>{analysis.reference?.scope==="surah"?"نتيجة المقارنة النصية المبدئية للسورة كاملة":"نتيجة المقارنة النصية المبدئية"}</Text>
     <Text style={s.analysisTranscript}>ما تعرّف عليه النظام: {analysis.transcript}</Text>
     <Text style={s.analysisScore}>نسبة التطابق النصي التقريبية: {analysis.matchRate}%</Text>
     <View style={s.engineList}>
@@ -223,11 +230,11 @@ export default function Recite(){
     {(analysis.expectedRuleChecks||[]).length>0&&<View style={s.engineList}><Text style={s.engineTitle}>مواضع تجويد مرشحة للفحص — ليست أخطاء مؤكدة</Text>{analysis.expectedRuleChecks.slice(0,6).map((item:any,index:number)=><Text key={"rule-check-"+index} style={s.engineRow}>{item.ruleName} • الكلمة {item.wordIndex}: {item.context}</Text>)}</View>}
     </View>
     {(analysis.tajweed?.findings||[]).slice(0,8).map((item:any,index:number)=><Text key={"tajweed-"+index} style={s.analysisError}>{typeof item==="string"?item:JSON.stringify(item)}</Text>)}
-    {(analysis.textAlignment?.errors||[]).length>0?(analysis.textAlignment.errors.slice(0,8).map((item:any,index:number)=><Text key={index} style={s.analysisError}>{item.type==="possible_omission"?"احتمال إسقاط":item.type==="possible_addition"?"احتمال زيادة":"احتمال اختلاف"}: {item.expected?("المتوقع «"+item.expected+"»"):""} {item.heard?("، المسموع «"+item.heard+"»"):""}</Text>)):<Text style={s.analysisError}>لم تظهر اختلافات نصية واضحة، لكن هذا لا يثبت صحة التجويد.</Text>}
+    {(analysis.textAlignment?.errors||[]).length>0?(analysis.textAlignment.errors.slice(0,8).map((item:any,index:number)=><Text key={index} style={s.analysisError}>{item.type==="possible_omission"?"احتمال إسقاط":item.type==="possible_addition"?"احتمال زيادة":"احتمال اختلاف"}{typeof item.ayah==="number"?" • الآية "+item.ayah+(typeof item.wordIndex==="number"?"، الكلمة "+item.wordIndex:""):""}: {item.expected?("المتوقع «"+item.expected+"»"):""} {item.heard?("، المسموع «"+item.heard+"»"):""}</Text>)):<Text style={s.analysisError}>لم تظهر اختلافات نصية واضحة، لكن هذا لا يثبت صحة التجويد.</Text>}
     <Text style={s.analysisDisclaimer}>{analysis.tajweed?.message||analysis.disclaimer}</Text>
    </View>}
    <View style={s.liveCard}>
-    <View style={s.liveHeader}><View><Text style={s.liveTitle}>مراقبة التلاوة</Text><Text style={s.liveSub}>{mode==="live"?"وضع مباشر — التسجيل الفعلي":"وضع التحليل العميق — بانتظار المحرك"}</Text></View><View style={s.pulse}><View style={s.pulseInner}/></View></View>
+    <View style={s.liveHeader}><View><Text style={s.liveTitle}>مراقبة التلاوة</Text><Text style={s.liveSub}>{mode==="live"?"مباشر — تعرّف مبدئي على الكلمات فقط":"تحليل عميق — مقارنة نصية بعد التسجيل"}</Text></View><View style={s.pulse}><View style={s.pulseInner}/></View></View>
     <View style={s.wave}>{[10,18,28,16,34,22,40,25,14,31,20,37,16,27,12,24].map((h,i)=><View key={i} style={[s.bar,{height:h}]}/>)}</View>
     <View style={s.metrics}>
       <Metric label="التسجيل" value={state.isRecording?"يعمل":"جاهز"}/>
@@ -237,7 +244,7 @@ export default function Recite(){
     </View>
    </View>
 
-   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>{fullSurahMode?"يمكنك تسجيل السورة كاملة في مقطع واحد. تحليل التسجيل متعدد الآيات لم يُفعّل بعد، لذلك لن ننسب إليه نتيجة تحليل غير موجودة.":"المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام."}</Text></View>
+   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>{fullSurahMode?"يمكنك تسجيل السورة كاملة في مقطع واحد ثم اختيار التحليل العميق لمقارنة الكلمات وتحديد مواضع الاختلاف على مستوى الآيات. تحليل التجويد الصوتي متعدد الآيات غير مفعّل بعد.":"المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام."}</Text></View>
 
    <Text style={s.sectionTitle}>خط أنابيب التحليل</Text>
    <View style={s.steps}>
