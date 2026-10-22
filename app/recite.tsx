@@ -99,7 +99,6 @@ export default function Recite(){
 
  async function analyzeRecording(uri:string|undefined){
   if(!uri){setMessage("التسجيل تم، لكن لم يُرجع الجهاز مسار الملف لتحليله.");return;}
-  if(fullSurahMode){setSessionStatus("recorded");setMessage("تم تسجيل السورة كاملة. تحليل هذا التسجيل متعدد الآيات غير مفعّل بعد؛ خادم التحليل الحالي يقارن آية واحدة فقط، لذلك لن نعرض نتيجة مضللة.");return;}
   const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"https://ijazah-mobile-preview-profit-guard2.vercel.app").replace(/\/$/,"");
   if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
   setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
@@ -108,7 +107,7 @@ export default function Recite(){
    const audioResponse=await fetch(uri);
    if(!audioResponse.ok) throw new Error("تعذر قراءة ملف التسجيل");
    const audioBlob=await audioResponse.blob();
-   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&ayah="+selectedAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
+   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&scope="+(fullSurahMode?"surah":"ayah")+"&ayah="+selectedAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
    const result=await response.json();
    if(!response.ok) throw new Error(result?.message||"تعذر إكمال التحليل");
    setAnalysis(result); setSessionStatus("recorded");
@@ -117,7 +116,7 @@ export default function Recite(){
    const detail=error instanceof Error?error.message:"خطأ غير معروف";
    // Safe local fallback: compare only browser-recognized words with the verified reference.
    // This is explicitly preliminary and never presented as tajweed analysis.
-   if(heardText.trim() && referenceText && !referenceText.startsWith("جاري تحميل")){
+   if(!fullSurahMode && heardText.trim() && referenceText && !referenceText.startsWith("جاري تحميل")){
     const local=compareRecognizedWords(referenceText,heardText);
     setAnalysis({
      transcript:heardText.trim(),
@@ -153,9 +152,9 @@ export default function Recite(){
     await recorder.stop();
     setRecorded(true);
     setSessionStatus("recorded");
-    if(fullSurahMode){
+    if(fullSurahMode && mode!=="deep"){
      setAnalysis(null);
-     setMessage("تم تسجيل السورة كاملة. تحليل التسجيل متعدد الآيات غير مفعّل بعد؛ احتفظنا بالتسجيل دون إصدار نتيجة مضللة.");
+     setMessage("تم تسجيل السورة كاملة. اختر التحليل العميق لمقارنة التسجيل بآيات السورة وتحديد مواضع الاختلاف النصي.");
     }else if(mode==="deep"){
      setMessage("انتهى التسجيل. جارٍ تجهيز المقارنة النصية المبدئية إن كان خادم التحليل متاحًا.");
      const audioUri=recorder.uri;
@@ -245,7 +244,7 @@ export default function Recite(){
     </View>
    </View>
 
-   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>{fullSurahMode?"يمكنك تسجيل السورة كاملة في مقطع واحد. تحليل التسجيل متعدد الآيات لم يُفعّل بعد، لذلك لن ننسب إليه نتيجة تحليل غير موجودة.":"المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام."}</Text></View>
+   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>{fullSurahMode?"يمكنك تسجيل السورة كاملة في مقطع واحد ثم اختيار التحليل العميق لمقارنة الكلمات وتحديد مواضع الاختلاف على مستوى الآيات. تحليل التجويد الصوتي متعدد الآيات غير مفعّل بعد.":"المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام."}</Text></View>
 
    <Text style={s.sectionTitle}>خط أنابيب التحليل</Text>
    <View style={s.steps}>
