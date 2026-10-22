@@ -12,7 +12,7 @@ if (!recite.includes('replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ")
   errors.push("Client Arabic normalization must preserve whitespace and collapse repeated spaces.");
 }
 const toggle = recite.slice(recite.indexOf("async function toggleRecording"), recite.indexOf(" return <View style={s.root}>"));
-if (!toggle.includes("if(fullSurahMode)") || !toggle.includes('else if(mode==="deep")')) {
+if (!toggle.includes('if(fullSurahMode && mode!=="deep")') || !toggle.includes('else if(mode==="deep")')) {
   errors.push("Recording stop must keep full-surah analysis gated and run server analysis only in deep mode.");
 }
 if (!toggle.includes("void analyzeRecording(audioUri ?? undefined)") || !toggle.includes("الوضع المباشر يعرض تعرّف المتصفح")) {
