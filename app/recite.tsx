@@ -218,7 +218,7 @@ export default function Recite(){
 
    {analysisBusy&&<View style={s.pending}><Text style={s.pendingTitle}>جارٍ تحليل التسجيل</Text><Text style={s.pendingText}>نحوّل الصوت إلى كلمات ثم نقارنها بالنص المرجعي. تحليل التجويد الصوتي يحتاج محركًا متخصصًا منفصلًا.</Text></View>}
    {analysis&&<View style={s.analysisCard}>
-    <Text style={s.analysisTitle}>نتيجة المقارنة النصية المبدئية</Text>
+    <Text style={s.analysisTitle}>{analysis.reference?.scope==="surah"?"نتيجة المقارنة النصية المبدئية للسورة كاملة":"نتيجة المقارنة النصية المبدئية"}</Text>
     <Text style={s.analysisTranscript}>ما تعرّف عليه النظام: {analysis.transcript}</Text>
     <Text style={s.analysisScore}>نسبة التطابق النصي التقريبية: {analysis.matchRate}%</Text>
     <View style={s.engineList}>
@@ -230,7 +230,7 @@ export default function Recite(){
     {(analysis.expectedRuleChecks||[]).length>0&&<View style={s.engineList}><Text style={s.engineTitle}>مواضع تجويد مرشحة للفحص — ليست أخطاء مؤكدة</Text>{analysis.expectedRuleChecks.slice(0,6).map((item:any,index:number)=><Text key={"rule-check-"+index} style={s.engineRow}>{item.ruleName} • الكلمة {item.wordIndex}: {item.context}</Text>)}</View>}
     </View>
     {(analysis.tajweed?.findings||[]).slice(0,8).map((item:any,index:number)=><Text key={"tajweed-"+index} style={s.analysisError}>{typeof item==="string"?item:JSON.stringify(item)}</Text>)}
-    {(analysis.textAlignment?.errors||[]).length>0?(analysis.textAlignment.errors.slice(0,8).map((item:any,index:number)=><Text key={index} style={s.analysisError}>{item.type==="possible_omission"?"احتمال إسقاط":item.type==="possible_addition"?"احتمال زيادة":"احتمال اختلاف"}: {item.expected?("المتوقع «"+item.expected+"»"):""} {item.heard?("، المسموع «"+item.heard+"»"):""}</Text>)):<Text style={s.analysisError}>لم تظهر اختلافات نصية واضحة، لكن هذا لا يثبت صحة التجويد.</Text>}
+    {(analysis.textAlignment?.errors||[]).length>0?(analysis.textAlignment.errors.slice(0,8).map((item:any,index:number)=><Text key={index} style={s.analysisError}>{item.type==="possible_omission"?"احتمال إسقاط":item.type==="possible_addition"?"احتمال زيادة":"احتمال اختلاف"}{typeof item.ayah==="number"?" • الآية "+item.ayah+(typeof item.wordIndex==="number"?"، الكلمة "+item.wordIndex:""):""}: {item.expected?("المتوقع «"+item.expected+"»"):""} {item.heard?("، المسموع «"+item.heard+"»"):""}</Text>)):<Text style={s.analysisError}>لم تظهر اختلافات نصية واضحة، لكن هذا لا يثبت صحة التجويد.</Text>}
     <Text style={s.analysisDisclaimer}>{analysis.tajweed?.message||analysis.disclaimer}</Text>
    </View>}
    <View style={s.liveCard}>
