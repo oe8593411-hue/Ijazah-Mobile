@@ -21,6 +21,12 @@ if (!toggle.includes("void analyzeRecording(audioUri ?? undefined)") || !toggle.
 if (!api.includes('process.env.IJAZAH_ANALYSIS_ENABLED !== "true"')) {
   errors.push("Server analysis must stay disabled unless explicitly enabled.");
 }
+if (!api.includes('scope === "surah"') || !api.includes("expectedWordLocations") || !api.includes("full_surah_speech_to_text_alignment")) {
+  errors.push("Full-surah analysis must align against the selected surah and map differences to ayah locations.");
+}
+if (!recite.includes('&scope="+(fullSurahMode?"surah":"ayah")') || !recite.includes('typeof item.ayah==="number"')) {
+  errors.push("Client must request full-surah alignment and display ayah locations for differences.");
+}
 if (!api.includes('requestedRiwaya !== "hafs"')) {
   errors.push("Server analysis must reject unverified riwayat.");
 }
