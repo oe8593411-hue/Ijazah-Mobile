@@ -23,6 +23,7 @@ export default function Home() {
   const { width } = useWindowDimensions();
   const english = language !== "ar";
   const wide = width >= 760;
+  const compact = width < 520;
   const t = (ar: string, en: string) => english ? en : ar;
   const bg = dark ? "#061525" : C.paper;
   const surface = dark ? "#102B43" : C.white;
@@ -67,7 +68,7 @@ export default function Home() {
           </View>
         </View>
 
-        <View style={[s.hero, wide && s.heroWide]}>
+        <View style={[s.hero, compact && s.heroCompact, wide && s.heroWide]}>
           <View style={s.heroGlowOne} />
           <View style={s.heroGlowTwo} />
           <View style={s.heroText}>
@@ -81,7 +82,7 @@ export default function Home() {
               <Text style={s.heroButtonArrow}>{english ? "→" : "←"}</Text>
             </Pressable>
           </View>
-          <View style={s.heroArt}>
+          <View style={[s.heroArt, compact && s.heroArtCompact]}>
             <View style={s.artRingOuter} />
             <View style={s.artRingInner} />
             <View style={s.bookPlate}>
@@ -159,6 +160,7 @@ const s = StyleSheet.create({
   logo: { width: 55, height: 55, borderRadius: 16 },
   hero: { minHeight: 300, backgroundColor: C.navy, borderRadius: 30, padding: 23, overflow: "hidden", flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderColor: "#1B4A68", marginBottom: 28 },
   heroWide: { minHeight: 320, padding: 34, gap: 25 },
+  heroCompact: { flexDirection: "column", alignItems: "stretch", padding: 22 },
   heroGlowOne: { position: "absolute", width: 250, height: 250, borderRadius: 125, backgroundColor: "#168DA5", opacity: 0.22, right: -95, top: -105 },
   heroGlowTwo: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#D5AA53", opacity: 0.09, left: -85, bottom: -95 },
   heroText: { flex: 1, alignItems: "flex-end", zIndex: 1 },
@@ -170,6 +172,7 @@ const s = StyleSheet.create({
   heroButtonText: { color: C.navy, fontSize: 12, fontWeight: "900" },
   heroButtonArrow: { color: C.navy, fontSize: 17, fontWeight: "900" },
   heroArt: { width: 130, alignItems: "center", justifyContent: "center", minHeight: 200 },
+  heroArtCompact: { width: "100%", minHeight: 150, marginTop: 12 },
   artRingOuter: { position: "absolute", width: 124, height: 124, borderRadius: 40, borderWidth: 1, borderColor: "#4BAFC4", transform: [{ rotate: "45deg" }] },
   artRingInner: { position: "absolute", width: 94, height: 94, borderRadius: 31, borderWidth: 1, borderColor: "#D5AA53", transform: [{ rotate: "20deg" }] },
   bookPlate: { width: 75, height: 85, borderRadius: 23, backgroundColor: "#123A56", borderWidth: 1, borderColor: "#28637F", alignItems: "center", justifyContent: "center" },
