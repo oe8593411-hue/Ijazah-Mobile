@@ -52,10 +52,6 @@ export default function Home() {
             <Text style={s.title}>{t("عِش مع القرآن، آيةً آية", "Connect with the Quran, ayah by ayah")}</Text>
             <Text style={s.subtitle}>{t("اقرأ من المصحف الموثّق، أو سمّع محفوظك وراجع المقارنة النصية المتاحة.", "Read from a verified Quran text, or recite from memory and review the available text comparison.")}</Text>
             <View style={s.actions}>
-              <Pressable accessibilityRole="button" onPress={() => router.push("/recite")} style={({ pressed }) => [s.primaryButton, pressed && s.pressed]}>
-                <Text style={s.primaryButtonText}>{t("ابدأ التسميع", "Start reciting")}</Text>
-                <Text style={s.buttonArrow}>{en ? "→" : "←"}</Text>
-              </Pressable>
               <Pressable accessibilityRole="button" onPress={() => router.push("/quran")} style={({ pressed }) => [s.secondaryButton, pressed && s.pressed, { borderColor: dark ? "#35536B" : C.line }]}>
                 <Text style={[s.secondaryButtonText, { color: ink }]}>{t("افتح المصحف", "Read Quran")}</Text>
               </Pressable>
