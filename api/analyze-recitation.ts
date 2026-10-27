@@ -183,7 +183,8 @@ export default async function handler(req: any, res: any) {
     const upstream = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: { Authorization: "Bearer " + apiKey },
-      body: form
+      body: form,
+      signal: AbortSignal.timeout(45000)
     });
     if (!upstream.ok) {
       const detail = await upstream.text();
@@ -195,13 +196,20 @@ export default async function handler(req: any, res: any) {
     if (!transcript) return res.status(422).json({ error: "no_speech_detected", message: "لم نتمكن من تمييز كلمات واضحة في التسجيل." });
     const alignment = alignWords(target.text, transcript);
     const matchRate = Math.max(0, Math.round(100 * (1 - alignment.editDistance / Math.max(1, alignment.expectedWords, alignment.recognizedWords))));
-    const contentGate = matchRate >= 80 ? "passed_preliminary" : "blocked_low_text_confidence";
+    // A transcription is not reliable enough to accuse the reciter of specific word
+    // errors when the overall alignment is weak. Use a conservative gate to reduce
+    // false positives; this score is textual similarity, not acoustic confidence.
+    const contentGate = matchRate >= 85 && alignment.recognizedWords > 0
+      ? "passed_preliminary"
+      : "blocked_low_text_confidence";
     const expectedRuleChecks = scope === "ayah" ? findExpectedTajweedChecks(target.text) : [];
-    const locatedErrors = alignment.errors.map(error => {
-      const locationIndex = Math.max(0, Math.min(expectedWordLocations.length - 1, (error.position || 1) - 1));
-      const location = expectedWordLocations[locationIndex];
-      return location ? { ...error, surah: location.surah, ayah: location.ayah, wordIndex: location.wordIndex } : error;
-    });
+    const locatedErrors = contentGate === "passed_preliminary"
+      ? alignment.errors.map(error => {
+          const locationIndex = Math.max(0, Math.min(expectedWordLocations.length - 1, (error.position || 1) - 1));
+          const location = expectedWordLocations[locationIndex];
+          return location ? { ...error, surah: location.surah, ayah: location.ayah, wordIndex: location.wordIndex } : error;
+        })
+      : [];
     const tajweed = scope === "surah"
       ? { status: "not_configured", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "اكتملت مقارنة الكلمات على مستوى السورة. محرك التجويد الصوتي متعدد الآيات غير مهيأ؛ لم نصدر حكمًا في التجويد." }
       : contentGate === "passed_preliminary"
