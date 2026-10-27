@@ -43,6 +43,40 @@ async function readRawBody(req: AsyncIterable<Uint8Array | string>) {
   return all;
 }
 
+async function transcribeAudio(
+  audioBytes: Uint8Array,
+  contentType: string,
+  apiKey: string,
+  model: "gpt-4o-mini-transcribe" | "gpt-4o-transcribe"
+) {
+  const normalizedType = contentType.split(";")[0].trim() || "audio/m4a";
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: normalizedType }),
+    "recitation." + audioFileExtension(normalizedType)
+  );
+  form.append("model", model);
+  form.append("language", "ar");
+  form.append("prompt", "Quran recitation in Arabic. Transcribe only the words clearly heard; do not complete missing verses or guess inaudible words.");
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + apiKey },
+    body: form,
+    signal: AbortSignal.timeout(45000)
+  });
+  if (!response.ok) {
+    const details = await response.text();
+    console.error("AI4X transcription stage failed", model, response.status, details.slice(0, 300));
+    throw new Error("TRANSCRIPTION_PROVIDER_FAILED");
+  }
+  const data = await response.json() as { text?: string };
+  const transcript = (data.text || "").trim();
+  if (!transcript) throw new Error("NO_TRANSCRIPTION_TEXT");
+  return transcript;
+}
+
 function alignWords(target: string, spoken: string, allowPrefix = false) {
   const expected = normalizeArabic(target).split(" ").filter(Boolean);
   const actual = normalizeArabic(spoken).split(" ").filter(Boolean);
@@ -102,9 +136,26 @@ function alignWords(target: string, spoken: string, allowPrefix = false) {
     referenceWords: n,
     recognizedWords: m,
     editDistance: dp[effectiveExpectedWords][m],
-    errors: errors.slice(0, 20),
+    totalErrors: errors.length,
+    errors: errors.slice(0, 100),
     matchedExpectedIndexes
   };
+}
+
+function scoreAlignment(alignment: ReturnType<typeof alignWords>) {
+  return Math.max(0, Math.round(100 * (
+    1 - alignment.editDistance / Math.max(1, alignment.expectedWords, alignment.recognizedWords)
+  )));
+}
+
+function sameAlignmentError(
+  first: ReturnType<typeof alignWords>["errors"][number],
+  second: ReturnType<typeof alignWords>["errors"][number]
+) {
+  return first.type === second.type
+    && first.position === second.position
+    && normalizeArabic(first.expected || "") === normalizeArabic(second.expected || "")
+    && normalizeArabic(first.heard || "") === normalizeArabic(second.heard || "");
 }
 
 async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: string, surah: number, ayah: number, referenceText: string, expectedChecks: ReturnType<typeof findExpectedTajweedChecks>) {
@@ -227,37 +278,82 @@ export default async function handler(req: any, res: any) {
     const audioBytes = await readRawBody(req);
     if (audioBytes.byteLength < 1024) return res.status(400).json({ error: "audio_too_short", message: "التسجيل قصير جدًا للتحليل." });
     const contentType = String(req.headers["content-type"] || "audio/m4a").split(";")[0].trim() || "audio/m4a";
-    const audioBlob = new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: contentType });
-    const form = new FormData();
-    form.append("file", audioBlob, "recitation." + audioFileExtension(contentType));
-    form.append("model", "gpt-4o-mini-transcribe");
-    form.append("language", "ar");
-    form.append("prompt", "Quran recitation in Arabic. Transcribe only the words clearly heard; do not complete missing verses or guess inaudible words.");
-    const upstream = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + apiKey },
-      body: form,
-      signal: AbortSignal.timeout(45000)
-    });
-    if (!upstream.ok) {
-      const detail = await upstream.text();
-      console.error("Transcription provider error", upstream.status, detail.slice(0, 500));
-      return res.status(502).json({ error: "transcription_provider_failed", message: "تعذّر إكمال التعرّف على الصوت الآن." });
+
+    // AI1: two different speech-to-text models inspect the same recording.
+    // AI4: no specific word error is released unless the independent model agrees.
+    const [primaryResult, verifierResult] = await Promise.allSettled([
+      transcribeAudio(audioBytes, contentType, apiKey, "gpt-4o-mini-transcribe"),
+      transcribeAudio(audioBytes, contentType, apiKey, "gpt-4o-transcribe")
+    ]);
+    if (primaryResult.status !== "fulfilled") {
+      return res.status(502).json({
+        error: "transcription_provider_failed",
+        message: "تعذّر إكمال التعرّف على الصوت الآن."
+      });
     }
-    const transcriptData = await upstream.json() as { text?: string };
-    const transcript = (transcriptData.text || "").trim();
-    if (!transcript) return res.status(422).json({ error: "no_speech_detected", message: "لم نتمكن من تمييز كلمات واضحة في التسجيل." });
+
+    const transcript = primaryResult.value;
     const alignment = alignWords(target.text, transcript, scope === "range");
-    const matchRate = Math.max(0, Math.round(100 * (1 - alignment.editDistance / Math.max(1, alignment.expectedWords, alignment.recognizedWords))));
-    // A transcription is not reliable enough to accuse the reciter of specific word
-    // errors when the overall alignment is weak. Use a conservative gate to reduce
-    // false positives; this score is textual similarity, not acoustic confidence.
-    const contentGate = matchRate >= 85 && alignment.recognizedWords > 0
-      ? "passed_preliminary"
-      : "blocked_low_text_confidence";
+    const primaryMatchRate = scoreAlignment(alignment);
+    let verifierTranscript: string | null = null;
+    let verifierAlignment: ReturnType<typeof alignWords> | null = null;
+    let verifierMatchRate: number | null = null;
+    let transcriptAgreementRate: number | null = null;
+    let verificationStatus: "completed" | "unavailable" = "unavailable";
+    let contentGate = "verification_unavailable";
+    let contentGateReason = "تعذّر التحقق المتقاطع؛ لم نعرض أخطاء كلمات غير مؤكدة.";
+    let confirmedErrors: ReturnType<typeof alignWords>["errors"] = [];
+    let confirmedMatchedIndexes: number[] = [];
+
+    if (verifierResult.status === "fulfilled") {
+      verifierTranscript = verifierResult.value;
+      verifierAlignment = alignWords(target.text, verifierTranscript, scope === "range");
+      verifierMatchRate = scoreAlignment(verifierAlignment);
+      verificationStatus = "completed";
+
+      const transcriptComparison = alignWords(transcript, verifierTranscript);
+      transcriptAgreementRate = scoreAlignment(transcriptComparison);
+      const consensusErrors = alignment.errors.filter(first =>
+        verifierAlignment!.errors.some(second => sameAlignmentError(first, second))
+      );
+      const allCandidatesCorroborated =
+        alignment.totalErrors <= alignment.errors.length
+        && verifierAlignment.totalErrors <= verifierAlignment.errors.length
+        && consensusErrors.length === alignment.totalErrors
+        && consensusErrors.length === verifierAlignment.totalErrors;
+      const bothTranscriptsPlausible = primaryMatchRate >= 85 && verifierMatchRate >= 85;
+
+      if (!bothTranscriptsPlausible) {
+        contentGate = "blocked_low_text_confidence";
+        contentGateReason = "تطابق إحدى النتيجتين مع النص المرجعي منخفض؛ لم نعتمد مواضع أخطاء.";
+      } else if (transcriptAgreementRate < 90) {
+        contentGate = "review_required";
+        contentGateReason = "اختلف محركا التعرف على الكلمات؛ نحتاج إلى تسجيل أوضح قبل تحديد الأخطاء.";
+      } else if (!allCandidatesCorroborated) {
+        contentGate = "review_required";
+        contentGateReason = "لم يتفق المحركان على كل مواضع الاختلاف؛ لم نعتمد أي خطأ منفرد.";
+      } else {
+        confirmedErrors = consensusErrors;
+        const verifierMatched = new Set(verifierAlignment.matchedExpectedIndexes);
+        confirmedMatchedIndexes = alignment.matchedExpectedIndexes.filter(index => verifierMatched.has(index));
+        if (consensusErrors.length === 0) {
+          contentGate = "passed_consensus_no_mismatch";
+          contentGateReason = "تطابقت نتيجتا التعرف مع النص المرجعي ولم تظهر اختلافات نصية مؤكدة.";
+        } else {
+          contentGate = "passed_consensus_with_mismatches";
+          contentGateReason = "اتفق محركا التعرف على مواضع اختلاف نصية مرشحة للمراجعة.";
+        }
+      }
+    }
+
+    const matchRate = verifierMatchRate === null
+      ? primaryMatchRate
+      : Math.min(primaryMatchRate, verifierMatchRate);
     const expectedRuleChecks = scope === "ayah" ? findExpectedTajweedChecks(target.text) : [];
-    const locatedErrors = contentGate === "passed_preliminary"
-      ? alignment.errors.map(error => {
+    const canReleaseResults = contentGate === "passed_consensus_no_mismatch"
+      || contentGate === "passed_consensus_with_mismatches";
+    const locatedErrors = contentGate === "passed_consensus_with_mismatches"
+      ? confirmedErrors.slice(0, 20).map(error => {
           const locationIndex = Math.max(0, Math.min(expectedWordLocations.length - 1, (error.position || 1) - 1));
           const location = expectedWordLocations[locationIndex];
           return location ? { ...error, surah: location.surah, ayah: location.ayah, wordIndex: location.wordIndex } : error;
@@ -265,14 +361,18 @@ export default async function handler(req: any, res: any) {
       : [];
     const tajweed = scope !== "ayah"
       ? { status: "not_configured", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "اكتملت مقارنة الكلمات المتصلة. محرك التجويد الصوتي متعدد الآيات غير مهيأ؛ لم نصدر حكمًا في التجويد." }
-      : contentGate === "passed_preliminary"
-        ? await runSpecializedTajweedEngine(audioBytes, String(req.headers["content-type"] || "audio/m4a"), surah, ayah, target.text, expectedRuleChecks)
-        : { status: "blocked_by_content_guard", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "أوقفنا تقييم التجويد لأن تطابق الكلمات أقل من الحد الأولي؛ يجب التأكد من النص قبل تقييم الأحكام." };
+      : contentGate === "passed_consensus_no_mismatch"
+        ? await runSpecializedTajweedEngine(audioBytes, contentType, surah, ayah, target.text, expectedRuleChecks)
+        : { status: "blocked_by_confidence_gate", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "لم نُصدر حكمًا صوتيًا لأن التحقق المتقاطع لم يكتمل بثقة كافية." };
     const engines = {
-      speechRecognition: { status: transcript ? "completed_preliminary" : "failed", model: "gpt-4o-mini-transcribe" },
+      speechRecognition: {
+        status: "completed",
+        model: "gpt-4o-mini-transcribe",
+        verificationModel: "gpt-4o-transcribe"
+      },
       quranAlignment: { status: "completed", matchRate, editDistance: alignment.editDistance },
       acousticTajweed: { status: tajweed.status, rulesEvaluated: tajweed.rulesEvaluated },
-      confidenceGate: { status: contentGate }
+      confidenceGate: { status: contentGate, canReleaseResults }
     };
     return res.status(200).json({
       reference: {
@@ -286,10 +386,39 @@ export default async function handler(req: any, res: any) {
       textAlignment: {
         ...alignment,
         errors: locatedErrors,
-        matchedExpectedIndexes: contentGate === "passed_preliminary" ? alignment.matchedExpectedIndexes : []
+        matchedExpectedIndexes: canReleaseResults ? confirmedMatchedIndexes : []
       },
       matchRate,
-      confidence: "preliminary",
+      confidence: canReleaseResults ? "corroborated" : "needs_review",
+      ai4x: {
+        version: "1.0",
+        stages: {
+          audioRecognition: {
+            status: "completed",
+            primaryModel: "gpt-4o-mini-transcribe",
+            verifierModel: "gpt-4o-transcribe",
+            verifierStatus: verificationStatus
+          },
+          quranAlignment: {
+            status: "completed",
+            primaryMatchRate,
+            verifierMatchRate,
+            conservativeMatchRate: matchRate,
+            transcriptAgreementRate
+          },
+          acousticTajweed: {
+            status: tajweed.status,
+            checkedRules: tajweed.rulesEvaluated.length,
+            findingCount: Array.isArray(tajweed.findings) ? tajweed.findings.length : 0
+          },
+          confidenceGate: {
+            status: contentGate,
+            reason: contentGateReason,
+            canReleaseResults,
+            corroboratedErrorCount: locatedErrors.length
+          }
+        }
+      },
       analysisLevel: scope === "surah" ? "full_surah_speech_to_text_alignment"
         : scope === "range" ? "continuous_surah_range_speech_to_text_alignment"
         : "speech_to_text_alignment",
