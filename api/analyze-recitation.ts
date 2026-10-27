@@ -43,7 +43,7 @@ async function readRawBody(req: AsyncIterable<Uint8Array | string>) {
   return all;
 }
 
-function alignWords(target: string, spoken: string) {
+function alignWords(target: string, spoken: string, allowPrefix = false) {
   const expected = normalizeArabic(target).split(" ").filter(Boolean);
   const actual = normalizeArabic(spoken).split(" ").filter(Boolean);
   const n = expected.length, m = actual.length;
@@ -60,9 +60,21 @@ function alignWords(target: string, spoken: string) {
       ? dp[i - 1][j - 1]
       : Math.min(dp[i - 1][j - 1] + 1, dp[i - 1][j] + 1, dp[i][j - 1] + 1);
   }
+  let effectiveExpectedWords = n;
+  if (allowPrefix && m > 0) {
+    let bestDistance = dp[0][m];
+    effectiveExpectedWords = 0;
+    for (let row = 1; row <= n; row++) {
+      const distance = dp[row][m];
+      if (distance < bestDistance || (distance === bestDistance && row > effectiveExpectedWords)) {
+        bestDistance = distance;
+        effectiveExpectedWords = row;
+      }
+    }
+  }
   const errors: { type: string; expected?: string; heard?: string; position: number }[] = [];
   const matchedExpectedIndexes: number[] = [];
-  let i = n, j = m;
+  let i = effectiveExpectedWords, j = m;
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && expected[i - 1] === actual[j - 1]) {
       matchedExpectedIndexes.push(i - 1);
@@ -86,9 +98,10 @@ function alignWords(target: string, spoken: string) {
   errors.reverse();
   matchedExpectedIndexes.reverse();
   return {
-    expectedWords: n,
+    expectedWords: effectiveExpectedWords,
+    referenceWords: n,
     recognizedWords: m,
-    editDistance: dp[n][m],
+    editDistance: dp[effectiveExpectedWords][m],
     errors: errors.slice(0, 20),
     matchedExpectedIndexes
   };
@@ -234,7 +247,7 @@ export default async function handler(req: any, res: any) {
     const transcriptData = await upstream.json() as { text?: string };
     const transcript = (transcriptData.text || "").trim();
     if (!transcript) return res.status(422).json({ error: "no_speech_detected", message: "لم نتمكن من تمييز كلمات واضحة في التسجيل." });
-    const alignment = alignWords(target.text, transcript);
+    const alignment = alignWords(target.text, transcript, scope === "range");
     const matchRate = Math.max(0, Math.round(100 * (1 - alignment.editDistance / Math.max(1, alignment.expectedWords, alignment.recognizedWords))));
     // A transcription is not reliable enough to accuse the reciter of specific word
     // errors when the overall alignment is weak. Use a conservative gate to reduce
