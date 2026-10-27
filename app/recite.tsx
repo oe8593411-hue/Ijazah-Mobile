@@ -118,12 +118,14 @@ export default function Recite(){
   const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"https://ijazah-mobile-preview-profit-guard2.vercel.app").replace(/\/$/,"");
   if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
   setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
-  setMessage("جارٍ إرسال التسجيل لتحويله إلى نص ومقارنته بالآية المرجعية…");
+  setMessage("جارٍ تحليل التسجيل ومقارنة الكلمات من موضع البداية الصحيح…");
   try{
    const audioResponse=await fetch(uri);
    if(!audioResponse.ok) throw new Error("تعذر قراءة ملف التسجيل");
    const audioBlob=await audioResponse.blob();
-   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&scope="+(fullSurahMode?"surah":"ayah")+"&ayah="+selectedAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
+   const analysisScope=fullSurahMode?"surah":continuousMode?"range":"ayah";
+   const analysisAyah=activeAyah;
+   const response=await fetch(baseUrl+"/api/analyze-recitation?surah="+selectedSurah+"&scope="+analysisScope+"&ayah="+analysisAyah+"&startAyah="+analysisAyah+"&riwaya=hafs",{method:"POST",headers:{"Content-Type":audioBlob.type||"audio/m4a"},body:audioBlob});
    const result=await response.json();
    if(!response.ok) throw new Error(result?.message||"تعذر إكمال التحليل");
    setAnalysis(result); setSessionStatus("recorded");
