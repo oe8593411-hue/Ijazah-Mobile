@@ -20,16 +20,26 @@ function compareRecognizedWords(expectedText:string, spokenText:string){
  for(let j=0;j<=actual.length;j++)dp[0][j]=j;
  for(let i=1;i<=expected.length;i++)for(let j=1;j<=actual.length;j++)dp[i][j]=expected[i-1]===actual[j-1]?dp[i-1][j-1]:Math.min(dp[i-1][j-1]+1,dp[i-1][j]+1,dp[i][j-1]+1);
  const errors:{type:string;expected?:string;heard?:string}[]=[];
+ const matchedExpectedIndexes:number[]=[];
  let i=expected.length,j=actual.length;
  while(i>0||j>0){
-  if(i>0&&j>0&&expected[i-1]===actual[j-1]){i--;j--;continue;}
+  if(i>0&&j>0&&expected[i-1]===actual[j-1]){
+   matchedExpectedIndexes.push(i-1);
+   i--;j--;
+   continue;
+  }
   const sub=i>0&&j>0?dp[i-1][j-1]+1:Infinity,del=i>0?dp[i-1][j]+1:Infinity,ins=j>0?dp[i][j-1]+1:Infinity;
   if(sub<=del&&sub<=ins){errors.push({type:"possible_substitution",expected:expected[i-1],heard:actual[j-1]});i--;j--;}
   else if(del<=ins){errors.push({type:"possible_omission",expected:expected[i-1]});i--;}
   else{errors.push({type:"possible_addition",heard:actual[j-1]});j--;}
  }
  const distance=dp[expected.length][actual.length];
- return {matchRate:Math.max(0,Math.round(100*(1-distance/Math.max(1,expected.length,actual.length)))),textAlignment:{expectedWords:expected.length,recognizedWords:actual.length,editDistance:distance,errors:errors.reverse().slice(0,20)}};
+ matchedExpectedIndexes.reverse();
+ return {
+  matchRate:Math.max(0,Math.round(100*(1-distance/Math.max(1,expected.length,actual.length)))),
+  matchedExpectedIndexes,
+  textAlignment:{expectedWords:expected.length,recognizedWords:actual.length,editDistance:distance,errors:errors.reverse().slice(0,20)}
+ };
 }
 
 export default function Recite(){
@@ -209,15 +219,9 @@ function renderAlignedWords(expected:string,heard:string){
  const heardWords=normalizeArabicForCompare(heard).split(" ").filter(Boolean);
  if(!heardWords.length)return expectedWords.map((word,index)=><Text key={index}>{word} </Text>);
  const comparison=compareRecognizedWords(expected,heard);
- // Avoid marking words as correct when the transcript is incomplete or noisy.
+ // Keep all words neutral when browser recognition is too incomplete or noisy.
  if(comparison.matchRate<85)return expectedWords.map((word,index)=><Text key={index}>{word} </Text>);
- let cursor=0;
- return expectedWords.map((word,index)=>{
-  const normalized=normalizeArabicForCompare(word);
-  const pos=heardWords.indexOf(normalized,cursor);
-  const matched=pos>=0;
-  if(matched)cursor=pos+1;
-  return <Text key={index} style={{color:matched?"#18A86B":undefined}}>{word} </Text>;
- });
+ const matched=new Set(comparison.matchedExpectedIndexes);
+ return expectedWords.map((word,index)=><Text key={index} style={{color:matched.has(index)?"#18A86B":undefined}}>{word} </Text>);
 }
 const s=StyleSheet.create({root:{flex:1,paddingHorizontal:12,paddingTop:8,paddingBottom:8},minimalHeader:{height:50,flexDirection:"row",alignItems:"center",marginBottom:5},pageToolbar:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:7,marginBottom:8},toolbarButton:{flex:1,minHeight:38,paddingHorizontal:5,paddingVertical:8,borderRadius:10,alignItems:"center",justifyContent:"center",backgroundColor:"rgba(53,199,222,0.15)",borderWidth:1,borderColor:"rgba(53,199,222,0.45)"},toolbarButtonText:{fontSize:10,fontWeight:"800",color:"#2587A0",textAlign:"center"},smallAction:{width:36,height:36,borderRadius:18,alignItems:"center",justifyContent:"center",backgroundColor:"rgba(100,150,180,0.12)"},headerActionText:{fontSize:23,fontWeight:"700"},surahTitle:{fontSize:17,fontWeight:"900",textAlign:"center"},surahMeta:{fontSize:10,marginTop:3,textAlign:"center"},pageFrame:{flex:1,borderWidth:1.5,borderRadius:10,paddingHorizontal:15,paddingVertical:11,justifyContent:"space-between",overflow:"hidden"},pageTopLine:{alignItems:"center",borderBottomWidth:1,borderColor:"#D9C99D",paddingBottom:8,marginBottom:8},pageSurah:{fontSize:12,fontWeight:"800",textAlign:"center"},pageTextArea:{flex:1,overflow:"hidden"},pageTextContent:{flexGrow:1,justifyContent:"center",paddingVertical:8},surahEndNav:{marginTop:28,paddingTop:18,borderTopWidth:1,borderTopColor:"#D9C99D",alignItems:"center",gap:12},surahEndTitle:{fontSize:13,fontWeight:"900",textAlign:"center"},surahEndButtons:{flexDirection:"row",width:"100%",gap:10,justifyContent:"space-between"},surahEndButton:{flex:1,minHeight:44,paddingHorizontal:8,paddingVertical:12,borderRadius:12,backgroundColor:"rgba(53,199,222,0.16)",borderWidth:1,borderColor:"rgba(53,199,222,0.45)",alignItems:"center",justifyContent:"center"},surahEndButtonText:{fontSize:12,fontWeight:"900",color:"#2587A0",textAlign:"center"},mushafText:{fontSize:22,lineHeight:43,textAlign:"justify",writingDirection:"rtl",fontWeight:"500"},pageBottomLine:{alignItems:"center",borderTopWidth:1,borderColor:"#D9C99D",paddingTop:7,marginTop:7},pageFooter:{textAlign:"center",fontSize:8},riwayaUnavailable:{color:"#A77A20",fontSize:14,lineHeight:28,textAlign:"right"},focusControls:{paddingTop:7,paddingBottom:3,alignItems:"center",justifyContent:"center"},navigationRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",width:"100%",gap:5,marginBottom:7},navButton:{flex:1,borderRadius:10,paddingVertical:8,paddingHorizontal:4,backgroundColor:"rgba(64,142,168,0.12)",alignItems:"center"},navButtonText:{fontSize:10,fontWeight:"800",color:"#2587A0"},modalShade:{flex:1,backgroundColor:"rgba(0,0,0,0.55)",justifyContent:"center",padding:18},pickerPanel:{maxHeight:"86%",borderRadius:20,padding:16},ayahPanel:{maxHeight:"75%",borderRadius:20,padding:16},pickerTitle:{fontSize:18,fontWeight:"900",textAlign:"center",marginBottom:12},pickerItem:{minHeight:48,flexDirection:"row",alignItems:"center",justifyContent:"space-between",borderBottomWidth:1,paddingHorizontal:6},pickerItemText:{fontSize:15,fontWeight:"700"},pickerCount:{fontSize:11,color:"#8293A4"},closePicker:{alignItems:"center",padding:12,marginTop:6,backgroundColor:"#E5F8FC",borderRadius:12},closePickerText:{fontSize:13,fontWeight:"800",color:"#167B95"},ayahGrid:{flexDirection:"row",flexWrap:"wrap",justifyContent:"center",gap:8},ayahChip:{width:42,height:42,borderRadius:12,borderWidth:1,borderColor:"#B8CAD7",alignItems:"center",justifyContent:"center"},ayahChipActive:{backgroundColor:"#18B978",borderColor:"#087D61"},ayahChipText:{fontSize:13,fontWeight:"700",color:"#234"},ayahChipTextActive:{color:"#FFFFFF"},bigMic:{width:72,height:72,borderRadius:36,alignItems:"center",justifyContent:"center",backgroundColor:"#18D68A",borderWidth:4,borderColor:"#087D61"},bigMicOn:{backgroundColor:"#FF7777",borderColor:"#A63B46"},bigMicGlyph:{fontSize:28,color:"#FFFFFF"},focusStatus:{fontSize:10,textAlign:"center",marginTop:7},liveTranscript:{fontSize:11,textAlign:"center",marginTop:4,maxWidth:"95%"},analysisStatus:{fontSize:9,color:"#C07C35",textAlign:"center",marginTop:4}});
