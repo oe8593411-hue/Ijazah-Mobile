@@ -29,6 +29,7 @@ export default function Premium(){
    <Text style={s.section}>مزايا بريميوم</Text>
    {features.map(f=><View key={f.title} style={s.feature}><Text style={s.featureIcon}>{f.icon}</Text><View style={{flex:1}}><Text style={s.featureTitle}>{f.title}</Text><Text style={s.featureDesc}>{f.desc}</Text></View></View>)}
    <View style={s.statusCard}><Text style={s.statusTitle}>🔒 الدفع الآمن قيد التجهيز</Text><Text style={s.statusText}>لم يتم تفعيل أي عملية دفع أو اشتراك وهمي. سنربط بوابة دفع موثوقة ونختبرها قبل تحصيل أي مبلغ.</Text></View>
+   <Pressable style={s.primary} onPress={()=>router.push("/ijazah-pay")}><Text style={s.primaryText}>استكشف إجازة باي ←</Text></Pressable>
    <Pressable style={s.primary} onPress={()=>router.push("/smart-test")}><Text style={s.primaryText}>جرّب إعداد اختبار الحفظ ←</Text></Pressable>
    <Pressable style={s.secondary} onPress={()=>router.push("/recite")}><Text style={s.secondaryText}>الانتقال إلى التسميع</Text></Pressable>
    <Text style={s.foot}>تنبيه: اختيار بريميوم لا يعني أن تحليل التجويد أو حفظ نقاط الضعف أصبحا متصلين بالكامل حتى الآن.</Text>
