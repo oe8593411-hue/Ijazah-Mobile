@@ -239,21 +239,31 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
   }
   // Fail closed: only accept findings linked to a rule candidate from the verified
   // reference, with strong confidence and explicit acoustic evidence.
-  const allowedRuleIds = new Set(expectedChecks.map(check => check.ruleId));
   const findings = result.findings.filter((item): item is Record<string, unknown> => {
     if (!item || typeof item !== "object") return false;
     const finding = item as Record<string, unknown>;
-    return typeof finding.ruleId === "string"
-      && allowedRuleIds.has(finding.ruleId)
+    // A valid rule name alone is not evidence. Require a concrete candidate
+    // location from the verified reference and bind the finding to that location.
+    const candidate = expectedChecks.find(check =>
+      check.ruleId === finding.ruleId
+      && check.wordIndex === finding.wordIndex
+      && (typeof finding.context !== "string" || check.context === finding.context)
+    );
+    return Boolean(candidate)
+      && typeof finding.ruleId === "string"
+      && Number.isInteger(finding.wordIndex)
       && typeof finding.confidence === "number"
+      && Number.isFinite(finding.confidence)
       && finding.confidence >= 0.8
       && typeof finding.evidence === "string"
       && finding.evidence.trim().length >= 8
-      && (finding.startMs === undefined || (typeof finding.startMs === "number" && finding.startMs >= 0))
-      && (finding.endMs === undefined || (typeof finding.endMs === "number" && finding.endMs >= 0))
+      && (finding.startMs === undefined || (typeof finding.startMs === "number" && Number.isFinite(finding.startMs) && finding.startMs >= 0))
+      && (finding.endMs === undefined || (typeof finding.endMs === "number" && Number.isFinite(finding.endMs) && finding.endMs >= 0))
       && !(typeof finding.startMs === "number" && typeof finding.endMs === "number" && finding.endMs < finding.startMs);
   }).slice(0, 20);
-  const evaluatedRules = result.rulesEvaluated.filter((ruleId): ruleId is string => typeof ruleId === "string" && allowedRuleIds.has(ruleId));
+  const evaluatedRules = [...new Set(result.rulesEvaluated.filter((ruleId): ruleId is string =>
+    typeof ruleId === "string" && expectedChecks.some(check => check.ruleId === ruleId)
+  ))];
   return {
     status: findings.length > 0 ? "preliminary_findings" : "completed_no_confirmed_findings",
     rulesEvaluated: evaluatedRules,
