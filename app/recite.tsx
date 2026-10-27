@@ -40,10 +40,10 @@ function compareRecognizedWords(expectedText:string, spokenText:string, allowPre
   }
   if(!allowPrefix){
    while(i<expected.length){errors.push({type:"possible_omission",expected:expected[i]});i++;}
-   while(j<actual.length){errors.push({type:"possible_addition",heard:actual[j]});j++;}
   }else{
    effectiveExpectedWords=i;
   }
+  while(j<actual.length){errors.push({type:"possible_addition",heard:actual[j]});j++;}
   distance=errors.length;
  }else{
   const dp=Array.from({length:expected.length+1},()=>new Uint16Array(actual.length+1));
