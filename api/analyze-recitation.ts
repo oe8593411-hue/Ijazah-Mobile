@@ -51,9 +51,14 @@ function alignWords(target: string, spoken: string) {
       : Math.min(dp[i - 1][j - 1] + 1, dp[i - 1][j] + 1, dp[i][j - 1] + 1);
   }
   const errors: { type: string; expected?: string; heard?: string; position: number }[] = [];
+  const matchedExpectedIndexes: number[] = [];
   let i = n, j = m;
   while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && expected[i - 1] === actual[j - 1]) { i--; j--; continue; }
+    if (i > 0 && j > 0 && expected[i - 1] === actual[j - 1]) {
+      matchedExpectedIndexes.push(i - 1);
+      i--; j--;
+      continue;
+    }
     const diagonal = i > 0 && j > 0 ? dp[i - 1][j - 1] + 1 : Infinity;
     const deletion = i > 0 ? dp[i - 1][j] + 1 : Infinity;
     const insertion = j > 0 ? dp[i][j - 1] + 1 : Infinity;
@@ -69,7 +74,14 @@ function alignWords(target: string, spoken: string) {
     }
   }
   errors.reverse();
-  return { expectedWords: n, recognizedWords: m, editDistance: dp[n][m], errors: errors.slice(0, 20) };
+  matchedExpectedIndexes.reverse();
+  return {
+    expectedWords: n,
+    recognizedWords: m,
+    editDistance: dp[n][m],
+    errors: errors.slice(0, 20),
+    matchedExpectedIndexes
+  };
 }
 
 async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: string, surah: number, ayah: number, referenceText: string, expectedChecks: ReturnType<typeof findExpectedTajweedChecks>) {
@@ -246,7 +258,11 @@ export default async function handler(req: any, res: any) {
         riwaya: "حفص عن عاصم"
       },
       transcript,
-      textAlignment: { ...alignment, errors: locatedErrors },
+      textAlignment: {
+        ...alignment,
+        errors: locatedErrors,
+        matchedExpectedIndexes: contentGate === "passed_preliminary" ? alignment.matchedExpectedIndexes : []
+      },
       matchRate,
       confidence: "preliminary",
       analysisLevel: scope === "surah" ? "full_surah_speech_to_text_alignment"
