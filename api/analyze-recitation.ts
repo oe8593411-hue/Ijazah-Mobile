@@ -116,25 +116,29 @@ function alignWords(target: string, spoken: string, allowPrefix = false) {
   const expected = normalizeArabic(target).split(" ").filter(Boolean);
   const actual = normalizeArabic(spoken).split(" ").filter(Boolean);
   const n = expected.length, m = actual.length;
-  // Protect the server from oversized alignment requests and avoid boxed JS-number
-  // arrays. Uint16Array uses about 2 bytes per cell; 10k words still fit safely.
-  if (n > 10_000 || m > 10_000 || n * m > 45_000_000) {
+  // A flat typed array avoids thousands of row objects and bounds worst-case
+  // memory use for unauthenticated audio-analysis requests.
+  const columns = m + 1;
+  const cells = (n + 1) * columns;
+  const MAX_ALIGNMENT_CELLS = 8_000_000; // ~16 MB for Uint16Array, plus small arrays
+  if (n > 10_000 || m > 10_000 || !Number.isSafeInteger(cells) || cells > MAX_ALIGNMENT_CELLS) {
     throw new Error("ALIGNMENT_TOO_LARGE");
   }
-  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = 0; i <= n; i++) dp[i][0] = i;
-  for (let j = 0; j <= m; j++) dp[0][j] = j;
+  const dp = new Uint16Array(cells);
+  const at = (i: number, j: number) => i * columns + j;
+  for (let i = 0; i <= n; i++) dp[at(i, 0)] = i;
+  for (let j = 0; j <= m; j++) dp[at(0, j)] = j;
   for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) {
-    dp[i][j] = expected[i - 1] === actual[j - 1]
-      ? dp[i - 1][j - 1]
-      : Math.min(dp[i - 1][j - 1] + 1, dp[i - 1][j] + 1, dp[i][j - 1] + 1);
+    dp[at(i, j)] = expected[i - 1] === actual[j - 1]
+      ? dp[at(i - 1, j - 1)]
+      : Math.min(dp[at(i - 1, j - 1)] + 1, dp[at(i - 1, j)] + 1, dp[at(i, j - 1)] + 1);
   }
   let effectiveExpectedWords = n;
   if (allowPrefix && m > 0) {
-    let bestDistance = dp[0][m];
+    let bestDistance = dp[at(0, m)];
     effectiveExpectedWords = 0;
     for (let row = 1; row <= n; row++) {
-      const distance = dp[row][m];
+      const distance = dp[at(row, m)];
       if (distance < bestDistance || (distance === bestDistance && row > effectiveExpectedWords)) {
         bestDistance = distance;
         effectiveExpectedWords = row;
@@ -150,9 +154,9 @@ function alignWords(target: string, spoken: string, allowPrefix = false) {
       i--; j--;
       continue;
     }
-    const diagonal = i > 0 && j > 0 ? dp[i - 1][j - 1] + 1 : Infinity;
-    const deletion = i > 0 ? dp[i - 1][j] + 1 : Infinity;
-    const insertion = j > 0 ? dp[i][j - 1] + 1 : Infinity;
+    const diagonal = i > 0 && j > 0 ? dp[at(i - 1, j - 1)] + 1 : Infinity;
+    const deletion = i > 0 ? dp[at(i - 1, j)] + 1 : Infinity;
+    const insertion = j > 0 ? dp[at(i, j - 1)] + 1 : Infinity;
     if (diagonal <= deletion && diagonal <= insertion) {
       errors.push({ type: "possible_substitution", expected: expected[i - 1], heard: actual[j - 1], position: i });
       i--; j--;
@@ -170,7 +174,7 @@ function alignWords(target: string, spoken: string, allowPrefix = false) {
     expectedWords: effectiveExpectedWords,
     referenceWords: n,
     recognizedWords: m,
-    editDistance: dp[effectiveExpectedWords][m],
+    editDistance: dp[at(effectiveExpectedWords, m)],
     totalErrors: errors.length,
     errors: errors.slice(0, 100),
     matchedExpectedIndexes
