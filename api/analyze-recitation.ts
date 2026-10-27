@@ -6,6 +6,16 @@ export const config = { api: { bodyParser: false }, maxDuration: 60 };
 type Ayah = { surah: number; ayah: number; text: string };
 const ayahs = (corpus as unknown as { ayahs: Ayah[] }).ayahs;
 
+function audioFileExtension(contentType: string) {
+  const type = contentType.split(";")[0].trim().toLowerCase();
+  if (type.includes("webm")) return "webm";
+  if (type.includes("wav")) return "wav";
+  if (type.includes("mpeg") || type.includes("mp3")) return "mp3";
+  if (type.includes("ogg")) return "ogg";
+  if (type.includes("mp4")) return "mp4";
+  return "m4a";
+}
+
 function normalizeArabic(value: string) {
   return value
     .normalize("NFC")
@@ -96,7 +106,8 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
     };
   }
   const form = new FormData();
-  form.append("file", new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: contentType || "audio/m4a" }), "recitation.m4a");
+  const normalizedContentType = contentType.split(";")[0].trim() || "audio/m4a";
+  form.append("file", new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: normalizedContentType }), "recitation." + audioFileExtension(normalizedContentType));
   form.append("surah", String(surah));
   form.append("ayah", String(ayah));
   form.append("riwaya", "hafs");
@@ -202,9 +213,10 @@ export default async function handler(req: any, res: any) {
   try {
     const audioBytes = await readRawBody(req);
     if (audioBytes.byteLength < 1024) return res.status(400).json({ error: "audio_too_short", message: "التسجيل قصير جدًا للتحليل." });
-    const audioBlob = new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: String(req.headers["content-type"] || "audio/m4a") });
+    const contentType = String(req.headers["content-type"] || "audio/m4a").split(";")[0].trim() || "audio/m4a";
+    const audioBlob = new Blob([audioBytes.slice().buffer as ArrayBuffer], { type: contentType });
     const form = new FormData();
-    form.append("file", audioBlob, "recitation.m4a");
+    form.append("file", audioBlob, "recitation." + audioFileExtension(contentType));
     form.append("model", "gpt-4o-mini-transcribe");
     form.append("language", "ar");
     form.append("prompt", "Quran recitation in Arabic. Transcribe only the words clearly heard; do not complete missing verses or guess inaudible words.");
