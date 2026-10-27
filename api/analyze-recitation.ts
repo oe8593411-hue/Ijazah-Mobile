@@ -159,18 +159,29 @@ export default async function handler(req: any, res: any) {
   const surah = Number(req.query.surah);
   const scope = String(req.query.scope || "ayah");
   const ayah = Number(req.query.ayah);
-  if (!Number.isInteger(surah) || surah < 1 || surah > 114 || !["ayah", "surah"].includes(scope)
-      || (scope === "ayah" && (!Number.isInteger(ayah) || ayah < 1))) {
+  const startAyah = Number(req.query.startAyah ?? req.query.ayah);
+  const isValidSurah = Number.isInteger(surah) && surah >= 1 && surah <= 114;
+  const isValidAyah = Number.isInteger(ayah) && ayah >= 1;
+  const isValidStartAyah = Number.isInteger(startAyah) && startAyah >= 1;
+  if (!isValidSurah || !["ayah", "surah", "range"].includes(scope)
+      || (scope === "ayah" && !isValidAyah)
+      || (scope === "range" && !isValidStartAyah)) {
     return res.status(400).json({ error: "invalid_reference" });
   }
   const surahAyahs = ayahs.filter(item => item.surah === surah);
+  const rangeAyahs = scope === "range"
+    ? surahAyahs.filter(item => item.ayah >= startAyah)
+    : surahAyahs;
   const target = scope === "surah"
     ? { surah, ayah: 0, text: surahAyahs.map(item => item.text).join(" ") }
-    : surahAyahs.find(item => item.ayah === ayah);
-  if (!target || !target.text) return res.status(404).json({ error: scope === "surah" ? "surah_not_found" : "ayah_not_found" });
-  const expectedWordLocations = scope === "surah"
-    ? surahAyahs.flatMap(item => normalizeArabic(item.text).split(" ").filter(Boolean).map((_, index) => ({ surah: item.surah, ayah: item.ayah, wordIndex: index + 1 })))
-    : normalizeArabic(target.text).split(" ").filter(Boolean).map((_, index) => ({ surah, ayah, wordIndex: index + 1 }));
+    : scope === "range"
+      ? { surah, ayah: startAyah, text: rangeAyahs.map(item => item.text).join(" ") }
+      : surahAyahs.find(item => item.ayah === ayah);
+  if (!target || !target.text) return res.status(404).json({ error: scope === "ayah" ? "ayah_not_found" : "surah_or_range_not_found" });
+  const expectedAyahs = scope === "range" ? rangeAyahs : scope === "surah" ? surahAyahs : [target as Ayah];
+  const expectedWordLocations = expectedAyahs.flatMap(item =>
+    normalizeArabic(item.text).split(" ").filter(Boolean).map((_, index) => ({ surah: item.surah, ayah: item.ayah, wordIndex: index + 1 }))
+  );
   try {
     const audioBytes = await readRawBody(req);
     if (audioBytes.byteLength < 1024) return res.status(400).json({ error: "audio_too_short", message: "التسجيل قصير جدًا للتحليل." });
@@ -210,8 +221,8 @@ export default async function handler(req: any, res: any) {
           return location ? { ...error, surah: location.surah, ayah: location.ayah, wordIndex: location.wordIndex } : error;
         })
       : [];
-    const tajweed = scope === "surah"
-      ? { status: "not_configured", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "اكتملت مقارنة الكلمات على مستوى السورة. محرك التجويد الصوتي متعدد الآيات غير مهيأ؛ لم نصدر حكمًا في التجويد." }
+    const tajweed = scope !== "ayah"
+      ? { status: "not_configured", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "اكتملت مقارنة الكلمات المتصلة. محرك التجويد الصوتي متعدد الآيات غير مهيأ؛ لم نصدر حكمًا في التجويد." }
       : contentGate === "passed_preliminary"
         ? await runSpecializedTajweedEngine(audioBytes, String(req.headers["content-type"] || "audio/m4a"), surah, ayah, target.text, expectedRuleChecks)
         : { status: "blocked_by_content_guard", rulesEvaluated: [] as string[], findings: [] as unknown[], message: "أوقفنا تقييم التجويد لأن تطابق الكلمات أقل من الحد الأولي؛ يجب التأكد من النص قبل تقييم الأحكام." };
@@ -222,12 +233,20 @@ export default async function handler(req: any, res: any) {
       confidenceGate: { status: contentGate }
     };
     return res.status(200).json({
-      reference: { surah, ...(scope === "ayah" ? { ayah } : { scope: "surah", ayahCount: surahAyahs.length }), riwaya: "حفص عن عاصم" },
+      reference: {
+        surah,
+        ...(scope === "ayah" ? { ayah } : scope === "range"
+          ? { scope: "range", startAyah, ayahCount: rangeAyahs.length }
+          : { scope: "surah", ayahCount: surahAyahs.length }),
+        riwaya: "حفص عن عاصم"
+      },
       transcript,
       textAlignment: { ...alignment, errors: locatedErrors },
       matchRate,
       confidence: "preliminary",
-      analysisLevel: scope === "surah" ? "full_surah_speech_to_text_alignment" : "speech_to_text_alignment",
+      analysisLevel: scope === "surah" ? "full_surah_speech_to_text_alignment"
+        : scope === "range" ? "continuous_surah_range_speech_to_text_alignment"
+        : "speech_to_text_alignment",
       engines,
       tajweed,
       expectedRuleChecks,
