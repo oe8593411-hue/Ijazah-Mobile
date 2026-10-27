@@ -12,36 +12,84 @@ const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A
 function normalizeArabicForCompare(value:string){
  return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim();
 }
-function compareRecognizedWords(expectedText:string, spokenText:string){
+function compareRecognizedWords(expectedText:string, spokenText:string, allowPrefix=false){
  const expected=normalizeArabicForCompare(expectedText).split(" ").filter(Boolean);
  const actual=normalizeArabicForCompare(spokenText).split(" ").filter(Boolean);
- const dp=Array.from({length:expected.length+1},()=>Array<number>(actual.length+1).fill(0));
- for(let i=0;i<=expected.length;i++)dp[i][0]=i;
- for(let j=0;j<=actual.length;j++)dp[0][j]=j;
- for(let i=1;i<=expected.length;i++)for(let j=1;j<=actual.length;j++)dp[i][j]=expected[i-1]===actual[j-1]?dp[i-1][j-1]:Math.min(dp[i-1][j-1]+1,dp[i-1][j]+1,dp[i][j-1]+1);
+ const maxCells=2_000_000;
  const errors:{type:string;expected?:string;heard?:string}[]=[];
  const matchedExpectedIndexes:number[]=[];
- let i=expected.length,j=actual.length;
- while(i>0||j>0){
-  if(i>0&&j>0&&expected[i-1]===actual[j-1]){
-   matchedExpectedIndexes.push(i-1);
-   i--;j--;
-   continue;
+ let effectiveExpectedWords=expected.length;
+ let distance=0;
+
+ if(expected.length*actual.length>maxCells){
+  // Use a linear, conservative fallback for long sessions so live UI updates
+  // never allocate a huge quadratic matrix on a phone.
+  let i=0,j=0;
+  while(i<expected.length&&j<actual.length){
+   if(expected[i]===actual[j]){
+    matchedExpectedIndexes.push(i);i++;j++;continue;
+   }
+   if(i+1<expected.length&&expected[i+1]===actual[j]){
+    errors.push({type:"possible_omission",expected:expected[i]});i++;continue;
+   }
+   if(j+1<actual.length&&expected[i]===actual[j+1]){
+    errors.push({type:"possible_addition",heard:actual[j]});j++;continue;
+   }
+   errors.push({type:"possible_substitution",expected:expected[i],heard:actual[j]});
+   i++;j++;
   }
-  const sub=i>0&&j>0?dp[i-1][j-1]+1:Infinity,del=i>0?dp[i-1][j]+1:Infinity,ins=j>0?dp[i][j-1]+1:Infinity;
-  if(sub<=del&&sub<=ins){errors.push({type:"possible_substitution",expected:expected[i-1],heard:actual[j-1]});i--;j--;}
-  else if(del<=ins){errors.push({type:"possible_omission",expected:expected[i-1]});i--;}
-  else{errors.push({type:"possible_addition",heard:actual[j-1]});j--;}
+  if(!allowPrefix){
+   while(i<expected.length){errors.push({type:"possible_omission",expected:expected[i]});i++;}
+   while(j<actual.length){errors.push({type:"possible_addition",heard:actual[j]});j++;}
+  }else{
+   effectiveExpectedWords=i;
+  }
+  distance=errors.length;
+ }else{
+  const dp=Array.from({length:expected.length+1},()=>new Uint16Array(actual.length+1));
+  for(let i=0;i<=expected.length;i++)dp[i][0]=i;
+  for(let j=0;j<=actual.length;j++)dp[0][j]=j;
+  for(let i=1;i<=expected.length;i++)for(let j=1;j<=actual.length;j++){
+   dp[i][j]=expected[i-1]===actual[j-1]?dp[i-1][j-1]:Math.min(dp[i-1][j-1]+1,dp[i-1][j]+1,dp[i][j-1]+1);
+  }
+  if(allowPrefix&&actual.length>0){
+   let bestDistance=dp[0][actual.length];
+   effectiveExpectedWords=0;
+   for(let row=1;row<=expected.length;row++){
+    const candidate=dp[row][actual.length];
+    if(candidate<bestDistance||(candidate===bestDistance&&row>effectiveExpectedWords)){
+     bestDistance=candidate;effectiveExpectedWords=row;
+    }
+   }
+  }
+  distance=dp[effectiveExpectedWords][actual.length];
+  let i=effectiveExpectedWords,j=actual.length;
+  while(i>0||j>0){
+   if(i>0&&j>0&&expected[i-1]===actual[j-1]){
+    matchedExpectedIndexes.push(i-1);i--;j--;continue;
+   }
+   const sub=i>0&&j>0?dp[i-1][j-1]+1:Infinity;
+   const del=i>0?dp[i-1][j]+1:Infinity;
+   const ins=j>0?dp[i][j-1]+1:Infinity;
+   if(sub<=del&&sub<=ins){errors.push({type:"possible_substitution",expected:expected[i-1],heard:actual[j-1]});i--;j--;}
+   else if(del<=ins){errors.push({type:"possible_omission",expected:expected[i-1]});i--;}
+   else{errors.push({type:"possible_addition",heard:actual[j-1]});j--;}
+  }
  }
- const distance=dp[expected.length][actual.length];
  matchedExpectedIndexes.reverse();
+ const score= Math.max(0,Math.round(100*(1-distance/Math.max(1,effectiveExpectedWords,actual.length))));
  return {
-  matchRate:Math.max(0,Math.round(100*(1-distance/Math.max(1,expected.length,actual.length)))),
+  matchRate:score,
   matchedExpectedIndexes,
-  textAlignment:{expectedWords:expected.length,recognizedWords:actual.length,editDistance:distance,errors:errors.reverse().slice(0,20)}
+  textAlignment:{
+   expectedWords:effectiveExpectedWords,
+   referenceWords:expected.length,
+   recognizedWords:actual.length,
+   editDistance:distance,
+   errors:errors.reverse().slice(0,20)
+  }
  };
 }
-
 export default function Recite(){
  const params=useLocalSearchParams<{surah?:string;ayah?:string;scope?:string}>();
  const selectedSurah=Math.max(1,Math.min(114,Number(params.surah)||1));
@@ -145,7 +193,7 @@ export default function Recite(){
    // Safe local fallback: compare only browser-recognized words with the verified reference.
    // This is explicitly preliminary and never presented as tajweed analysis.
    if(!fullSurahMode && heardText.trim() && referenceText && !referenceText.startsWith("جاري تحميل")){
-    const local=compareRecognizedWords(referenceText,heardText);
+    const local=compareRecognizedWords(referenceText,heardText,continuousMode);
     setAnalysis({
      transcript:heardText.trim(),
      matchRate:local.matchRate,
@@ -211,14 +259,14 @@ export default function Recite(){
   }
  }
 
- return <View style={[s.root,{backgroundColor:dark?"#061321":"#EAF2F7"}]}><StatusBar style={dark?"light":"dark"}/><View style={s.minimalHeader}><Pressable onPress={()=>router.back()} style={s.smallAction}><Text style={[s.headerActionText,{color:dark?"#E8F4FC":"#18334B"}]}>‹</Text></Pressable><Pressable onPress={()=>setSurahPickerVisible(true)} style={{flex:1,alignItems:"center"}}><Text style={[s.surahTitle,{color:dark?"#F5F8FC":"#10253D"}]}>{SURAHS.find(x=>x.number===selectedSurah)?.nameAr||"المصحف الشريف"}　⌄</Text><Text style={[s.surahMeta,{color:dark?"#9EB4C9":"#687D91"}]}>حفص عن عاصم · {referenceLabel}</Text></Pressable><Pressable onPress={()=>setDark(!dark)} style={s.smallAction}><Text style={[s.headerActionText,{color:dark?"#E8F4FC":"#18334B"}]}>{dark?"☼":"☾"}</Text></Pressable></View><View style={s.pageToolbar}><Pressable disabled style={[s.toolbarButton,{opacity:0.48}]}><Text style={s.toolbarButtonText}>تفسير الصفحة</Text></Pressable><Pressable onPress={togglePageAudio} style={s.toolbarButton}><Text style={s.toolbarButtonText}>{pageAudioRange?"Ⅱ إيقاف السماع":"▶ سماع الصفحة"}</Text></Pressable><Pressable onPress={()=>setDark(!dark)} style={s.toolbarButton}><Text style={s.toolbarButtonText}>{dark?"☀ الوضع الفاتح":"☾ الوضع الداكن"}</Text></Pressable></View><View style={[s.pageFrame,{backgroundColor:dark?"#0B1A2B":"#FDFBF4",borderColor:dark?"#28445A":"#D6C69F"}]}><View style={s.pageTopLine}><Text style={[s.pageSurah,{color:dark?"#D5B86C":"#8A713E"}]}>۞  المصحف الشريف  ۞</Text></View><ScrollView style={s.pageTextArea} contentContainerStyle={s.pageTextContent} showsVerticalScrollIndicator>{riwaya==="حفص عن عاصم"?<Text style={[s.mushafText,{color:dark?"#F5F5F1":"#171A1D"}]}>{renderAlignedWords(referenceText,heardText)}</Text>{continuousMode&&<View style={s.surahEndNav}><Text style={[s.surahEndTitle,{color:dark?"#D5B86C":"#8A713E"}]}>نهاية سورة {SURAHS.find(x=>x.number===selectedSurah)?.nameAr}</Text><View style={s.surahEndButtons}>{selectedSurah>1&&<Pressable onPress={()=>{pageAudioPlayer.pause();setPageAudioRange(null);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(selectedSurah-1),ayah:"1",scope:"ayah"}});}} style={s.surahEndButton}><Text style={s.surahEndButtonText}>‹ السورة السابقة</Text></Pressable>}<Pressable disabled={selectedSurah>=114} onPress={()=>{pageAudioPlayer.pause();setPageAudioRange(null);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(selectedSurah+1),ayah:"1",scope:"ayah"}});}} style={[s.surahEndButton,selectedSurah>=114&&{opacity:0.4}]}><Text style={s.surahEndButtonText}>السورة التالية ›</Text></Pressable></View></View>}:<Text style={s.riwayaUnavailable}>النص والتحليل لهذه الرواية غير مفعّلين قبل توثيق مصدرها.</Text>}</ScrollView><View style={s.pageBottomLine}><Text style={[s.pageFooter,{color:dark?"#9EB4C9":"#7B6D51"}]}>نص موثّق · Tanzil Uthmani 1.1</Text></View></View><View style={s.focusControls}><View style={s.navigationRow}><Pressable onPress={()=>navigateAyah(activeAyah-1)} style={s.navButton}><Text style={s.navButtonText}>الآية السابقة</Text></Pressable><Pressable onPress={()=>setAyahPickerVisible(true)} style={s.navButton}><Text style={s.navButtonText}>اختيار الآية {activeAyah} ⌄</Text></Pressable><Pressable onPress={()=>navigateAyah(activeAyah+1)} style={s.navButton}><Text style={s.navButtonText}>التالية</Text></Pressable></View><Pressable onPress={toggleRecording} style={[s.bigMic,state.isRecording&&s.bigMicOn]}><Text style={s.bigMicGlyph}>{state.isRecording?"■":"🎙"}</Text></Pressable><Text style={[s.focusStatus,{color:dark?"#AFC5D8":"#647A8E"}]}>{state.isRecording?"جارٍ الاستماع — اقرأ من المصحف":"ابدأ التسميع من الصفحة"}</Text>{heardText.length>0&&<Text numberOfLines={2} style={[s.liveTranscript,{color:dark?"#9EDFC7":"#147A5A"}]}>{heardText}</Text>}{analysisBusy&&<Text style={s.analysisStatus}>جارٍ مراجعة التسجيل…</Text>}{analysis&&<View style={{maxHeight:92,width:"100%",alignItems:"center"}}><Text style={s.analysisStatus}>انتهت المقارنة النصية المبدئية؛ غير المؤكد ليس خطأً مؤكدًا.</Text>{(analysis?.textAlignment?.errors||[]).filter((item:any)=>typeof item.ayah==="number").slice(0,3).map((item:any,index:number)=><Text key={index} numberOfLines={1} style={s.analysisStatus}>سورة {SURAHS.find(x=>x.number===item.surah)?.nameAr||item.surah} · آية {item.ayah} · {item.type==="possible_omission"?"كلمة محتملة السقوط":item.type==="possible_addition"?"كلمة زائدة محتملة":"اختلاف نصي محتمل"}</Text>)}</View>}</View>
+ return <View style={[s.root,{backgroundColor:dark?"#061321":"#EAF2F7"}]}><StatusBar style={dark?"light":"dark"}/><View style={s.minimalHeader}><Pressable onPress={()=>router.back()} style={s.smallAction}><Text style={[s.headerActionText,{color:dark?"#E8F4FC":"#18334B"}]}>‹</Text></Pressable><Pressable onPress={()=>setSurahPickerVisible(true)} style={{flex:1,alignItems:"center"}}><Text style={[s.surahTitle,{color:dark?"#F5F8FC":"#10253D"}]}>{SURAHS.find(x=>x.number===selectedSurah)?.nameAr||"المصحف الشريف"}　⌄</Text><Text style={[s.surahMeta,{color:dark?"#9EB4C9":"#687D91"}]}>حفص عن عاصم · {referenceLabel}</Text></Pressable><Pressable onPress={()=>setDark(!dark)} style={s.smallAction}><Text style={[s.headerActionText,{color:dark?"#E8F4FC":"#18334B"}]}>{dark?"☼":"☾"}</Text></Pressable></View><View style={s.pageToolbar}><Pressable disabled style={[s.toolbarButton,{opacity:0.48}]}><Text style={s.toolbarButtonText}>تفسير الصفحة</Text></Pressable><Pressable onPress={togglePageAudio} style={s.toolbarButton}><Text style={s.toolbarButtonText}>{pageAudioRange?"Ⅱ إيقاف السماع":"▶ سماع الصفحة"}</Text></Pressable><Pressable onPress={()=>setDark(!dark)} style={s.toolbarButton}><Text style={s.toolbarButtonText}>{dark?"☀ الوضع الفاتح":"☾ الوضع الداكن"}</Text></Pressable></View><View style={[s.pageFrame,{backgroundColor:dark?"#0B1A2B":"#FDFBF4",borderColor:dark?"#28445A":"#D6C69F"}]}><View style={s.pageTopLine}><Text style={[s.pageSurah,{color:dark?"#D5B86C":"#8A713E"}]}>۞  المصحف الشريف  ۞</Text></View><ScrollView style={s.pageTextArea} contentContainerStyle={s.pageTextContent} showsVerticalScrollIndicator>{riwaya==="حفص عن عاصم"?<Text style={[s.mushafText,{color:dark?"#F5F5F1":"#171A1D"}]}>{renderAlignedWords(referenceText,heardText,continuousMode)}</Text>{continuousMode&&<View style={s.surahEndNav}><Text style={[s.surahEndTitle,{color:dark?"#D5B86C":"#8A713E"}]}>نهاية سورة {SURAHS.find(x=>x.number===selectedSurah)?.nameAr}</Text><View style={s.surahEndButtons}>{selectedSurah>1&&<Pressable onPress={()=>{pageAudioPlayer.pause();setPageAudioRange(null);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(selectedSurah-1),ayah:"1",scope:"ayah"}});}} style={s.surahEndButton}><Text style={s.surahEndButtonText}>‹ السورة السابقة</Text></Pressable>}<Pressable disabled={selectedSurah>=114} onPress={()=>{pageAudioPlayer.pause();setPageAudioRange(null);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(selectedSurah+1),ayah:"1",scope:"ayah"}});}} style={[s.surahEndButton,selectedSurah>=114&&{opacity:0.4}]}><Text style={s.surahEndButtonText}>السورة التالية ›</Text></Pressable></View></View>}:<Text style={s.riwayaUnavailable}>النص والتحليل لهذه الرواية غير مفعّلين قبل توثيق مصدرها.</Text>}</ScrollView><View style={s.pageBottomLine}><Text style={[s.pageFooter,{color:dark?"#9EB4C9":"#7B6D51"}]}>نص موثّق · Tanzil Uthmani 1.1</Text></View></View><View style={s.focusControls}><View style={s.navigationRow}><Pressable onPress={()=>navigateAyah(activeAyah-1)} style={s.navButton}><Text style={s.navButtonText}>الآية السابقة</Text></Pressable><Pressable onPress={()=>setAyahPickerVisible(true)} style={s.navButton}><Text style={s.navButtonText}>اختيار الآية {activeAyah} ⌄</Text></Pressable><Pressable onPress={()=>navigateAyah(activeAyah+1)} style={s.navButton}><Text style={s.navButtonText}>التالية</Text></Pressable></View><Pressable onPress={toggleRecording} style={[s.bigMic,state.isRecording&&s.bigMicOn]}><Text style={s.bigMicGlyph}>{state.isRecording?"■":"🎙"}</Text></Pressable><Text style={[s.focusStatus,{color:dark?"#AFC5D8":"#647A8E"}]}>{state.isRecording?"جارٍ الاستماع — اقرأ من المصحف":"ابدأ التسميع من الصفحة"}</Text>{heardText.length>0&&<Text numberOfLines={2} style={[s.liveTranscript,{color:dark?"#9EDFC7":"#147A5A"}]}>{heardText}</Text>}{analysisBusy&&<Text style={s.analysisStatus}>جارٍ مراجعة التسجيل…</Text>}{analysis&&<View style={{maxHeight:92,width:"100%",alignItems:"center"}}><Text style={s.analysisStatus}>انتهت المقارنة النصية المبدئية؛ غير المؤكد ليس خطأً مؤكدًا.</Text>{(analysis?.textAlignment?.errors||[]).filter((item:any)=>typeof item.ayah==="number").slice(0,3).map((item:any,index:number)=><Text key={index} numberOfLines={1} style={s.analysisStatus}>سورة {SURAHS.find(x=>x.number===item.surah)?.nameAr||item.surah} · آية {item.ayah} · {item.type==="possible_omission"?"كلمة محتملة السقوط":item.type==="possible_addition"?"كلمة زائدة محتملة":"اختلاف نصي محتمل"}</Text>)}</View>}</View>
 <Modal visible={surahPickerVisible} animationType="slide" transparent onRequestClose={()=>setSurahPickerVisible(false)}><View style={s.modalShade}><View style={[s.pickerPanel,{backgroundColor:dark?"#0B1A2B":"#FFFFFF"}]}><Text style={[s.pickerTitle,{color:dark?"#F5F8FC":"#10253D"}]}>اختيار السورة</Text><ScrollView>{SURAHS.map(item=><Pressable key={item.number} onPress={()=>{setSurahPickerVisible(false);setActiveAyah(1);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(item.number),ayah:"1",scope:"ayah"}});}} style={[s.pickerItem,{borderBottomColor:dark?"#263D50":"#E6EDF3"}]}><Text style={[s.pickerItemText,{color:dark?"#F5F8FC":"#18334B"}]}>{item.number}. {item.nameAr}</Text><Text style={s.pickerCount}>{item.ayahCount} آية</Text></Pressable>)}</ScrollView><Pressable onPress={()=>setSurahPickerVisible(false)} style={s.closePicker}><Text style={s.closePickerText}>إلغاء</Text></Pressable></View></View></Modal><Modal visible={ayahPickerVisible} animationType="fade" transparent onRequestClose={()=>setAyahPickerVisible(false)}><View style={s.modalShade}><View style={[s.ayahPanel,{backgroundColor:dark?"#0B1A2B":"#FFFFFF"}]}><Text style={[s.pickerTitle,{color:dark?"#F5F8FC":"#10253D"}]}>اختيار آية البداية</Text><ScrollView contentContainerStyle={s.ayahGrid}>{Array.from({length:SURAHS.find(x=>x.number===selectedSurah)?.ayahCount||1},(_,i)=>i+1).map(n=><Pressable key={n} onPress={()=>{setActiveAyah(n);setAyahPickerVisible(false);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(selectedSurah),ayah:String(n),scope:"ayah"}});}} style={[s.ayahChip,n===activeAyah&&s.ayahChipActive]}><Text style={[s.ayahChipText,n===activeAyah&&s.ayahChipTextActive]}>{n}</Text></Pressable>)}</ScrollView><Pressable onPress={()=>setAyahPickerVisible(false)} style={s.closePicker}><Text style={s.closePickerText}>إلغاء</Text></Pressable></View></View></Modal></View>;
 }
-function renderAlignedWords(expected:string,heard:string){
+function renderAlignedWords(expected:string,heard:string,allowPrefix=false){
  const expectedWords=expected.split(/\s+/).filter(Boolean);
  const heardWords=normalizeArabicForCompare(heard).split(" ").filter(Boolean);
  if(!heardWords.length)return expectedWords.map((word,index)=><Text key={index}>{word} </Text>);
- const comparison=compareRecognizedWords(expected,heard);
+ const comparison=compareRecognizedWords(expected,heard,allowPrefix);
  // Keep all words neutral when browser recognition is too incomplete or noisy.
  if(comparison.matchRate<85)return expectedWords.map((word,index)=><Text key={index}>{word} </Text>);
  const matched=new Set(comparison.matchedExpectedIndexes);
