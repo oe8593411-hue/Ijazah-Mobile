@@ -17,7 +17,7 @@ Set these variables only in Vercel's server-side environment (never prefix the p
 - `IJAZAH_ALLOWED_ORIGINS`: comma-separated exact origins allowed to connect, including the app's HTTPS origin.
 - `EXPO_PUBLIC_IJAZAH_AI4X_REALTIME=true`: build-time flag that makes the web app attempt live streaming.
 
-The proxy keeps the Nabr key server-side, checks origin, limits session duration/audio bytes, and applies per-IP in-memory connection limits. Those in-memory limits are per server instance rather than a durable global limiter. Before enabling provider calls for unrestricted public traffic, add authenticated user sessions and a shared/durable rate limiter, then configure the variables above. The app falls back to the existing post-recording path if the live engine is unavailable.
+The proxy keeps the Nabr key server-side, checks origin, limits session duration/audio bytes, and applies per-IP in-memory connection limits. The post-recording transcription route also limits each IP to three requests per 15 minutes on a warm serverless instance. These in-memory limits are per instance rather than a durable global limiter. Before enabling provider calls for unrestricted public traffic, add authenticated user sessions and a shared/durable rate limiter, then configure the variables above. The app falls back to the existing post-recording path if the live engine is unavailable.
 
 ## Costs and privacy
 

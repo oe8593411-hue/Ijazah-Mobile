@@ -151,7 +151,7 @@ export default function Recite(){
  function navigateAyah(next:number){const max=SURAHS.find(x=>x.number===selectedSurah)?.ayahCount||1;const safe=Math.max(1,Math.min(max,next));setActiveAyah(safe);setHeardText("");setAnalysis(null);router.replace({pathname:"/recite",params:{surah:String(selectedSurah),ayah:String(safe),scope:"ayah"}});}
 
  function mergeNabrFeedback(previous:any,next:any){
-  if(!next||next.event!=="TILAWA_RESULT")return previous;
+  if(!next||next.event!=="TILAWA_RESULT"||![6,8].includes(Number(next.exit_code)))return previous;
   const fields=["correct_words","skipped_words","tajweed_mistakes","letter_mistakes"];
   const merged:any={...(previous||{}),...next};
   for(const field of fields){
@@ -180,8 +180,8 @@ export default function Recite(){
 
  function stopAI4XRealtime(){
   const socket=nabrSocketRef.current;
+  const shouldReset=nabrStartSentRef.current;
   nabrSessionStartedRef.current=false;
-  nabrStartSentRef.current=false;
   try{nabrProcessorRef.current?.disconnect?.();}catch{}
   try{nabrSourceRef.current?.disconnect?.();}catch{}
   try{nabrMuteRef.current?.disconnect?.();}catch{}
@@ -191,12 +191,13 @@ export default function Recite(){
   nabrPendingSamplesRef.current=[];
   if(socket){
    try{
-    if(socket.readyState===1&&nabrStartSentRef.current){
+    if(socket.readyState===1&&shouldReset){
      socket.send(encodeMessagePack({method:"RESET_TILAWA_SESSION"}));
     }
    }catch{}
    try{setTimeout(()=>{try{socket.close();}catch{}},350);}catch{}
   }
+  nabrStartSentRef.current=false;
   nabrSocketRef.current=null;
   setNabrStatus(previous=>previous==="unavailable"?"unavailable":nabrFeedback?"complete":"idle");
  }
@@ -302,7 +303,13 @@ export default function Recite(){
    socket.onerror=()=>{setNabrStatus("unavailable");finishStart(false);};
    socket.onclose=()=>{if(!nabrSessionStartedRef.current){setNabrStatus(previous=>previous==="complete"?previous:"unavailable");finishStart(false);}};
    await context.resume?.();
-   return await started;
+   const didStart=await started;
+   if(!didStart){
+    stopAI4XRealtime();
+    setNabrStatus("unavailable");
+    return false;
+   }
+   return true;
   }catch{
    stopAI4XRealtime();setNabrStatus("unavailable");return false;
   }

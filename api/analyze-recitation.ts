@@ -6,6 +6,41 @@ export const config = { api: { bodyParser: false }, maxDuration: 60 };
 type Ayah = { surah: number; ayah: number; text: string };
 const ayahs = (corpus as unknown as { ayahs: Ayah[] }).ayahs;
 
+type AnalysisRateWindow = { startedAt: number; count: number };
+const analysisRateWindows = new Map<string, AnalysisRateWindow>();
+const ANALYSIS_RATE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_ANALYSIS_REQUESTS_PER_WINDOW = 3;
+
+function analysisClientIp(req: any) {
+  const real = req.headers?.["x-real-ip"];
+  if (typeof real === "string" && real.trim()) return real.trim();
+  const forwarded = req.headers?.["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",").pop()?.trim() || "unknown";
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
+function allowAnalysisRequest(req: any) {
+  const now = Date.now();
+  const ip = analysisClientIp(req);
+  let state = analysisRateWindows.get(ip);
+  if (!state || now - state.startedAt >= ANALYSIS_RATE_WINDOW_MS) {
+    state = { startedAt: now, count: 0 };
+    analysisRateWindows.set(ip, state);
+  }
+  if (state.count >= MAX_ANALYSIS_REQUESTS_PER_WINDOW) return false;
+  state.count += 1;
+
+  // Bound memory if many source addresses hit a warm serverless instance.
+  if (analysisRateWindows.size > 2000) {
+    for (const [key, value] of analysisRateWindows) {
+      if (now - value.startedAt >= ANALYSIS_RATE_WINDOW_MS) analysisRateWindows.delete(key);
+    }
+  }
+  return true;
+}
+
 function audioFileExtension(contentType: string) {
   const type = contentType.split(";")[0].trim().toLowerCase();
   if (type.includes("webm")) return "webm";
@@ -239,6 +274,10 @@ export default async function handler(req: any, res: any) {
   }
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "analysis_not_configured", message: "خادم التحليل يحتاج إلى ضبط مفتاح مزود الذكاء الاصطناعي." });
+  if (!allowAnalysisRequest(req)) {
+    res.setHeader("Retry-After", "900");
+    return res.status(429).json({ error: "analysis_rate_limited", message: "تم الوصول إلى حد التحليل المؤقت؛ حاول مرة أخرى بعد قليل." });
+  }
   const requestedRiwaya = String(req.query.riwaya || "");
   // Fail closed: only the verified Hafs corpus is currently supported.
   // Never compare another riwayah against Hafs text.
