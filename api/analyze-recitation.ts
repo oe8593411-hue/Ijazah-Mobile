@@ -37,7 +37,12 @@ function alignWords(target: string, spoken: string) {
   const expected = normalizeArabic(target).split(" ").filter(Boolean);
   const actual = normalizeArabic(spoken).split(" ").filter(Boolean);
   const n = expected.length, m = actual.length;
-  const dp = Array.from({ length: n + 1 }, () => Array<number>(m + 1).fill(0));
+  // Protect the server from oversized alignment requests and avoid boxed JS-number
+  // arrays. Uint16Array uses about 2 bytes per cell; 10k words still fit safely.
+  if (n > 10_000 || m > 10_000 || n * m > 45_000_000) {
+    throw new Error("ALIGNMENT_TOO_LARGE");
+  }
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
   for (let i = 0; i <= n; i++) dp[i][0] = i;
   for (let j = 0; j <= m; j++) dp[0][j] = j;
   for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) {
@@ -255,6 +260,7 @@ export default async function handler(req: any, res: any) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message === "AUDIO_TOO_LARGE") return res.status(413).json({ error: "audio_too_large", message: "التسجيل أكبر من الحد المسموح." });
+    if (message === "ALIGNMENT_TOO_LARGE") return res.status(422).json({ error: "analysis_range_too_large", message: "نطاق التسميع كبير للتحليل دفعة واحدة. اختر نطاقًا أقصر ثم أعد التحليل." });
     console.error("Recitation analysis failed", message);
     return res.status(500).json({ error: "analysis_failed", message: "حدث خطأ أثناء تحليل التسجيل." });
   }
