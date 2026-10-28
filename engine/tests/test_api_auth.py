@@ -159,7 +159,7 @@ class TrustedReferenceTests(unittest.TestCase):
                 self.reference, "ALLOW_UNPINNED_TSV", False
             ):
                 self.reference._load_corpus.cache_clear()
-                with self.assertRaisesRegex(ValueError, "unpinned_tsv_reference_disabled"):
+                with self.assertRaisesRegex(ValueError, "unversioned_tsv_reference_disabled"):
                     self.reference.get_corpus()
 
     def test_exact_trusted_reference_accepted(self):
