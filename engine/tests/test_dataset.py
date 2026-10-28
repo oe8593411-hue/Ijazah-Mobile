@@ -1,6 +1,6 @@
 import unittest
 
-from tajweed_engine.dataset import validate_label_provenance
+from tajweed_engine.dataset import validate_label_provenance, validate_segment_timestamps
 
 
 def valid_row():
@@ -20,6 +20,27 @@ def valid_row():
         ],
     }
 
+
+class DatasetSegmentValidationTests(unittest.TestCase):
+    def test_valid_segment_is_accepted(self):
+        validate_segment_timestamps(100, 500, 1000)
+
+    def test_non_finite_reversed_and_too_short_segments_are_rejected(self):
+        cases = [
+            (float("nan"), 500, 1000),
+            (100, float("inf"), 1000),
+            (100, 200, float("nan")),
+            (200, 100, 1000),
+            (100, 349, 1000),
+            (-1, 300, 1000),
+            (100, 1001, 1000),
+            (10 ** 1000, 10 ** 1000 + 500, 1000),
+            (True, 500, 1000),
+        ]
+        for start, end, duration in cases:
+            with self.subTest(start=start, end=end, duration=duration):
+                with self.assertRaises(ValueError):
+                    validate_segment_timestamps(start, end, duration)
 
 class DatasetProvenanceTests(unittest.TestCase):
     def test_two_independent_reviewers_with_consensus_are_accepted(self):
