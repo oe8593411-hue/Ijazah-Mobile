@@ -9,6 +9,7 @@ This is an Ijazah-owned acoustic-model scaffold for a narrow first research task
 - Strict manifest checks and separate reciter groups for training, validation, and held-out test.
 - Fail-closed model loading: the API requires both independent teacher review and calibration metadata.
 - No findings are generated without trusted word timestamps.
+- Strict validation rejects missing, reversed, non-finite, boolean, and out-of-audio timestamp boundaries; malformed candidate objects are rejected.
 
 ## Local run
 Install requirements, set `IJAZAH_TAJWEED_ENGINE_TOKEN` to a long random secret, then run from this directory:
