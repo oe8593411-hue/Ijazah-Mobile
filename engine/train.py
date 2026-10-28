@@ -9,7 +9,7 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from tajweed_engine.audio import SAMPLE_RATE, log_mel
 from tajweed_engine.model import AcousticRuleClassifier
-from tajweed_engine.dataset import validate_label_provenance
+from tajweed_engine.dataset import validate_label_provenance, validate_segment_timestamps
 
 class Segments(Dataset):
     def __init__(self, rows, root):
@@ -66,12 +66,12 @@ def main():
             raise SystemExit(f"Invalid rights/review provenance at manifest line {line_number}: {exc}") from exc
         if r["rule_id"]!="qalqalah" or r["teacher_reviewed"] is not True or r["label"] not in (0,1):
             raise SystemExit("Only teacher-reviewed qalqalah labels 0/1 are accepted.")
-        if r["split"] not in ("train","validation","test") or not str(r["reciter_id"]).strip():
-            raise SystemExit("Each row needs split=train/validation/test and a reciter_id.")
-        if (not isinstance(r["start_ms"],(int,float)) or isinstance(r["start_ms"],bool)
-            or not isinstance(r["end_ms"],(int,float)) or isinstance(r["end_ms"],bool)
-            or r["start_ms"] < 0 or r["end_ms"] <= r["start_ms"]):
-            raise SystemExit("Invalid segment timestamps.")
+        if r["split"] not in ("train","validation","test"):
+            raise SystemExit("Each row needs split=train/validation/test.")
+        if not isinstance(r["reciter_id"], str) or not r["reciter_id"].strip():
+            raise SystemExit("Each row needs a non-empty pseudonymous reciter_id.")
+        if not isinstance(r["audio_path"], str) or not r["audio_path"].strip():
+            raise SystemExit("Each row needs a non-empty audio_path string.")
         path=(root / r["audio_path"]).resolve()
         if not path.is_file() or (path != root and root not in path.parents):
             raise SystemExit(f"Missing or unsafe audio_path: {r['audio_path']}")
@@ -79,8 +79,10 @@ def main():
             info=sf.info(str(path))
         except Exception as exc:
             raise SystemExit(f"Unreadable audio file: {r['audio_path']}") from exc
-        if r["end_ms"] > info.duration*1000 or r["end_ms"]-r["start_ms"] < 250:
-            raise SystemExit(f"Segment timestamps outside audio or too short: {r['audio_path']}")
+        try:
+            validate_segment_timestamps(r["start_ms"], r["end_ms"], info.duration * 1000)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid segment timestamps at manifest line {line_number}: {exc}") from exc
         r["audio_path"]=str(path)
     groups={s:[r for r in rows if r["split"]==s] for s in ("train","validation","test")}
     if any(not groups[s] for s in groups):
