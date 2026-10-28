@@ -271,6 +271,15 @@ class TrustedReferenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.reference._parse_verified_json(payload)
 
+    def test_tsv_ayah_number_cannot_exceed_surah_boundary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "quran.tsv"
+            path.write_text("1\\t8\\tآية خارج نطاق الفاتحة\\n", encoding="utf-8")
+            self.reference.CORPUS_PATH = path
+            self.reference._load_corpus.cache_clear()
+            with self.assertRaisesRegex(ValueError, "invalid_quran_corpus_entry"):
+                self.reference.get_corpus()
+
     def test_duplicate_corpus_reference_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
