@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import math
 from typing import Any
 
 
@@ -84,3 +85,22 @@ def validate_label_provenance(row: dict[str, Any]) -> None:
         raise ValueError("final_label_must_match_adjudication")
     if not _valid_review_date(adjudication.get("reviewed_at")):
         raise ValueError("invalid_adjudication_date")
+
+
+def validate_segment_timestamps(start_ms: Any, end_ms: Any, duration_ms: Any) -> None:
+    """Reject non-finite, reversed, too-short, or out-of-recording segments."""
+    values = (start_ms, end_ms, duration_ms)
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
+        raise ValueError("invalid_segment_timestamp_type")
+    try:
+        start, end, duration = (float(value) for value in values)
+    except (OverflowError, ValueError, TypeError) as exc:
+        raise ValueError("invalid_segment_timestamp_value") from exc
+    if not all(math.isfinite(value) for value in (start, end, duration)):
+        raise ValueError("invalid_segment_timestamp_value")
+    if start < 0 or end <= start:
+        raise ValueError("invalid_segment_timestamp_order")
+    if duration <= 0 or end > duration:
+        raise ValueError("segment_outside_recording")
+    if end - start < 250:
+        raise ValueError("segment_too_short")
