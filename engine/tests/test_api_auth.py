@@ -144,6 +144,46 @@ class TrustedReferenceTests(unittest.TestCase):
                 with self.subTest(surah=surah, ayah=ayah):
                     self.assertFalse(self.reference.validate_reference(surah, ayah, "بسم الله"))
 
+    def _verified_json_fixture(self):
+        payload = {
+            "source": "Tanzil Quran Text",
+            "edition": "Tanzil Uthmani",
+            "riwayah": "hafs",
+            "script": "uthmani",
+            "version": "1.1",
+            "sha256": self.reference.EXPECTED_TANZIL_SHA256,
+            "ayahs": [],
+        }
+        for surah, count in enumerate(self.reference.EXPECTED_SURAH_AYAH_COUNTS, 1):
+            for ayah in range(1, count + 1):
+                payload["ayahs"].append({
+                    "surah": surah, "ayah": ayah,
+                    "text": f"نص اختبار {surah} {ayah}",
+                })
+        return payload
+
+    def test_complete_verified_json_corpus_accepted(self):
+        corpus = self.reference._parse_verified_json(self._verified_json_fixture())
+        self.assertEqual(len(corpus), 6236)
+        self.assertEqual(corpus[(1, 1)], "نص اختبار 1 1")
+        self.assertEqual(corpus[(114, 6)], "نص اختبار 114 6")
+
+    def test_verified_json_corpus_rejects_wrong_source_metadata(self):
+        payload = self._verified_json_fixture()
+        payload["riwayah"] = "warsh"
+        with self.assertRaises(ValueError):
+            self.reference._parse_verified_json(payload)
+
+    def test_verified_json_corpus_rejects_missing_or_duplicate_ayahs(self):
+        payload = self._verified_json_fixture()
+        payload["ayahs"].pop()
+        with self.assertRaises(ValueError):
+            self.reference._parse_verified_json(payload)
+        payload = self._verified_json_fixture()
+        payload["ayahs"][-1] = payload["ayahs"][0]
+        with self.assertRaises(ValueError):
+            self.reference._parse_verified_json(payload)
+
     def test_duplicate_corpus_reference_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
