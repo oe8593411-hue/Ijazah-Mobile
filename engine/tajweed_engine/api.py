@@ -45,8 +45,10 @@ def authorize(value: str | None):
     if not hmac.compare_digest(supplied, TOKEN):
         raise HTTPException(status_code=401, detail="unauthorized")
 
-def validate_rule_checks(checks: Any, duration_ms: float) -> list[dict[str, Any]]:
-    """Accept only finite, bounded timestamps; never infer missing word boundaries."""
+def validate_rule_checks(
+    checks: Any, duration_ms: float, reference_word_count: int | None = None
+) -> list[dict[str, Any]]:
+    """Accept finite, bounded timestamps and word positions only."""
     if not isinstance(checks, list) or len(checks) > 500:
         raise HTTPException(status_code=400, detail="invalid_rule_checks")
     validated: list[dict[str, Any]] = []
@@ -57,10 +59,21 @@ def validate_rule_checks(checks: Any, duration_ms: float) -> list[dict[str, Any]
         if item.get("ruleId") != "qalqalah":
             continue
         start, end, word_index = item.get("startMs"), item.get("endMs"), item.get("wordIndex")
-        if (isinstance(start, bool) or isinstance(end, bool) or isinstance(word_index, bool)
+        if (
+            isinstance(start, bool) or isinstance(end, bool) or isinstance(word_index, bool)
             or not isinstance(start, (int, float)) or not isinstance(end, (int, float))
-            or not isinstance(word_index, int) or not math.isfinite(start) or not math.isfinite(end)
-            or start < 0 or end <= start or end > duration_ms or word_index < 0):
+            or not isinstance(word_index, int) or word_index < 0 or word_index > 10_000
+        ):
+            raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps")
+        try:
+            start_ms, end_ms = float(start), float(end)
+        except (OverflowError, ValueError, TypeError) as exc:
+            raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps") from exc
+        if (
+            not math.isfinite(start_ms) or not math.isfinite(end_ms)
+            or start_ms < 0 or end_ms <= start_ms or end_ms > duration_ms
+            or (reference_word_count is not None and word_index >= reference_word_count)
+        ):
             raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps")
         validated.append(item)
     return validated
@@ -115,7 +128,7 @@ async def analyze(
     # Client-provided timestamps are untrusted input, not acoustic alignment evidence.
     # The server-side forced aligner is not implemented yet, so fail closed even if
     # a caller submits plausible timestamps or a reviewed model is present.
-    candidates = validate_rule_checks(checks, quality["duration_seconds"] * 1000)
+    candidates = validate_rule_checks(checks, quality["duration_seconds"] * 1000, len(referenceText.split()))
     return {
         "status": "not_configured",
         "rulesEvaluated": [],
