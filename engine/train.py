@@ -65,12 +65,14 @@ def main():
             validate_label_provenance(r)
         except ValueError as exc:
             raise SystemExit(f"Invalid rights/review provenance at manifest line {line_number}: {exc}") from exc
+        r["recording_id"] = r["recording_id"].strip()
         if r["rule_id"]!="qalqalah" or r["teacher_reviewed"] is not True or r["label"] not in (0,1):
             raise SystemExit("Only teacher-reviewed qalqalah labels 0/1 are accepted.")
         if r["split"] not in ("train","validation","test"):
             raise SystemExit("Each row needs split=train/validation/test.")
         if not isinstance(r["reciter_id"], str) or not r["reciter_id"].strip():
             raise SystemExit("Each row needs a non-empty pseudonymous reciter_id.")
+        r["reciter_id"] = r["reciter_id"].strip()
         if not isinstance(r["audio_path"], str) or not r["audio_path"].strip():
             raise SystemExit("Each row needs a non-empty audio_path string.")
         path=(root / r["audio_path"]).resolve()
@@ -91,6 +93,9 @@ def main():
     reciters=[{r["reciter_id"] for r in groups[s]} for s in ("train","validation","test")]
     if reciters[0]&reciters[1] or reciters[0]&reciters[2] or reciters[1]&reciters[2]:
         raise SystemExit("Data leakage: reciters must be disjoint across train/validation/test.")
+    recordings=[{r["recording_id"] for r in groups[s]} for s in ("train","validation","test")]
+    if recordings[0]&recordings[1] or recordings[0]&recordings[2] or recordings[1]&recordings[2]:
+        raise SystemExit("Data leakage: recording IDs must be disjoint across train/validation/test.")
     if any({r["label"] for r in groups[s]}!={0,1} for s in groups):
         raise SystemExit("Both classes must exist in every split.")
     if a.validate_only:
