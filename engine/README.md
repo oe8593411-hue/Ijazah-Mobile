@@ -8,7 +8,7 @@ This is an Ijazah-owned acoustic-model scaffold for a narrow first research task
 - CNN model architecture and supervised training script.
 - Strict manifest checks and separate reciter groups for training, validation, and held-out test.
 - Fail-closed model loading: the API requires both independent teacher review and calibration metadata.
-- No findings are generated without trusted word timestamps.
+- The API fails closed: client-supplied timestamps are never treated as trusted alignment evidence.
 - Strict validation rejects missing, reversed, non-finite, boolean, and out-of-audio timestamp boundaries; malformed candidate objects are rejected.
 
 ## Local run
@@ -45,7 +45,7 @@ python train.py --manifest data/manifest.jsonl --data-root data --output models/
 The output is a research checkpoint with `teacher_reviewed=false` and `calibrated=false`, so the API deliberately refuses to load it. Do not change these flags just to force deployment. Independent audit and confidence calibration must be completed and documented before a release checkpoint can be produced.
 
 ## Critical integration gap
-The mobile app currently provides textual rule candidates but does not provide trusted word-level audio timestamps. This service will not guess word locations. A validated audio-to-word alignment stage must be integrated and tested first. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
+The mobile app currently provides textual rule candidates and can submit timestamps, but client-supplied timestamps are untrusted and are not used to issue findings. The API deliberately returns no findings until a server-side, validated audio-to-word alignment stage is integrated. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
 
 ## Deployment and security
 Deploy this Python/PyTorch service separately from the Expo/Vercel frontend on a container-capable host. Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` only as a server-side secret; never include it in browser or mobile code. Before real users: add authenticated caller identity, shared rate limiting, concurrency limits, request logging without raw audio, a privacy/retention policy, and monitoring. The current in-memory app scaffold is not production-ready.
