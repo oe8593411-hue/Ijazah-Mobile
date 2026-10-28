@@ -61,6 +61,20 @@ class RuleCheckValidationTests(unittest.TestCase):
                 with self.assertRaises(HTTPException):
                     api.validate_rule_checks([item], 1000)
 
+    def test_extremely_large_integer_timestamps_return_client_error(self):
+        with self.assertRaises(HTTPException) as ctx:
+            api.validate_rule_checks([{
+                "ruleId": "qalqalah", "startMs": 10 ** 1000,
+                "endMs": 10 ** 1000 + 1, "wordIndex": 0,
+            }], 1000)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_word_index_must_fit_reference_ayah(self):
+        candidate = {"ruleId": "qalqalah", "startMs": 10, "endMs": 20, "wordIndex": 2}
+        with self.assertRaises(HTTPException) as ctx:
+            api.validate_rule_checks([candidate], 1000, reference_word_count=2)
+        self.assertEqual(ctx.exception.status_code, 400)
+
     def test_out_of_bounds_or_reversed_timestamps_rejected(self):
         for start, end in [(-1, 20), (20, 20), (30, 20), (10, 1001)]:
             with self.subTest(start=start, end=end):
