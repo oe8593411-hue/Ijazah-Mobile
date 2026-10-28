@@ -25,8 +25,12 @@ jobs:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: engine/requirements.txt
-      - name: Install CPU dependencies
-        run: pip install -r requirements.txt
+      - name: Install Python dependencies except PyTorch
+        run: |
+          grep -v '^torch==' requirements.txt > /tmp/engine-requirements.txt
+          pip install -r /tmp/engine-requirements.txt
+      - name: Install CPU-only PyTorch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.7.0'
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
       - name: Compile Python files
