@@ -24,22 +24,27 @@ PYTHONPATH=engine uvicorn tajweed_engine.api:app --app-dir engine --host 127.0.0
 `GET /health` reports whether the full reference corpus loaded and separately shows `trusted_server_alignment: false`. Until a trusted server-side audio-to-word aligner is integrated, analysis intentionally returns no tajweed findings. Keep the service on a private network during development.
 
 ## Dataset manifest
-Each JSONL line requires:
+
+Each JSONL line is one teacher-reviewed audio segment and requires:
 - `audio_path`: path to a permitted audio file under `--data-root`
-- `start_ms`, `end_ms`: teacher-checked segment boundaries in milliseconds
+- `start_ms`, `end_ms`: reviewed segment boundaries in milliseconds
 - `label`: 0=acceptable segment, 1=teacher-confirmed review candidate
 - `rule_id`: `qalqalah`
 - `split`: `train`, `validation`, or `test`
 - `teacher_reviewed`: `true`
-- `reciter_id`: stable pseudonymous ID, used to keep voices disjoint between splits
+- `recording_id`: pseudonymous clip identifier
+- `reciter_id`: stable pseudonymous voice identifier, kept disjoint across splits
+- `rights`: license/permission reference plus explicit training-rights and speaker-consent confirmations
+- `reviewers`: at least two distinct teacher IDs, each with a binary label and ISO date
+- `adjudication`: required only when the first reviewers disagree; must name a third, independent teacher and the final label
 
-Example:
+Example with two teachers in agreement:
 
 ```json
-{"audio_path":"segments/clip01.wav","start_ms":1200,"end_ms":2050,"label":0,"rule_id":"qalqalah","split":"train","teacher_reviewed":true,"reciter_id":"reader-001"}
+{"audio_path":"segments/clip01.wav","start_ms":1200,"end_ms":2050,"label":0,"rule_id":"qalqalah","split":"train","teacher_reviewed":true,"recording_id":"session-001-clip-01","reciter_id":"reader-001","rights":{"license":"written_permission","reference":"permission-record-001","training_rights_confirmed":true,"consent_confirmed":true},"reviewers":[{"reviewer_id":"teacher-a","label":0,"reviewed_at":"2026-10-01"},{"reviewer_id":"teacher-b","label":0,"reviewed_at":"2026-10-02"}]}
 ```
 
-The same reciter must not appear in more than one split, and each split must contain both labels. Use recordings licensed for model training and obtain any needed permissions. Qualified tajweed teachers must define annotation criteria and review labels.
+The trainer rejects missing licensing/permission evidence, missing reciter consent, fewer than two independent teachers, duplicate reviewer IDs, invalid dates, consensus mismatches, or disagreements without a third-teacher adjudication. Use actual records; the example above is a schema illustration, not a real annotated recording. The same reciter must not appear in more than one split, and each split must contain both labels. Do not train from unlicensed recordings or synthetic labels. Qualified tajweed teachers must define annotation criteria and review labels.
 
 ```bash
 python train.py --manifest data/manifest.jsonl --data-root data --output models/qalqalah_classifier.pt
