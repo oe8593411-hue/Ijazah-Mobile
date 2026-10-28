@@ -46,13 +46,17 @@ The output is a research checkpoint with `teacher_reviewed=false` and `calibrate
 
 ## Trusted Quran reference corpus
 
-The API requires a server-side Hafs reference corpus and checks the submitted surah, ayah, and reference text against it before proceeding. Configure `IJAZAH_QURAN_CORPUS_PATH` to a UTF-8 TSV file (tab-separated values) with one ayah per line:
+The engine uses the application's existing versioned source, `src/quran/verified-corpus.json`, containing Tanzil Uthmani 1.1 / Hafs. The Docker image copies this exact source to `/data/verified-corpus.json` and sets `IJAZAH_QURAN_CORPUS_PATH` to that file. The engine checks the corpus metadata, pinned upstream SHA-256, all 114 surahs, all 6,236 ayahs, and the expected ayah count for each surah before accepting any request. A missing, malformed, incomplete, or differently identified corpus fails closed.
 
-```text
-surah<TAB>ayah<TAB>exact Uthmani ayah text
+Build the image **from the repository root** (the build context must include `src/quran/verified-corpus.json`):
+
+```bash
+docker build -f engine/Dockerfile -t ijazah-tajweed-engine .
 ```
 
-For example, the literal separators are tab characters, not the text `<TAB>`. Keep the full licensed/approved corpus outside the source tree and verify its provenance and checksum before deployment. This repository does not include or generate Quran text; if the corpus is missing, malformed, or the reference does not match, analysis is rejected.
+Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` as a long random server-side secret when running the container. Never expose it to the browser or mobile app. The corpus source attribution and verification notes are included in the image at `/data/SOURCE_ATTRIBUTION.md`.
+
+A tab-separated TSV corpus is still accepted for isolated local tests or separately managed deployments, using one ayah per line: `surah<TAB>ayah<TAB>exact Uthmani ayah text`. The default production image uses the strict, versioned JSON corpus from the app; do not replace it with generated or unverified text.
 
 ## Critical integration gap
 The mobile app currently provides textual rule candidates and can submit timestamps, but client-supplied timestamps are untrusted and are not used to issue findings. The API deliberately returns no findings until a server-side, validated audio-to-word alignment stage is integrated. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
