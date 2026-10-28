@@ -143,10 +143,24 @@ class TrustedReferenceTests(unittest.TestCase):
         from tajweed_engine import reference
         self.reference = reference
         self.original_path = reference.CORPUS_PATH
+        self.original_allow_tsv = reference.ALLOW_UNPINNED_TSV
+        reference.ALLOW_UNPINNED_TSV = True  # Small synthetic TSV fixtures are test-only.
 
     def tearDown(self):
         self.reference.CORPUS_PATH = self.original_path
+        self.reference.ALLOW_UNPINNED_TSV = self.original_allow_tsv
         self.reference._load_corpus.cache_clear()
+
+    def test_unpinned_tsv_reference_requires_explicit_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "untrusted.tsv"
+            path.write_text("1\t1\tبِسْمِ اللَّهِ\n", encoding="utf-8")
+            with patch.object(self.reference, "CORPUS_PATH", path), patch.object(
+                self.reference, "ALLOW_UNPINNED_TSV", False
+            ):
+                self.reference._load_corpus.cache_clear()
+                with self.assertRaisesRegex(ValueError, "unpinned_tsv_reference_disabled"):
+                    self.reference.get_corpus()
 
     def test_exact_trusted_reference_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
