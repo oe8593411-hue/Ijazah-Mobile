@@ -91,21 +91,22 @@ async def analyze(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Client-provided timestamps are untrusted input, not acoustic alignment evidence.
+    # The server-side forced aligner is not implemented yet, so fail closed even if
+    # a caller submits plausible timestamps or a reviewed model is present.
     candidates = validate_rule_checks(checks, quality["duration_seconds"] * 1000)
-
-    if model is None:
-        return {
-            "status": "not_configured", "rulesEvaluated": [], "findings": [],
-            "message": "لم يُعتمد نموذج صوتي مُدرّب ومُراجع بعد؛ لم نصدر أحكام تجويد.",
-            "diagnostics": {"audioQuality": quality, "modelLoaded": False},
-        }
-
-    if not candidates:
-        return {
-            "status": "not_configured", "rulesEvaluated": [], "findings": [],
-            "message": "نحتاج محاذاة زمنية موثوقة للكلمات قبل تحليل قاعدة تجويد محددة.",
-            "diagnostics": {"audioQuality": quality, "modelLoaded": True, "timestampedCandidates": 0},
-        }
+    return {
+        "status": "not_configured",
+        "rulesEvaluated": [],
+        "findings": [],
+        "message": "لم تُفعّل المحاذاة الصوتية الداخلية الموثوقة بعد؛ لم نصدر أحكام تجويد.",
+        "diagnostics": {
+            "audioQuality": quality,
+            "modelLoaded": model is not None,
+            "clientCandidatesReceived": len(candidates),
+            "trustedServerAlignment": False,
+        },
+    }
 
     findings, evaluated = [], []
     with torch.inference_mode():
