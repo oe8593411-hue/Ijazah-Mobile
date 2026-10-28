@@ -84,7 +84,11 @@ def _parse_tsv_corpus(path: Path) -> dict[tuple[int, int], str]:
             except ValueError as exc:
                 raise ValueError(f"invalid_quran_corpus_reference:{line_number}") from exc
             text = parts[2].strip()
-            if not 1 <= surah <= 114 or ayah < 1 or not text:
+            if (
+                not 1 <= surah <= 114
+                or not 1 <= ayah <= EXPECTED_SURAH_AYAH_COUNTS[surah - 1]
+                or not text
+            ):
                 raise ValueError(f"invalid_quran_corpus_entry:{line_number}")
             key = (surah, ayah)
             if key in corpus:
