@@ -137,7 +137,7 @@ class TrustedReferenceTests(unittest.TestCase):
     def test_invalid_surah_ayah_and_boolean_indices_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
-            path.write_text("1\\t1\\tبِسْمِ اللَّهِ\\n", encoding="utf-8")
+            path.write_text("1\t1\tبِسْمِ اللَّهِ\n", encoding="utf-8")
             self.reference.CORPUS_PATH = path
             self.reference._load_corpus.cache_clear()
             for surah, ayah in [(0, 1), (115, 1), (1, 0), (True, 1), (1, False)]:
