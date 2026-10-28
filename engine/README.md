@@ -44,6 +44,16 @@ python train.py --manifest data/manifest.jsonl --data-root data --output models/
 
 The output is a research checkpoint with `teacher_reviewed=false` and `calibrated=false`, so the API deliberately refuses to load it. Do not change these flags just to force deployment. Independent audit and confidence calibration must be completed and documented before a release checkpoint can be produced.
 
+## Trusted Quran reference corpus
+
+The API requires a server-side Hafs reference corpus and checks the submitted surah, ayah, and reference text against it before proceeding. Configure `IJAZAH_QURAN_CORPUS_PATH` to a UTF-8 TSV file (tab-separated values) with one ayah per line:
+
+```text
+surah<TAB>ayah<TAB>exact Uthmani ayah text
+```
+
+For example, the literal separators are tab characters, not the text `<TAB>`. Keep the full licensed/approved corpus outside the source tree and verify its provenance and checksum before deployment. This repository does not include or generate Quran text; if the corpus is missing, malformed, or the reference does not match, analysis is rejected.
+
 ## Critical integration gap
 The mobile app currently provides textual rule candidates and can submit timestamps, but client-supplied timestamps are untrusted and are not used to issue findings. The API deliberately returns no findings until a server-side, validated audio-to-word alignment stage is integrated. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
 
