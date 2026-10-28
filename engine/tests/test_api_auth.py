@@ -274,7 +274,7 @@ class TrustedReferenceTests(unittest.TestCase):
     def test_tsv_ayah_number_cannot_exceed_surah_boundary(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
-            path.write_text("1\\t8\\tآية خارج نطاق الفاتحة\\n", encoding="utf-8")
+            path.write_text("1\t8\tآية خارج نطاق الفاتحة\n", encoding="utf-8")
             self.reference.CORPUS_PATH = path
             self.reference._load_corpus.cache_clear()
             with self.assertRaisesRegex(ValueError, "invalid_quran_corpus_entry"):
