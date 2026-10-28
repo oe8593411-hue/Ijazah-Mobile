@@ -54,6 +54,10 @@ if (!api.includes('scope === "surah"') || !api.includes("expectedWordLocations")
 if (!recite.includes('&scope="+analysisScope+"&ayah=') || !recite.includes('typeof item.ayah==="number"')) {
   errors.push("Client must request the selected analysis scope and display ayah locations for differences.");
 }
+if (!recite.includes('analysis?.tajweed?.status==="not_configured"')
+  || !recite.includes("تحليل أحكام التجويد الصوتي غير مفعّل؛ لم نصدر أحكامًا.")) {
+  errors.push("The recitation UI must distinguish an unconfigured acoustic tajweed engine from text-match results.");
+}
 if (!api.includes('requestedRiwaya !== "hafs"')) {
   errors.push("Server analysis must reject unverified riwayat.");
 }
