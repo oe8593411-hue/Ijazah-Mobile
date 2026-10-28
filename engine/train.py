@@ -9,6 +9,7 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from tajweed_engine.audio import SAMPLE_RATE, log_mel
 from tajweed_engine.model import AcousticRuleClassifier
+from tajweed_engine.dataset import validate_label_provenance
 
 class Segments(Dataset):
     def __init__(self, rows, root):
@@ -55,10 +56,14 @@ def main():
     torch.manual_seed(42)
     root=Path(a.data_root).resolve()
     rows=[json.loads(x) for x in Path(a.manifest).read_text(encoding="utf-8").splitlines() if x.strip()]
-    required={"audio_path","start_ms","end_ms","label","rule_id","split","teacher_reviewed","reciter_id"}
+    required={"audio_path","start_ms","end_ms","label","rule_id","split","teacher_reviewed","reciter_id","recording_id","rights","reviewers"}
     if not rows or any(not isinstance(r,dict) or not required.issubset(r) for r in rows):
         raise SystemExit("Manifest missing required fields.")
-    for r in rows:
+    for line_number, r in enumerate(rows, 1):
+        try:
+            validate_label_provenance(r)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid rights/review provenance at manifest line {line_number}: {exc}") from exc
         if r["rule_id"]!="qalqalah" or r["teacher_reviewed"] is not True or r["label"] not in (0,1):
             raise SystemExit("Only teacher-reviewed qalqalah labels 0/1 are accepted.")
         if r["split"] not in ("train","validation","test") or not str(r["reciter_id"]).strip():
