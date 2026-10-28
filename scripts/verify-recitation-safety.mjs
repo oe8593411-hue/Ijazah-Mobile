@@ -57,6 +57,11 @@ if (!recite.includes('&scope="+analysisScope+"&ayah=') || !recite.includes('type
 if (!api.includes('requestedRiwaya !== "hafs"')) {
   errors.push("Server analysis must reject unverified riwayat.");
 }
+if (!api.includes('if (result.status === "not_configured")')
+  || !api.includes('result.status !== "preliminary_findings"')
+  || !api.includes('result.status === "completed_no_confirmed_findings" && result.findings.length > 0')) {
+  errors.push("The client must preserve not-configured engine state and reject unsupported result statuses.");
+}
 if (!api.includes("total > 20 * 1024 * 1024")) {
   errors.push("Audio upload size limit must remain enforced.");
 }
