@@ -116,27 +116,3 @@ async def analyze(
             "trustedServerAlignment": False,
         },
     }
-
-    findings, evaluated = [], []
-    with torch.inference_mode():
-        for c in candidates[:80]:
-            start, end = max(0, int(c["startMs"] * 16)), min(len(audio), int(c["endMs"] * 16))
-            if end - start < 4000:
-                continue
-            probs = torch.softmax(model(log_mel(audio[start:end]).to(DEVICE)), dim=-1)[0]
-            confidence, predicted = torch.max(probs, dim=0)
-            evaluated.append("qalqalah")
-            score = float(confidence.item())
-            if int(predicted.item()) == 1 and score >= float(metadata["decision_threshold"]):
-                findings.append({
-                    "ruleId": "qalqalah", "wordIndex": int(c["wordIndex"]),
-                    "context": str(c.get("context", ""))[:160], "confidence": score,
-                    "evidence": "Reviewed model candidate; human verification required",
-                    "startMs": int(c["startMs"]), "endMs": int(c["endMs"]),
-                })
-    return {
-        "status": "preliminary_findings" if findings else "completed_no_confirmed_findings",
-        "rulesEvaluated": sorted(set(evaluated)), "findings": findings[:20],
-        "confidence": min((x["confidence"] for x in findings), default=0.0),
-        "message": "اقتراحات أولية تحتاج مراجعة معلّم التجويد؛ ليست حكمًا نهائيًا.",
-    }
