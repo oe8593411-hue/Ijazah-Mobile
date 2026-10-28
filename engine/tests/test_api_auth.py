@@ -120,7 +120,7 @@ class TrustedReferenceTests(unittest.TestCase):
     def test_exact_trusted_reference_accepted(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
-            path.write_text("1\\t1\\tبِسْمِ اللَّهِ\\n1\\t2\\tالْحَمْدُ لِلَّهِ\\n", encoding="utf-8")
+            path.write_text("1\t1\tبِسْمِ اللَّهِ\n1\t2\tالْحَمْدُ لِلَّهِ\n", encoding="utf-8")
             self.reference.CORPUS_PATH = path
             self.reference._load_corpus.cache_clear()
             self.assertTrue(self.reference.validate_reference(1, 1, "بسم الله"))
@@ -128,7 +128,7 @@ class TrustedReferenceTests(unittest.TestCase):
     def test_wrong_ayah_text_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
-            path.write_text("1\\t1\\tبِسْمِ اللَّهِ\\n", encoding="utf-8")
+            path.write_text("1\t1\tبِسْمِ اللَّهِ\n", encoding="utf-8")
             self.reference.CORPUS_PATH = path
             self.reference._load_corpus.cache_clear()
             self.assertFalse(self.reference.validate_reference(1, 1, "نص غير صحيح"))
@@ -136,7 +136,7 @@ class TrustedReferenceTests(unittest.TestCase):
     def test_duplicate_corpus_reference_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "quran.tsv"
-            path.write_text("1\\t1\\tآية أولى\\n1\\t1\\tآية مكررة\\n", encoding="utf-8")
+            path.write_text("1\t1\tآية أولى\n1\t1\tآية مكررة\n", encoding="utf-8")
             self.reference.CORPUS_PATH = path
             self.reference._load_corpus.cache_clear()
             with self.assertRaises(ValueError):
