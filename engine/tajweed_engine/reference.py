@@ -7,7 +7,7 @@ from pathlib import Path
 
 CORPUS_PATH = Path(os.getenv("IJAZAH_QURAN_CORPUS_PATH", "/data/quran-hafs.tsv"))
 _ARABIC_MARKS = re.compile("[\\u0610-\\u061a\\u064b-\\u065f\\u0670\\u06d6-\\u06ed]")
-_WHITESPACE = re.compile(r"\\s+")
+_WHITESPACE = re.compile(r"\s+")
 
 
 def normalize_reference(text: str) -> str:
@@ -25,10 +25,10 @@ def _load_corpus(path_string: str, modified_ns: int, size: int) -> dict[tuple[in
     corpus: dict[tuple[int, int], str] = {}
     with path.open("r", encoding="utf-8-sig") as handle:
         for line_number, line in enumerate(handle, 1):
-            line = line.rstrip("\\r\\n")
+            line = line.rstrip("\r\n")
             if not line or line.startswith("#"):
                 continue
-            parts = line.split("\\t", 2)
+            parts = line.split("\t", 2)
             if len(parts) != 3:
                 raise ValueError(f"invalid_quran_corpus_line:{line_number}")
             try:
