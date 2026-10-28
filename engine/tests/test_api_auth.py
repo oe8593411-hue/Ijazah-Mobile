@@ -23,6 +23,23 @@ class AuthorizationTests(unittest.TestCase):
             self.assertIsNone(api.authorize("Bearer correct-secret"))
 
 
+class HealthReadinessTests(unittest.TestCase):
+    def test_health_reports_corpus_and_missing_alignment_separately(self):
+        with patch.object(api, "get_corpus", return_value={(1, 1): "fixture"}):
+            result = api.health()
+        self.assertEqual(result["status"], "alignment_not_configured")
+        self.assertTrue(result["reference_corpus_ready"])
+        self.assertEqual(result["reference_corpus_ayahs"], 1)
+        self.assertFalse(result["trusted_server_alignment"])
+
+    def test_health_reports_missing_reference_corpus(self):
+        with patch.object(api, "get_corpus", side_effect=FileNotFoundError):
+            result = api.health()
+        self.assertEqual(result["status"], "trusted_quran_corpus_not_configured")
+        self.assertFalse(result["reference_corpus_ready"])
+        self.assertEqual(result["reference_corpus_ayahs"], 0)
+
+
 class RuleCheckValidationTests(unittest.TestCase):
     def test_valid_timestamped_candidate_accepted(self):
         candidate = {"ruleId": "qalqalah", "startMs": 100, "endMs": 450, "wordIndex": 3}
