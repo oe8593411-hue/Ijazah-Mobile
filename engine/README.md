@@ -4,7 +4,7 @@ This is an Ijazah-owned acoustic-model scaffold for a narrow first research task
 
 ## Included
 - FastAPI service with server-side bearer-token authentication.
-- Audio decoding, mono conversion, 16 kHz resampling, and file/duration/silence checks.
+- Audio decoding, mono conversion, 16 kHz resampling, and file/duration/silence checks; FFmpeg fallback for mobile audio containers when `soundfile` cannot decode them, with a separate duration probe and bounded output.
 - CNN model architecture and supervised training script.
 - Strict manifest checks and separate reciter groups for training, validation, and held-out test.
 - Fail-closed model loading: the API requires both independent teacher review and calibration metadata.
