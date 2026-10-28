@@ -50,6 +50,7 @@ def main():
     p.add_argument("--manifest", required=True); p.add_argument("--data-root", default=".")
     p.add_argument("--output", default="models/qalqalah_classifier.pt")
     p.add_argument("--epochs", type=int, default=20); p.add_argument("--batch-size", type=int, default=16)
+    p.add_argument("--validate-only", action="store_true", help="validate the full manifest and report split counts without training")
     a=p.parse_args()
     if a.epochs < 1 or a.batch_size < 1:
         raise SystemExit("epochs and batch-size must be positive")
@@ -92,6 +93,24 @@ def main():
         raise SystemExit("Data leakage: reciters must be disjoint across train/validation/test.")
     if any({r["label"] for r in groups[s]}!={0,1} for s in groups):
         raise SystemExit("Both classes must exist in every split.")
+    if a.validate_only:
+        summary = {
+            "valid": True,
+            "manifest_rows": len(rows),
+            "splits": {
+                split: {
+                    "segments": len(groups[split]),
+                    "reciters": len({row["reciter_id"] for row in groups[split]}),
+                    "labels": {
+                        "acceptable": sum(row["label"] == 0 for row in groups[split]),
+                        "review_candidate": sum(row["label"] == 1 for row in groups[split]),
+                    },
+                }
+                for split in ("train", "validation", "test")
+            },
+        }
+        print(json.dumps(summary, sort_keys=True))
+        return
     tl=DataLoader(Segments(groups["train"],root),batch_size=a.batch_size,shuffle=True)
     vl=DataLoader(Segments(groups["validation"],root),batch_size=a.batch_size)
     testl=DataLoader(Segments(groups["test"],root),batch_size=a.batch_size)
