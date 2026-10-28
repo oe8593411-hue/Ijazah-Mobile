@@ -47,6 +47,8 @@ Example with two teachers in agreement:
 The trainer rejects missing licensing/permission evidence, missing reciter consent, fewer than two independent teachers, duplicate reviewer IDs, invalid dates, consensus mismatches, or disagreements without a third-teacher adjudication. Use actual records; the example above is a schema illustration, not a real annotated recording. The same reciter must not appear in more than one split, and each split must contain both labels. Do not train from unlicensed recordings or synthetic labels. Qualified tajweed teachers must define annotation criteria and review labels.
 
 ```bash
+python train.py --manifest data/manifest.jsonl --data-root data --validate-only
+# After validation succeeds, run the research training:
 python train.py --manifest data/manifest.jsonl --data-root data --output models/qalqalah_classifier.pt
 ```
 
