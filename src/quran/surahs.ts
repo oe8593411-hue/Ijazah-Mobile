@@ -113,6 +113,6 @@ export const SURAHS: SurahMeta[] = [
   { number: 110, nameAr: "النصر", ayahCount: 3 },
   { number: 111, nameAr: "المسد", ayahCount: 5 },
   { number: 112, nameAr: "الإخلاص", ayahCount: 4 },
-  { number: 113, nameAr: "الفلق", ayahCount: 6 },
+  { number: 113, nameAr: "الفلق", ayahCount: 5 },
   { number: 114, nameAr: "الناس", ayahCount: 6 }
 ];
