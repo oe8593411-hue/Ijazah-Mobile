@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hmac, json, os
+import hmac, json, os, math
 from pathlib import Path
 from typing import Any
 import torch
@@ -21,7 +21,10 @@ def load_model():
     try:
         checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True)
         info = checkpoint.get("metadata", {})
-        if info.get("task") != "qalqalah_segment_v1" or info.get("teacher_reviewed") is not True or info.get("calibrated") is not True:
+        threshold = info.get("decision_threshold")
+        if (info.get("task") != "qalqalah_segment_v1" or info.get("teacher_reviewed") is not True
+            or info.get("calibrated") is not True or not isinstance(threshold, (int, float))
+            or isinstance(threshold, bool) or not math.isfinite(threshold) or not 0 < threshold <= 1):
             return
         candidate = AcousticRuleClassifier()
         candidate.load_state_dict(checkpoint["state_dict"], strict=True)
@@ -86,7 +89,8 @@ async def analyze(
             continue
         if not isinstance(start_ms, (int, float)) or not isinstance(end_ms, (int, float)) or not isinstance(word_index, int):
             continue
-        if start_ms < 0 or end_ms <= start_ms or end_ms > quality["duration_seconds"] * 1000 or word_index < 0:
+        if (not math.isfinite(start_ms) or not math.isfinite(end_ms) or start_ms < 0
+            or end_ms <= start_ms or end_ms > quality["duration_seconds"] * 1000 or word_index < 0):
             continue
         candidates.append(c)
     if not candidates:
@@ -106,7 +110,7 @@ async def analyze(
             confidence, predicted = torch.max(probs, dim=0)
             evaluated.append("qalqalah")
             score = float(confidence.item())
-            if int(predicted.item()) == 1 and score >= float(metadata.get("decision_threshold", 1.01)):
+            if int(predicted.item()) == 1 and score >= float(metadata["decision_threshold"]):
                 findings.append({
                     "ruleId": "qalqalah", "wordIndex": int(c["wordIndex"]),
                     "context": str(c.get("context", ""))[:160], "confidence": score,
