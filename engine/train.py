@@ -26,9 +26,11 @@ class Segments(Dataset):
         start = int(r["start_ms"] * SAMPLE_RATE / 1000)
         end = int(r["end_ms"] * SAMPLE_RATE / 1000)
         segment = a[start:end]
-        if len(segment) < 4000:
-            segment = np.pad(segment, (0, 4000-len(segment)))
-        segment = segment[:SAMPLE_RATE*4]
+        # Use a fixed four-second window so default DataLoader batching works.
+        max_samples = SAMPLE_RATE * 4
+        segment = segment[:max_samples]
+        if len(segment) < max_samples:
+            segment = np.pad(segment, (0, max_samples - len(segment)))
         return log_mel(segment).squeeze(0), torch.tensor(int(r["label"]), dtype=torch.long)
 
 def score(model, loader, device, threshold=0.5):
