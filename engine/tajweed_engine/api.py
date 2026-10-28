@@ -44,6 +44,26 @@ def authorize(value: str | None):
     if not hmac.compare_digest(supplied, TOKEN):
         raise HTTPException(status_code=401, detail="unauthorized")
 
+def validate_rule_checks(checks: Any, duration_ms: float) -> list[dict[str, Any]]:
+    """Accept only finite, bounded timestamps; never infer missing word boundaries."""
+    if not isinstance(checks, list) or len(checks) > 500:
+        raise HTTPException(status_code=400, detail="invalid_rule_checks")
+    validated: list[dict[str, Any]] = []
+    for item in checks:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="invalid_rule_check")
+        # Ignore other rule types, but strictly validate any qalqalah candidate.
+        if item.get("ruleId") != "qalqalah":
+            continue
+        start, end, word_index = item.get("startMs"), item.get("endMs"), item.get("wordIndex")
+        if (isinstance(start, bool) or isinstance(end, bool) or isinstance(word_index, bool)
+            or not isinstance(start, (int, float)) or not isinstance(end, (int, float))
+            or not isinstance(word_index, int) or not math.isfinite(start) or not math.isfinite(end)
+            or start < 0 or end <= start or end > duration_ms or word_index < 0):
+            raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps")
+        validated.append(item)
+    return validated
+
 @app.get("/health")
 def health():
     return {"status": "ready" if model is not None else "model_not_trained", "model_loaded": model is not None}
@@ -63,8 +83,6 @@ async def analyze(
         checks = json.loads(expectedRuleChecks)
     except (json.JSONDecodeError, TypeError) as exc:
         raise HTTPException(status_code=400, detail="invalid_rule_checks") from exc
-    if not isinstance(checks, list) or len(checks) > 500:
-        raise HTTPException(status_code=400, detail="invalid_rule_checks")
     raw = await file.read(20 * 1024 * 1024 + 1)
     if len(raw) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="audio_too_large")
@@ -73,6 +91,8 @@ async def analyze(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    candidates = validate_rule_checks(checks, quality["duration_seconds"] * 1000)
+
     if model is None:
         return {
             "status": "not_configured", "rulesEvaluated": [], "findings": [],
@@ -80,19 +100,6 @@ async def analyze(
             "diagnostics": {"audioQuality": quality, "modelLoaded": False},
         }
 
-    candidates = []
-    for c in checks:
-        if not isinstance(c, dict) or c.get("ruleId") != "qalqalah":
-            continue
-        start_ms, end_ms, word_index = c.get("startMs"), c.get("endMs"), c.get("wordIndex")
-        if isinstance(start_ms, bool) or isinstance(end_ms, bool) or isinstance(word_index, bool):
-            continue
-        if not isinstance(start_ms, (int, float)) or not isinstance(end_ms, (int, float)) or not isinstance(word_index, int):
-            continue
-        if (not math.isfinite(start_ms) or not math.isfinite(end_ms) or start_ms < 0
-            or end_ms <= start_ms or end_ms > quality["duration_seconds"] * 1000 or word_index < 0):
-            continue
-        candidates.append(c)
     if not candidates:
         return {
             "status": "not_configured", "rulesEvaluated": [], "findings": [],
