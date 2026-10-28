@@ -64,7 +64,7 @@ docker build -f engine/Dockerfile -t ijazah-tajweed-engine .
 
 Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` as a long random server-side secret when running the container. Never expose it to the browser or mobile app. The corpus source attribution and verification notes are included in the image at `/data/SOURCE_ATTRIBUTION.md`.
 
-A tab-separated TSV corpus is still accepted for isolated local tests or separately managed deployments, using one ayah per line: `surah<TAB>ayah<TAB>exact Uthmani ayah text`. The default production image uses the strict, versioned JSON corpus from the app; do not replace it with generated or unverified text.
+A tab-separated TSV corpus is accepted only when `IJAZAH_ALLOW_UNPINNED_TSV=true` is explicitly set, for isolated local tests or separately managed deployments; each line contains `surah<TAB>ayah<TAB>exact Uthmani ayah text`. The production Docker image pins this flag to `false` and uses the exact versioned JSON corpus from the app. Never enable unpinned TSV loading in production or replace the reference with generated/unverified text.
 
 ## Critical integration gap
 The mobile app currently provides textual rule candidates and can submit timestamps, but client-supplied timestamps are untrusted and are not used to issue findings. The API deliberately returns no findings until a server-side, validated audio-to-word alignment stage is integrated. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
