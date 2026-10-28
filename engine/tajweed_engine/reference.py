@@ -58,6 +58,12 @@ def get_corpus() -> dict[tuple[int, int], str]:
 
 def validate_reference(surah: int, ayah: int, supplied_text: str) -> bool:
     """Return False when the trusted corpus is absent or reference does not match."""
+    if isinstance(surah, bool) or isinstance(ayah, bool):
+        return False
+    if not isinstance(surah, int) or not isinstance(ayah, int):
+        return False
+    if not 1 <= surah <= 114 or ayah < 1 or not isinstance(supplied_text, str):
+        return False
     try:
         corpus = get_corpus()
     except (FileNotFoundError, ValueError, OSError):
