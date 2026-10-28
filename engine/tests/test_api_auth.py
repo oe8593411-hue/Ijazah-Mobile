@@ -156,7 +156,7 @@ class AnalyzeFailClosedTests(unittest.IsolatedAsyncioTestCase):
         try:
             api.model = object()  # Even a loaded model must not bypass the alignment gate.
             api.metadata = {"decision_threshold": 0.9}
-            with patch.object(api, "authorize"), patch.object(
+            with patch.object(api, "authorize"), patch.object(api, "get_corpus", return_value={(1, 1): "بسم الله الرحمن الرحيم"}), patch.object(api, "validate_reference", return_value=True), patch.object(
                 api, "decode_audio",
                 return_value=(np.ones(16000, dtype=np.float32),
                               {"duration_seconds": 1.0, "peak": 1.0, "rms": 1.0}),
