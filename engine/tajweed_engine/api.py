@@ -6,6 +6,7 @@ import torch
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from .audio import decode_audio, log_mel
 from .model import AcousticRuleClassifier
+from .reference import get_corpus, validate_reference
 
 app = FastAPI(title="Ijazah Acoustic Tajweed Engine", version="0.2.0")
 TOKEN = os.getenv("IJAZAH_TAJWEED_ENGINE_TOKEN", "")
@@ -79,6 +80,14 @@ async def analyze(
         raise HTTPException(status_code=400, detail="invalid_reference")
     if not referenceText.strip():
         raise HTTPException(status_code=400, detail="missing_reference_text")
+    try:
+        get_corpus()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="trusted_quran_corpus_not_configured") from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="trusted_quran_corpus_invalid") from exc
+    if not validate_reference(surah, ayah, referenceText):
+        raise HTTPException(status_code=400, detail="reference_text_mismatch")
     try:
         checks = json.loads(expectedRuleChecks)
     except (json.JSONDecodeError, TypeError) as exc:
