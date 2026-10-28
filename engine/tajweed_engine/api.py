@@ -67,7 +67,19 @@ def validate_rule_checks(checks: Any, duration_ms: float) -> list[dict[str, Any]
 
 @app.get("/health")
 def health():
-    return {"status": "ready" if model is not None else "model_not_trained", "model_loaded": model is not None}
+    try:
+        corpus_size = len(get_corpus())
+        corpus_ready = True
+    except (FileNotFoundError, ValueError, OSError):
+        corpus_size = 0
+        corpus_ready = False
+    return {
+        "status": "alignment_not_configured" if corpus_ready else "trusted_quran_corpus_not_configured",
+        "model_loaded": model is not None,
+        "reference_corpus_ready": corpus_ready,
+        "reference_corpus_ayahs": corpus_size,
+        "trusted_server_alignment": False,
+    }
 
 @app.post("/v1/analyze")
 async def analyze(
