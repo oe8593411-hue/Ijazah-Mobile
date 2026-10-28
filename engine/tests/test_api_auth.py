@@ -105,5 +105,41 @@ class ModelReleaseGateTests(unittest.TestCase):
         self.assertIsNone(api.model)
         self.assertEqual(api.metadata, {})
 
+
+class AnalyzeFailClosedTests(unittest.IsolatedAsyncioTestCase):
+    async def test_client_timestamps_never_produce_findings_without_server_aligner(self):
+        import json
+        import numpy as np
+
+        class FakeUpload:
+            async def read(self, limit):
+                return b"fake-audio"
+
+        original_model = api.model
+        original_metadata = api.metadata
+        try:
+            api.model = object()  # Even a loaded model must not bypass the alignment gate.
+            api.metadata = {"decision_threshold": 0.9}
+            with patch.object(api, "authorize"), patch.object(
+                api, "decode_audio",
+                return_value=(np.ones(16000, dtype=np.float32),
+                              {"duration_seconds": 1.0, "peak": 1.0, "rms": 1.0}),
+            ):
+                result = await api.analyze(
+                    file=FakeUpload(), surah=1, ayah=1, riwaya="hafs",
+                    referenceText="بسم الله الرحمن الرحيم",
+                    expectedRuleChecks=json.dumps([{
+                        "ruleId": "qalqalah", "startMs": 100, "endMs": 500,
+                        "wordIndex": 0,
+                    }]),
+                    authorization="Bearer test",
+                )
+            self.assertEqual(result["status"], "not_configured")
+            self.assertEqual(result["findings"], [])
+            self.assertFalse(result["diagnostics"]["trustedServerAlignment"])
+        finally:
+            api.model = original_model
+            api.metadata = original_metadata
+
 if __name__ == "__main__":
     unittest.main()
