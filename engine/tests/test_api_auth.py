@@ -289,6 +289,50 @@ class TrustedReferenceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.reference.get_corpus()
 
+class AnalyzeReferenceGateTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_trusted_corpus_returns_503_before_audio_read(self):
+        class FakeUpload:
+            read_called = False
+            async def read(self, limit):
+                self.read_called = True
+                return b"fake-audio"
+
+        upload = FakeUpload()
+        with patch.object(api, "authorize"), patch.object(
+            api, "get_corpus", side_effect=FileNotFoundError("missing")
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                await api.analyze(
+                    file=upload, surah=1, ayah=1, riwaya="hafs",
+                    referenceText="بسم الله الرحمن الرحيم",
+                    expectedRuleChecks="[]", authorization="Bearer test",
+                )
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.detail, "trusted_quran_corpus_not_configured")
+        self.assertFalse(upload.read_called)
+
+    async def test_unmatched_ayah_text_returns_400_before_audio_read(self):
+        class FakeUpload:
+            read_called = False
+            async def read(self, limit):
+                self.read_called = True
+                return b"fake-audio"
+
+        upload = FakeUpload()
+        with patch.object(api, "authorize"), patch.object(
+            api, "get_corpus", return_value={(1, 1): "بسم الله"}
+        ), patch.object(api, "validate_reference", return_value=False):
+            with self.assertRaises(HTTPException) as ctx:
+                await api.analyze(
+                    file=upload, surah=1, ayah=1, riwaya="hafs",
+                    referenceText="نص مختلق", expectedRuleChecks="[]",
+                    authorization="Bearer test",
+                )
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail, "reference_text_mismatch")
+        self.assertFalse(upload.read_called)
+
+
 class AnalyzeFailClosedTests(unittest.IsolatedAsyncioTestCase):
     async def test_client_timestamps_never_produce_findings_without_server_aligner(self):
         import json
