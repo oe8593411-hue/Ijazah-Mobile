@@ -1,33 +1,47 @@
-# Real Acoustic Tajweed Engine Integration
+# Ijazah-Owned Acoustic Tajweed Engine Integration
 
-## Selected engine
+## Selected architecture
 
-Initial candidate: [Quran Muaalem](https://github.com/obadx/quran-muaalem), using the published `obadx/muaalem-model-v3_2` model and `quran-transcript` reference phonemizer. The model predicts phonemes and articulatory attributes from audio against a supplied Quranic phonetic reference. It is a candidate engine, not a claim of production validation.
+Ijazah is building and operating its own narrow acoustic tajweed engine. The first research task is a qalqalah segment classifier trained on teacher-reviewed recordings. The Python service in `engine/` owns audio decoding, reference validation, model loading, and the API contract. It does not call an external tajweed SaaS or import a third-party tajweed model.
 
-## Why this is not a Vercel function
+The CNN in `engine/tajweed_engine/model.py` is only an untrained architecture scaffold. It is not evidence of detection accuracy. The release gate intentionally rejects checkpoints unless the task identifier, independent teacher-review flag, and calibration metadata are present and valid.
 
-The model uses PyTorch/Wav2Vec2-BERT and expects 16 kHz mono audio. Its published engine is a persistent Python service; Vercel's current Expo web deployment should not load the model inside a serverless function. Run the model service on a separate GPU-capable host and keep the service credential server-side.
+## Verified Quran reference
+
+The engine uses the app's pinned Tanzil Uthmani 1.1 / Hafs file, `src/quran/verified-corpus.json`. The container image copies that exact file to `/data/verified-corpus.json`. Before accepting a request, the engine checks the repository blob fingerprint, source metadata, upstream SHA-256, all 114 surahs, all 6,236 ayahs, and the expected ayah count for each surah. Corpus changes fail closed until the expected fingerprint and tests are deliberately updated.
 
 ## Current app contract
 
-The app endpoint `api/analyze-recitation.ts` calls the service configured by:
+The Vercel endpoint `api/analyze-recitation.ts` can call the private engine using server-side environment variables:
 - `IJAZAH_TAJWEED_ENGINE_URL`
 - `IJAZAH_TAJWEED_ENGINE_TOKEN`
 
-The current contract sends multipart fields `file`, `surah`, `ayah`, `riwaya`, `referenceText`, `expectedRuleChecks`, and `responseContract`. The service must return JSON with `rulesEvaluated` and `findings`. Each finding must contain `ruleId`, `wordIndex`, `confidence`, and specific `evidence`; optional timing fields are `startMs` and `endMs`.
+It sends the audio as multipart data alongside the selected Hafs reference and expected rule candidates. The engine validates the reference against the pinned Quran corpus and rejects malformed audio, unbounded timestamps, invalid word indices, and unauthenticated requests.
 
-**Important:** the upstream Quran Muaalem API has its own schema. It is not a drop-in match for this app contract. A server-side adapter must translate its actual phoneme/sifat output into app findings; it must not turn a generic model output into a tajweed error without comparing the predicted attribute against the verified Hafs reference at the correct phoneme location.
+The current Python API **always returns `status: "not_configured"` and no findings** because trusted server-side audio-to-word alignment has not yet been implemented. The Vercel adapter must preserve that status; it must not turn an unconfigured response into a success or imply that no tajweed mistakes were found.
+
+The separate transcription flow in `api/analyze-recitation.ts` may use speech-to-text providers for textual comparison, but text recognition is not acoustic tajweed detection. Text-only evidence, client-supplied timestamps, and an untrained classifier must never be presented as confirmed tajweed findings.
+
+## Build and run
+
+From the repository root:
+
+```bash
+docker build -f engine/Dockerfile -t ijazah-tajweed-engine .
+```
+
+Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` only in the engine host's server-side environment. Configure `IJAZAH_TAJWEED_ENGINE_URL` and the matching token only in the Vercel server-side environment. Keep `IJAZAH_ANALYSIS_ENABLED` disabled until caller authentication, shared rate limits, and the operational privacy controls are ready.
 
 ## Release gates
 
-1. Host the model and a versioned adapter; keep the API private with a strong server-side token.
-2. Convert uploads to mono 16 kHz audio and enforce duration, byte-size, and concurrency limits.
-3. Verify the exact Hafs phonetic reference using `quran-transcript`; do not generate Quran text with an LLM.
-4. Reject output when phoneme alignment is uncertain or the recognized content does not match the requested ayah.
-5. Return only findings tied to an expected rule candidate and a mapped phoneme location. Include calibrated confidence and acoustic evidence.
-6. Test clean recitations and deliberately annotated errors across multiple voices, devices, and recording conditions; have qualified tajweed teachers review the results.
-7. Only after validation, configure `IJAZAH_TAJWEED_ENGINE_URL` and `IJAZAH_TAJWEED_ENGINE_TOKEN` in the hosting provider's server-side environment. Keep `IJAZAH_ANALYSIS_ENABLED` disabled until authentication and shared rate limiting are in place.
+1. Collect recordings with appropriate permissions and training rights; retain no raw audio longer than the stated privacy policy permits.
+2. Obtain teacher-reviewed segment boundaries and labels for the narrow qalqalah task. Keep the same reciter wholly within one of train, validation, or held-out test.
+3. Implement server-side phoneme/word alignment. Client-provided candidate timestamps are untrusted and cannot become evidence.
+4. Evaluate on speaker-disjoint held-out recordings across voices, devices, noise conditions, and clean/annotated-error examples.
+5. Require independent tajweed teacher review and calibrated confidence thresholds before producing a release checkpoint.
+6. Keep all unsupported or ambiguous cases fail-closed. Only return findings tied to trusted-reference locations and measured acoustic evidence.
+7. Verify the service's health endpoint, authentication, request limits, logs without raw audio, retention policy, and failure behavior before enabling any user-facing analysis.
 
 ## Status
 
-This document records the selected integration path. It does not mean the model has been hosted, configured, or validated. Until those steps are complete, the app must not claim that acoustic tajweed analysis is active.
+The verified reference is packaged and validated, the API is hardened, and the existing CI runs the Python tests and syntax checks. The acoustic model is not trained, and trusted server-side audio alignment is still missing. No production tajweed accuracy is claimed. Until those components are implemented and independently validated, the app must describe acoustic tajweed analysis as not configured and must not issue model-generated tajweed rulings.
