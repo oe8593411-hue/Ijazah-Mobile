@@ -49,7 +49,7 @@ The output is a research checkpoint with `teacher_reviewed=false` and `calibrate
 
 ## Trusted Quran reference corpus
 
-The engine uses the application's existing versioned source, `src/quran/verified-corpus.json`, containing Tanzil Uthmani 1.1 / Hafs. The Docker image copies this exact source to `/data/verified-corpus.json` and sets `IJAZAH_QURAN_CORPUS_PATH` to that file. The engine checks the corpus metadata, pinned upstream SHA-256, all 114 surahs, all 6,236 ayahs, and the expected ayah count for each surah before accepting any request. A missing, malformed, incomplete, or differently identified corpus fails closed.
+The engine uses the application's existing versioned source, `src/quran/verified-corpus.json`, containing Tanzil Uthmani 1.1 / Hafs. The Docker image copies this exact source to `/data/verified-corpus.json` and sets `IJAZAH_QURAN_CORPUS_PATH` to that file. The engine checks the exact repository-blob fingerprint of the JSON file, corpus metadata, pinned upstream SHA-256, all 114 surahs, all 6,236 ayahs, and the expected ayah count for each surah before accepting any request. Any approved corpus update must deliberately update the pinned file fingerprint and its tests. A missing, malformed, incomplete, or differently identified corpus fails closed.
 
 Build the image **from the repository root** (the build context must include `src/quran/verified-corpus.json`):
 
