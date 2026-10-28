@@ -12,13 +12,16 @@ This is an Ijazah-owned acoustic-model scaffold for a narrow first research task
 - Strict validation rejects missing, reversed, non-finite, boolean, and out-of-audio timestamp boundaries; malformed candidate objects are rejected.
 
 ## Local run
-Install requirements, set `IJAZAH_TAJWEED_ENGINE_TOKEN` to a long random secret, then run from this directory:
+Install requirements, set `IJAZAH_TAJWEED_ENGINE_TOKEN` to a long random secret, and point the corpus path at the versioned app JSON. From the repository root:
 
 ```bash
-uvicorn tajweed_engine.api:app --host 127.0.0.1 --port 8080
+pip install -r engine/requirements.txt
+export IJAZAH_TAJWEED_ENGINE_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export IJAZAH_QURAN_CORPUS_PATH="$PWD/src/quran/verified-corpus.json"
+PYTHONPATH=engine uvicorn tajweed_engine.api:app --app-dir engine --host 127.0.0.1 --port 8080
 ```
 
-`GET /health` should report `model_not_trained` until a reviewed, calibrated checkpoint exists. Keep the service on a private network during development.
+`GET /health` reports whether the full reference corpus loaded and separately shows `trusted_server_alignment: false`. Until a trusted server-side audio-to-word aligner is integrated, analysis intentionally returns no tajweed findings. Keep the service on a private network during development.
 
 ## Dataset manifest
 Each JSONL line requires:
