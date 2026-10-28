@@ -56,6 +56,7 @@ def validate_label_provenance(row: dict[str, Any]) -> None:
         reviewer_id = review.get("reviewer_id")
         if not isinstance(reviewer_id, str) or len(reviewer_id.strip()) < 2:
             raise ValueError(f"invalid_reviewer_id:{index}")
+        reviewer_id = reviewer_id.strip()
         if reviewer_id in reviewer_ids:
             raise ValueError("reviewers_must_be_independent")
         if not _valid_label(review.get("label")):
@@ -79,6 +80,7 @@ def validate_label_provenance(row: dict[str, Any]) -> None:
     adjudicator_id = adjudication.get("reviewer_id")
     if not isinstance(adjudicator_id, str) or len(adjudicator_id.strip()) < 2:
         raise ValueError("invalid_adjudicator_id")
+    adjudicator_id = adjudicator_id.strip()
     if adjudicator_id in reviewer_ids:
         raise ValueError("adjudicator_must_be_independent")
     if not _valid_label(adjudication.get("label")) or adjudication["label"] != final_label:
