@@ -25,7 +25,7 @@ function clientIp(req: any) {
 function isAllowedOrigin(origin: string | undefined) {
   if (!origin) return false;
   const configured = (process.env.IJAZAH_ALLOWED_ORIGINS || "")
-    .split(",").map(value => value.trim()).filter(Boolean);
+    .split(",").map((value: string) => value.trim()).filter(Boolean);
   if (configured.includes(origin)) return true;
   try {
     const parsed = new URL(origin);
