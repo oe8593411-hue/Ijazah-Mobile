@@ -185,6 +185,38 @@ class TrustedReferenceTests(unittest.TestCase):
         self.assertEqual(corpus[(1, 1)], "نص اختبار 1 1")
         self.assertEqual(corpus[(114, 6)], "نص اختبار 114 6")
 
+    def test_json_file_loader_pins_the_exact_payload(self):
+        import hashlib
+        import json
+
+        payload = self._verified_json_fixture()
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        expected_blob_sha = hashlib.sha1(f"blob {len(raw)}\0".encode("ascii") + raw).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "verified-corpus.json"
+            path.write_bytes(raw)
+            with patch.object(self.reference, "CORPUS_PATH", path), patch.object(
+                self.reference, "EXPECTED_VERIFIED_JSON_GIT_BLOB_SHA1", expected_blob_sha
+            ):
+                self.reference._load_corpus.cache_clear()
+                corpus = self.reference.get_corpus()
+            self.assertEqual(len(corpus), 6236)
+
+    def test_json_file_loader_rejects_changed_payload(self):
+        import json
+
+        payload = self._verified_json_fixture()
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "verified-corpus.json"
+            path.write_bytes(raw)
+            with patch.object(self.reference, "CORPUS_PATH", path), patch.object(
+                self.reference, "EXPECTED_VERIFIED_JSON_GIT_BLOB_SHA1", "0" * 40
+            ):
+                self.reference._load_corpus.cache_clear()
+                with self.assertRaisesRegex(ValueError, "blob_checksum_mismatch"):
+                    self.reference.get_corpus()
+
     def test_verified_json_corpus_rejects_wrong_source_metadata(self):
         payload = self._verified_json_fixture()
         payload["riwayah"] = "warsh"
