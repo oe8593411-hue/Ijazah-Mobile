@@ -68,16 +68,15 @@ def decode_audio(raw: bytes):
     used_ffmpeg = False
     try:
         audio, sr = sf.read(io.BytesIO(raw), dtype="float32", always_2d=True)
-        if sr <= 0 or audio.size == 0:
-            raise ValueError("unsupported_or_corrupt_audio")
-        mono = audio.mean(axis=1)
-        duration = len(mono) / float(sr)
-    except ValueError:
-        raise
     except Exception:
         mono, duration = _decode_with_ffmpeg(raw)
         sr = SAMPLE_RATE
         used_ffmpeg = True
+    else:
+        if sr <= 0 or audio.size == 0:
+            raise ValueError("unsupported_or_corrupt_audio")
+        mono = audio.mean(axis=1)
+        duration = len(mono) / float(sr)
 
     if len(mono) < int(.25 * sr):
         raise ValueError("audio_too_short")
