@@ -1,12 +1,35 @@
 import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
-const [recite, api, riwayah] = await Promise.all([
+const [recite, api, riwayah, corpusRaw, surahsSource] = await Promise.all([
   read("../app/recite.tsx"),
   read("../api/analyze-recitation.ts"),
   read("../src/quran/riwayah.ts"),
+  read("../src/quran/verified-corpus.json"),
+  read("../src/quran/surahs.ts"),
 ]);
 const errors = [];
+const expectedCorpus = JSON.parse(corpusRaw);
+const surahs = [...surahsSource.matchAll(/number:\s*(\d+),\s*nameAr:\s*"[^"]+",\s*ayahCount:\s*(\d+)/g)]
+  .map(match => ({ number: Number(match[1]), ayahCount: Number(match[2]) }));
+if (expectedCorpus.source !== "Tanzil Quran Text"
+  || expectedCorpus.edition !== "Tanzil Uthmani"
+  || expectedCorpus.riwayah !== "hafs"
+  || expectedCorpus.script !== "uthmani"
+  || expectedCorpus.version !== "1.1"
+  || expectedCorpus.sha256 !== "bf4f57b968d03f4131c070b1e285da9be0e0a108a21c910e872801ca273312c8"
+  || expectedCorpus.ayahs?.length !== 6236) {
+  errors.push("The packaged Quran corpus must match the pinned Tanzil Uthmani 1.1 / Hafs source identity and 6,236-ayah count.");
+}
+const corpusCounts = new Map();
+for (const item of expectedCorpus.ayahs || []) {
+  corpusCounts.set(item.surah, (corpusCounts.get(item.surah) || 0) + 1);
+}
+if (surahs.length !== 114 || surahs.some((item, index) =>
+  item.number !== index + 1 || item.ayahCount !== corpusCounts.get(item.number))
+  || surahs.reduce((total, item) => total + item.ayahCount, 0) !== 6236) {
+  errors.push("Surah metadata must match the exact ayah counts in the verified Quran corpus.");
+}
 
 if (!recite.includes('replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ")')) {
   errors.push("Client Arabic normalization must preserve whitespace and collapse repeated spaces.");
@@ -51,4 +74,4 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log("Recitation safety checks passed: scoped analysis, browser/acoustic separation, Arabic normalization, Hafs-only guard, disabled-by-default API, upload limit, cross-engine consensus, and multi-ayah tajweed guard.");
+console.log("Recitation safety checks passed: verified corpus identity/counts, surah metadata, scoped analysis, browser/acoustic separation, Arabic normalization, Hafs-only guard, disabled-by-default API, upload limit, cross-engine consensus, and multi-ayah tajweed guard.");
