@@ -179,6 +179,16 @@ class TrustedReferenceTests(unittest.TestCase):
                 })
         return payload
 
+    def test_repository_verified_corpus_matches_pinned_hash_and_verse_counts(self):
+        root = Path(__file__).resolve().parents[2]
+        self.reference.CORPUS_PATH = root / "src" / "quran" / "verified-corpus.json"
+        self.reference._load_corpus.cache_clear()
+        corpus = self.reference.get_corpus()
+        self.assertEqual(len(corpus), 6236)
+        self.assertIn((113, 5), corpus)
+        self.assertNotIn((113, 6), corpus)
+        self.assertEqual(self.reference.EXPECTED_SURAH_AYAH_COUNTS[112], 5)
+
     def test_complete_verified_json_corpus_accepted(self):
         corpus = self.reference._parse_verified_json(self._verified_json_fixture())
         self.assertEqual(len(corpus), 6236)
