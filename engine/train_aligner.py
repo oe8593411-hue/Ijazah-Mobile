@@ -75,7 +75,7 @@ def validate_split_isolation(rows: list[dict[str, Any]]) -> dict[str, list[dict[
     if reciters[0] & reciters[1] or reciters[0] & reciters[2] or reciters[1] & reciters[2]:
         raise ValueError("reciters_must_be_disjoint_across_splits")
     recordings = [{row["recording_id"].strip() for row in splits[name]}
-                  for name in ("train", "validation", "test")}
+                  for name in ("train", "validation", "test")]
     if recordings[0] & recordings[1] or recordings[0] & recordings[2] or recordings[1] & recordings[2]:
         raise ValueError("recordings_must_be_disjoint_across_splits")
     return splits
