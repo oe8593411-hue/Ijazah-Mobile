@@ -16,7 +16,7 @@ const QURAN_FONT = Platform.select({
   android: "serif",
   default: "'Amiri Quran', 'Amiri', 'Scheherazade New', serif",
 });
-const COLUMN_MAX = 560;
+const COLUMN_MAX = 540;
 
 // ---------- Arabic matching helpers ----------
 
@@ -158,7 +158,7 @@ export default function Recite() {
   // Mushaf-style lines: break the text into lines of about the same length, and center
   // each line in the column, like the traditional mushaf page layout.
   const lines = useMemo(() => {
-    const capacity = Math.max(12, Math.floor(columnWidth / 19)); // letters per line
+    const capacity = Math.max(12, Math.floor(columnWidth / 17)); // letters per line
     const out: number[][] = [];
     let cur: number[] = [];
     let len = 0;
@@ -403,8 +403,8 @@ const s = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 250, alignItems: "center" },
   column: { width: "100%", maxWidth: COLUMN_MAX },
-  line: { flexDirection: "row-reverse", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", marginBottom: 10 },
-  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 34, lineHeight: 72, marginHorizontal: 4, writingDirection: "rtl" },
+  line: { flexDirection: "row-reverse", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
+  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
   ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 16, lineHeight: 34, borderRadius: 16, overflow: "hidden" },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
