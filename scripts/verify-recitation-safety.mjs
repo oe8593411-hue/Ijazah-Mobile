@@ -8,24 +8,22 @@ const [recite, api, riwayah] = await Promise.all([
 ]);
 const errors = [];
 
-if (!recite.includes('replace(/[^\\u0621-\\u064A\\s]/g," ").replace(/\\s+/g," ")')) {
+if (!/\[\^(\\u0621-\\u064A|ء-ي)\\s\]/.test(recite) || !recite.includes('.replace(/\\s+/g, " ")')) {
   errors.push("Client Arabic normalization must preserve whitespace and collapse repeated spaces.");
 }
-const toggle = recite.slice(recite.indexOf("async function toggleRecording"), recite.indexOf(" return <View style={s.root}>"));
-if (!toggle.includes('if(fullSurahMode && mode!=="deep")') || !toggle.includes('else if(mode==="deep")')) {
-  errors.push("Recording stop must keep full-surah analysis gated and run server analysis only in deep mode.");
+// The client no longer calls the server analysis API; it must not present
+// tajweed verdicts, and it must not show riwayat other than the verified Hafs.
+if (/tajweed.*(finding|verdict|حكم)/i.test(recite.replace(/\/\/.*$/gm, ""))) {
+  errors.push("Client must not render tajweed verdicts from the browser comparison.");
 }
-if (!toggle.includes("void analyzeRecording(audioUri ?? undefined)") || !toggle.includes("الوضع المباشر يعرض تعرّف المتصفح")) {
-  errors.push("Live mode must remain clearly distinct from server-side deep analysis.");
+if (!recite.includes("حفص عن عاصم") || recite.includes("analyze-recitation")) {
+  errors.push("Client must stay Hafs-only and must not call the server analysis endpoint until it is enabled and authenticated.");
 }
 if (!api.includes('process.env.IJAZAH_ANALYSIS_ENABLED !== "true"')) {
   errors.push("Server analysis must stay disabled unless explicitly enabled.");
 }
 if (!api.includes('scope === "surah"') || !api.includes("expectedWordLocations") || !api.includes("full_surah_speech_to_text_alignment")) {
   errors.push("Full-surah analysis must align against the selected surah and map differences to ayah locations.");
-}
-if (!recite.includes('&scope="+(fullSurahMode?"surah":"ayah")') || !recite.includes('typeof item.ayah==="number"')) {
-  errors.push("Client must request full-surah alignment and display ayah locations for differences.");
 }
 if (!api.includes('requestedRiwaya !== "hafs"')) {
   errors.push("Server analysis must reject unverified riwayat.");
