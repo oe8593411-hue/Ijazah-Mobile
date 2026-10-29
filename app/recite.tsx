@@ -281,8 +281,8 @@ export default function Recite() {
   const timer = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
   const restartDisabled = recording || (!finished && !heardText);
 
-  let status = "اضغط الميكروفون وابدأ التسميع";
-  if (recording) status = "جارٍ الاستماع… اضغط للإنهاء";
+  let status = startAyah > 1 ? `ابدأ من الآية ${startAyah} • اضغط الميكروفون` : "اضغط الميكروفون وابدأ التسميع";
+  if (recording) status = `● ${timer} • جارٍ الاستماع… اضغط للإنهاء`;
   else if (finished) status = "انتهى التسميع";
 
   return (
@@ -293,9 +293,7 @@ export default function Recite() {
         <Pressable onPress={() => router.back()} style={s.backButton}><Text style={s.back}>›</Text></Pressable>
         <View style={s.titleBlock}>
           <Text style={s.title} numberOfLines={1}>{surahName ? `سورة ${surahName}` : "التسميع"}</Text>
-          <Text style={s.subtitle} numberOfLines={1}>
-            {recording ? `● ${timer}` : startAyah > 1 ? `تبدأ من الآية ${startAyah} • حفص عن عاصم` : "السورة كاملة • حفص عن عاصم"}
-          </Text>
+          <Text style={s.subtitle}>حفص عن عاصم</Text>
         </View>
         <View style={s.segment}>
           <Pressable onPress={() => setHidden(false)} style={[s.segItem, !hidden && s.segActive]}>
@@ -404,7 +402,7 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  topBar: { paddingTop: 52, paddingHorizontal: 12, paddingBottom: 12, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.bar },
+  topBar: { paddingTop: Platform.OS === "web" ? 8 : 52, paddingHorizontal: 12, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.bar },
   backButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   back: { color: C.gold, fontSize: 34, lineHeight: 36 },
   titleBlock: { flex: 1, alignItems: "flex-start" },
@@ -420,7 +418,7 @@ const s = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 250, alignItems: "center" },
   column: { width: "100%", maxWidth: COLUMN_MAX },
-  line: { flexDirection: "row-reverse", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
+  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
   word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
   ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 14, lineHeight: 26, marginHorizontal: 4, borderRadius: 13, overflow: "hidden" },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
