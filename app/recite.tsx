@@ -83,7 +83,6 @@ export default function Recite() {
   const params = useLocalSearchParams<{ surah?: string; ayah?: string; scope?: string }>();
   const surahNumber = Math.max(1, Math.min(114, Number(params.surah) || 1));
   const startAyah = Math.max(1, Number(params.ayah) || 1);
-  const fullSurah = params.scope === "surah";
   const surahName = SURAHS.find(x => x.number === surahNumber)?.nameAr || "";
   const { width: screenWidth } = useWindowDimensions();
 
@@ -110,19 +109,19 @@ export default function Recite() {
     document.head.appendChild(link);
   }, []);
 
-  // Load the verified Hafs text (surah or single ayah).
+  // Load the verified Hafs text for the whole surah; the chosen ayah is only the starting point.
   useEffect(() => {
     import("../src/quran/verified-corpus.json").then((m) => {
       const corpus = m.default as { ayahs: { surah: number; ayah: number; text: string }[] };
-      const hits = fullSurah
-        ? corpus.ayahs.filter(x => x.surah === surahNumber)
-        : corpus.ayahs.filter(x => x.surah === surahNumber && x.ayah === startAyah);
+      const hits = corpus.ayahs.filter(x => x.surah === surahNumber);
       if (hits.length) {
-        setReferenceText(hits.map(x => x.text + (fullSurah ? ` ﴿${x.ayah}﴾` : "")).join(" "));
+        setReferenceText(hits.map(x => x.text + ` ﴿${x.ayah}﴾`).join(" "));
         setReady(true);
       }
     }).catch(() => setNotice("تعذّر تحميل المصحف داخل التطبيق."));
-  }, [fullSurah, surahNumber, startAyah]);
+    setFinished(false);
+    setHeardText("");
+  }, [surahNumber]);
 
   const tokens = useMemo(() => referenceText.split(/\s+/u).filter(Boolean), [referenceText]);
   const wordInfo = useMemo(() => tokens.map(text => {
@@ -138,6 +137,21 @@ export default function Recite() {
     () => wordInfo.map((w, i) => (!w.marker && w.norm ? i : -1)).filter(i => i >= 0),
     [wordInfo]
   );
+
+  // Which ayah each token belongs to (a marker closes its ayah), and where reading starts.
+  const ayahOfToken = useMemo(() => {
+    let cur = 1;
+    return wordInfo.map(w => {
+      const v = cur;
+      if (w.marker) cur = Number(w.num) + 1;
+      return v;
+    });
+  }, [wordInfo]);
+  const startPos = useMemo(() => {
+    const k = expectedIdx.findIndex(i => ayahOfToken[i] >= startAyah);
+    return k < 0 ? 0 : k;
+  }, [expectedIdx, ayahOfToken, startAyah]);
+  const readable = useMemo(() => expectedIdx.slice(startPos), [expectedIdx, startPos]);
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
 
@@ -159,26 +173,25 @@ export default function Recite() {
   }, [wordInfo, columnWidth]);
 
   const tracked = useMemo(() => {
-    if (!expectedIdx.length || !heardText) return null;
-    return trackRecitation(expectedIdx.map(i => wordInfo[i].norm), heardText, finished);
-  }, [expectedIdx, wordInfo, heardText, finished]);
+    if (!readable.length || !heardText) return null;
+    return trackRecitation(readable.map(i => wordInfo[i].norm), heardText, finished);
+  }, [readable, wordInfo, heardText, finished]);
 
   const byToken: Record<number, { state: WordState; heard?: string }> = {};
   let cursorToken = -1;
   if (tracked) {
-    expectedIdx.forEach((tokenIndex, k) => {
-      const st = tracked.states[k];
-      if (st) byToken[tokenIndex] = { state: st, heard: tracked.heardAt[k] };
+    tracked.states.forEach((st, k) => {
+      if (st) byToken[readable[k]] = { state: st, heard: tracked.heardAt[k] };
     });
-    if (tracked.cursor < expectedIdx.length) cursorToken = expectedIdx[tracked.cursor];
+    if (tracked.cursor < readable.length) cursorToken = readable[tracked.cursor];
   }
   const counts = { ok: 0, bad: 0, skipped: 0 };
   Object.values(byToken).forEach(v => { counts[v.state]++; });
-  const notReached = expectedIdx.length - counts.ok - counts.bad - counts.skipped;
-  const needReview = expectedIdx
+  const notReached = readable.length - counts.ok - counts.bad - counts.skipped;
+  const needReview = readable
     .filter(i => byToken[i] && byToken[i].state !== "ok")
     .slice(0, 8);
-  const progress = expectedIdx.length && tracked ? Math.min(1, tracked.cursor / expectedIdx.length) : 0;
+  const progress = readable.length && tracked ? Math.min(1, tracked.cursor / readable.length) : 0;
 
   // ---------- Live word recognition (browser) ----------
 
@@ -242,6 +255,11 @@ export default function Recite() {
     setNotice("");
   }
 
+  function goSurah(n: number) {
+    stopListening();
+    router.replace({ pathname: "/recite", params: { surah: String(n), ayah: "1", scope: "surah" } });
+  }
+
   const seconds = Math.floor((state.durationMillis || 0) / 1000);
   const timer = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
   const restartDisabled = recording || (!finished && !heardText);
@@ -259,7 +277,7 @@ export default function Recite() {
         <View style={s.titleBlock}>
           <Text style={s.title} numberOfLines={1}>{surahName ? `سورة ${surahName}` : "التسميع"}</Text>
           <Text style={s.subtitle} numberOfLines={1}>
-            {recording ? `● ${timer}` : `${fullSurah ? "السورة كاملة" : `الآية ${startAyah}`} • حفص عن عاصم`}
+            {recording ? `● ${timer}` : startAyah > 1 ? `تبدأ من الآية ${startAyah} • حفص عن عاصم` : "السورة كاملة • حفص عن عاصم"}
           </Text>
         </View>
         <View style={s.segment}>
@@ -319,6 +337,18 @@ export default function Recite() {
             <Text style={s.disclaimer}>
               هذا تعرّف تقريبي على الكلمات، وليس حكمًا على التجويد. راجع مع معلّمك للتأكد.
             </Text>
+            <View style={s.navRow}>
+              {surahNumber > 1 && (
+                <Pressable onPress={() => goSurah(surahNumber - 1)} style={s.navButton}>
+                  <Text style={s.navText}>› السورة السابقة</Text>
+                </Pressable>
+              )}
+              {surahNumber < 114 && (
+                <Pressable onPress={() => goSurah(surahNumber + 1)} style={s.navButton}>
+                  <Text style={s.navText}>السورة التالية ‹</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -388,6 +418,9 @@ const s = StyleSheet.create({
   reviewTitle: { color: C.ink, fontWeight: "700", fontSize: 13, textAlign: "right", marginTop: 16 },
   reviewRow: { color: C.skipped, fontSize: 13, lineHeight: 22, textAlign: "right", marginTop: 4 },
   disclaimer: { color: C.muted, fontSize: 10, lineHeight: 17, textAlign: "right", marginTop: 14 },
+  navRow: { flexDirection: "row", gap: 8, marginTop: 16 },
+  navButton: { flex: 1, backgroundColor: C.bar, borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: C.gold },
+  navText: { color: C.gold, fontWeight: "700", fontSize: 13 },
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 10, paddingBottom: 28, paddingHorizontal: 18, backgroundColor: C.bar, borderTopWidth: 1, borderTopColor: C.line },
   notice: { textAlign: "center", color: C.gold, fontSize: 11, lineHeight: 17, marginBottom: 6 },
   status: { textAlign: "center", fontWeight: "600", color: C.ink, fontSize: 13 },
