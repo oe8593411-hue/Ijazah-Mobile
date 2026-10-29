@@ -1,11 +1,17 @@
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
+import { SURAHS } from "../src/quran/surahs";
+import { findExpectedTajweedChecks } from "../src/recitation/tajweed-rules";
 
-const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A43",muted:"#788BA0",surface:"#F4F8FC",white:"#FFFFFF"};
+const C={paper:"#FBF7EE",ink:"#1B2A3A",muted:"#8A8576",line:"#E7E0CF",navy:"#071A33",cyan:"#35C7DE",cyanDark:"#168DA5",ok:"#1E8E4E",bad:"#D93A3A",missed:"#E08A00",mask:"#E4DDCB",cursor:"#FFE9A6",white:"#FFFFFF"};
+const QURAN_FONT=Platform.select({ios:"Geeza Pro",android:"serif",default:"'Amiri','Scheherazade New','Traditional Arabic',serif"});
+// Tajweed rule colours are only shown as *candidate positions* taken from the verified text,
+// never as a judgement on the recitation. Madd is skipped because it marks almost every word.
+const RULE_COLORS:Record<string,string>={ghunnah:"#1F9D55",qalqalah:"#2F6FDE",ikhfa:"#B8458A",idgham:"#7A56C9",iqlab:"#0E9AA7",izhar:"#8C7A3A"};
 
 function normalizeArabicForCompare(value:string){
  return value.normalize("NFC").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim();
@@ -30,45 +36,116 @@ function compareRecognizedWords(expectedText:string, spokenText:string){
  return {matchRate:Math.max(0,Math.round(100*(1-distance/Math.max(1,expected.length,actual.length)))),textAlignment:{expectedWords:expected.length,recognizedWords:actual.length,editDistance:distance,errors:errors.reverse().slice(0,20)}};
 }
 
+function levenshtein(a:string,b:string){
+ const row=Array.from({length:b.length+1},(_,j)=>j);
+ for(let i=1;i<=a.length;i++){
+  let prev=row[0];row[0]=i;
+  for(let j=1;j<=b.length;j++){const tmp=row[j];row[j]=a[i-1]===b[j-1]?prev:Math.min(prev,row[j],row[j-1])+1;prev=tmp;}
+ }
+ return row[b.length];
+}
+// Speech-to-text is noisy, so a heard word counts as the expected one when it is identical
+// or within one (short word) / two (long word) letters of it.
+function sameWord(expected:string,heard:string){
+ if(expected===heard)return true;
+ if(Math.min(expected.length,heard.length)<4)return false;
+ return levenshtein(expected,heard)<=(Math.max(expected.length,heard.length)>6?2:1);
+}
+type WordState="ok"|"bad"|"missed";
+// Walks the recognised words along the verified text, like a follow-along reader:
+// match -> ok, a skipped word found 1-3 words ahead -> missed, otherwise -> bad.
+function trackRecitation(expected:string[],spoken:string,final:boolean){
+ const heard=normalizeArabicForCompare(spoken).split(" ").filter(Boolean);
+ const states:(WordState|undefined)[]=Array(expected.length).fill(undefined);
+ const heardAt:(string|undefined)[]=Array(expected.length).fill(undefined);
+ let p=0;
+ for(let idx=0;idx<heard.length&&p<expected.length;idx++){
+  const h=heard[idx];
+  if(sameWord(expected[p],h)){states[p]="ok";p++;continue;}
+  let found=-1;
+  for(let k=1;k<=3&&p+k<expected.length;k++){if(sameWord(expected[p+k],h)){found=k;break;}}
+  if(found>0){for(let k=0;k<found;k++)states[p+k]="missed";states[p+found]="ok";p+=found+1;continue;}
+  // The last interim word may still be half-recognised while the user is speaking.
+  if(!final&&idx===heard.length-1)break;
+  states[p]="bad";heardAt[p]=h;p++;
+ }
+ return {states,heardAt,cursor:p};
+}
+
 export default function Recite(){
  const params=useLocalSearchParams<{surah?:string;ayah?:string;scope?:string}>();
  const selectedSurah=Math.max(1,Math.min(114,Number(params.surah)||1));
  const selectedAyah=Math.max(1,Number(params.ayah)||1);
  const fullSurahMode=params.scope==="surah";
+ const surahName=SURAHS.find(x=>x.number===selectedSurah)?.nameAr||"";
  const [referenceText,setReferenceText]=useState("جاري تحميل الآية الموثقة…");
  const [referenceLabel,setReferenceLabel]=useState("الآية");
+ const [refReady,setRefReady]=useState(false);
  const [riwaya,setRiwayaState]=useState(getSelectedRiwayah());
- const setRiwaya=(value:string)=>{setSelectedRiwayah(value);setRiwayaState(value);setMessage(value==="حفص عن عاصم"?"تم اختيار حفص عن عاصم؛ النص الموثق والتسجيل والتحليل النصي المبدئي متاحون.":`تم اختيار ${value}. الاختيار محفوظ أثناء التنقل داخل التطبيق، لكن نص المصحف والتحليل لهذه الرواية غير مفعّلين قبل توثيق مصدرها.`);};
  const riwayat=["حفص عن عاصم","شعبة عن عاصم","قالون عن نافع","ورش عن نافع","البزي عن ابن كثير","قنبل عن ابن كثير","الدوري عن أبي عمرو","السوسي عن أبي عمرو","هشام عن ابن عامر","ابن ذكوان عن ابن عامر","خلف عن حمزة","خلاد عن حمزة","أبو الحارث عن الكسائي","الدوري عن الكسائي","ابن وردان عن أبي جعفر","ابن جمّاز عن أبي جعفر","رويس عن يعقوب","روح عن يعقوب","إسحاق عن خلف العاشر","إدريس عن خلف العاشر"];
+ const recorder=useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+ const state=useAudioRecorderState(recorder);
+ const [message,setMessage]=useState("اضغط على الميكروفون وابدأ التسميع");
+ const [recorded,setRecorded]=useState(false);
+ const [mode,setMode]=useState<"live"|"deep">("deep");
+ const [sessionStatus,setSessionStatus]=useState<"idle"|"recording"|"recorded"|"processing">("idle");
+ const [mushafVisible,setMushafVisible]=useState(true);
+ const [panelOpen,setPanelOpen]=useState(false);
+ const [showTajweedColors,setShowTajweedColors]=useState(false);
+ const [heardText,setHeardText]=useState("");
+ const [speechMessage,setSpeechMessage]=useState("الكلمات المباشرة تعمل في متصفح يدعم التعرّف الصوتي؛ وعلى الجوال تظهر النتيجة بعد إيقاف التسجيل.");
+ const [speechRecognition,setSpeechRecognition]=useState<any>(null);
+ const [analysis,setAnalysis]=useState<any>(null);
+ const [analysisBusy,setAnalysisBusy]=useState(false);
+
+ const setRiwaya=(value:string)=>{setSelectedRiwayah(value);setRiwayaState(value);setMessage(value==="حفص عن عاصم"?"تم اختيار حفص عن عاصم؛ النص الموثق والتسجيل والتحليل النصي المبدئي متاحون.":`تم اختيار ${value}. الاختيار محفوظ أثناء التنقل داخل التطبيق، لكن نص المصحف والتحليل لهذه الرواية غير مفعّلين قبل توثيق مصدرها.`);};
 
  useEffect(()=>{ import("../src/quran/verified-corpus.json").then((m)=>{
    const corpus=m.default as {ayahs:{surah:number;ayah:number;text:string}[]};
    if(fullSurahMode){
     const hits=corpus.ayahs.filter(x=>x.surah===selectedSurah);
-    if(hits.length){setReferenceText(hits.map(x=>x.text+` ﴿${x.ayah}﴾`).join(" "));setReferenceLabel(`السورة كاملة • ${hits.length} آيات`);}
+    if(hits.length){setReferenceText(hits.map(x=>x.text+` ﴿${x.ayah}﴾`).join(" "));setReferenceLabel(`السورة كاملة • ${hits.length} آيات`);setRefReady(true);}
    }else{
     const hit=corpus.ayahs.find(x=>x.surah===selectedSurah&&x.ayah===selectedAyah);
-    if(hit){setReferenceText(hit.text);setReferenceLabel(`الآية ${hit.ayah}`);}
+    if(hit){setReferenceText(hit.text);setReferenceLabel(`الآية ${hit.ayah}`);setRefReady(true);}
    }
- }).catch(()=>setReferenceText("سيظهر النص بعد تجهيز نسخة المصحف داخل التطبيق.")); });
- const recorder=useAudioRecorder(RecordingPresets.HIGH_QUALITY);
- const state=useAudioRecorderState(recorder);
- const [message,setMessage]=useState("جاهز للتسجيل");
- const [recorded,setRecorded]=useState(false);
- const [mode,setMode]=useState<"live"|"deep">("live");
- const [sessionStatus,setSessionStatus]=useState<"idle"|"recording"|"recorded"|"processing">("idle");
- const [mushafVisible,setMushafVisible]=useState(true);
- const [heardText,setHeardText]=useState("");
- const [speechMessage,setSpeechMessage]=useState("التعرّف المباشر على الكلمات يعمل في متصفح يدعمه فقط، ولا يُعدّ تصحيحًا للتلاوة.");
- const [speechRecognition,setSpeechRecognition]=useState<any>(null);
- const [analysis,setAnalysis]=useState<any>(null);
- const [analysisBusy,setAnalysisBusy]=useState(false);
+ }).catch(()=>setReferenceText("سيظهر النص بعد تجهيز نسخة المصحف داخل التطبيق.")); },[fullSurahMode,selectedSurah,selectedAyah]);
+
+ const tokens=useMemo(()=>referenceText.split(/\s+/u).filter(Boolean),[referenceText]);
+ const wordInfo=useMemo(()=>tokens.map(text=>{
+  const marker=/^﴿.*﴾$/u.test(text);
+  return {text,marker,norm:marker?"":normalizeArabicForCompare(text).replace(/ /g,"")};
+ }),[tokens]);
+ const expectedIdx=useMemo(()=>refReady&&riwaya==="حفص عن عاصم"?wordInfo.map((w,i)=>(!w.marker&&w.norm?i:-1)).filter(i=>i>=0):[],[wordInfo,refReady,riwaya]);
+ const ruleByToken=useMemo(()=>{
+  const map:Record<number,string>={};
+  if(!refReady||fullSurahMode)return map;
+  for(const check of findExpectedTajweedChecks(referenceText)){
+   if(check.ruleId==="madd"||!RULE_COLORS[check.ruleId])continue;
+   if(map[check.wordIndex-1]===undefined)map[check.wordIndex-1]=check.ruleId;
+  }
+  return map;
+ },[referenceText,refReady,fullSurahMode]);
+
+ const spoken=analysis?.transcript||heardText;
+ const tracked=useMemo(()=>{
+  if(!expectedIdx.length||!spoken)return null;
+  return trackRecitation(expectedIdx.map(i=>wordInfo[i].norm),spoken,!state.isRecording);
+ },[expectedIdx,wordInfo,spoken,state.isRecording]);
+ const stateByToken:Record<number,{state:WordState;heard?:string}>={};
+ let cursorToken=-1;
+ if(tracked){
+  expectedIdx.forEach((tokenIndex,k)=>{const st=tracked.states[k];if(st)stateByToken[tokenIndex]={state:st,heard:tracked.heardAt[k]};});
+  if(tracked.cursor<expectedIdx.length)cursorToken=expectedIdx[tracked.cursor];
+ }
+ const counts={ok:0,bad:0,missed:0};
+ Object.values(stateByToken).forEach(v=>{counts[v.state]++;});
 
  function startLiveWords(){
   const browser = globalThis as unknown as { SpeechRecognition?: new () => any; webkitSpeechRecognition?: new () => any };
   const SpeechRecognitionClass = browser.SpeechRecognition || browser.webkitSpeechRecognition;
   if(!SpeechRecognitionClass){
-   setSpeechMessage("التعرّف المباشر على الكلمات غير مدعوم في هذا المتصفح/الجهاز. التسجيل الصوتي وحده لا يستطيع تحديد الكلمات المنطوقة.");
+   setSpeechMessage("التعرّف المباشر على الكلمات غير مدعوم في هذا المتصفح/الجهاز؛ ستظهر الكلمات بعد إيقاف التسجيل عبر خادم التحليل.");
    return;
   }
   try{
@@ -80,13 +157,13 @@ export default function Recite(){
     let combined = "";
     for(let i=0;i<event.results.length;i++) combined += event.results[i][0]?.transcript || "";
     setHeardText(combined.trim());
-    setSpeechMessage("الكلمات الظاهرة تعرّفٌ صوتي مبدئي وقد يخطئ؛ ليست مطابقة للمصحف ولا حكمًا على التجويد.");
+    setSpeechMessage("الكلمات الظاهرة تعرّفٌ صوتي مبدئي وقد يخطئ؛ ليست حكمًا على التجويد.");
    };
    recognition.onerror = () => setSpeechMessage("توقف التعرّف على الكلمات أو لم يحصل على إذن الميكروفون. التسجيل الصوتي منفصل عنه.");
    recognition.onend = () => setSpeechRecognition(null);
    recognition.start();
    setSpeechRecognition(recognition);
-   setSpeechMessage("جارٍ التقاط الكلمات من المتصفح؛ قد تظهر أخطاء في نص التعرّف.");
+   setSpeechMessage("جارٍ التقاط الكلمات؛ قد تظهر أخطاء في نص التعرّف.");
   }catch{
    setSpeechMessage("تعذر تشغيل التعرّف المباشر في هذا المتصفح. يمكنك متابعة التسجيل دون عرض كلمات غير مؤكدة.");
   }
@@ -102,7 +179,7 @@ export default function Recite(){
   const baseUrl=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||"https://ijazah-mobile-preview-profit-guard2.vercel.app").replace(/\/$/,"");
   if(!baseUrl){setMessage("التسجيل محفوظ محليًا. يلزم نشر خادم التحليل وضبط EXPO_PUBLIC_IJAZAH_API_URL.");return;}
   setAnalysisBusy(true); setAnalysis(null); setSessionStatus("processing");
-  setMessage("جارٍ إرسال التسجيل لتحويله إلى نص ومقارنته بالآية المرجعية…");
+  setMessage("جارٍ تحويل التسجيل إلى نص ومقارنته بالآية المرجعية…");
   try{
    const audioResponse=await fetch(uri);
    if(!audioResponse.ok) throw new Error("تعذر قراءة ملف التسجيل");
@@ -141,6 +218,12 @@ export default function Recite(){
   }finally{setAnalysisBusy(false);}
  }
 
+ function resetSession(){
+  stopLiveWords();
+  setHeardText("");setAnalysis(null);setRecorded(false);setSessionStatus("idle");
+  setMessage("اضغط على الميكروفون وابدأ التسميع");
+ }
+
  async function toggleRecording(){
   try{
    if(riwaya !== "حفص عن عاصم"){
@@ -168,13 +251,15 @@ export default function Recite(){
    const permission=await requestRecordingPermissionsAsync();
    if(!permission.granted){setMessage("يجب السماح بالميكروفون لبدء التلاوة");return;}
    setRecorded(false);
+   setAnalysis(null);
+   setPanelOpen(false);
    setHeardText("");
    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
    await recorder.prepareToRecordAsync();
    recorder.record();
    startLiveWords();
    setSessionStatus("recording");
-   setMessage("جاري الاستماع… اقرأ الآية بهدوء");
+   setMessage("جاري الاستماع… اقرأ بهدوء");
   }catch(error){
    console.error("Ijazah recording error:",error);
    const detail=error instanceof Error?error.message:String(error??"خطأ غير معروف");
@@ -183,95 +268,167 @@ export default function Recite(){
   }
  }
 
+ const seconds=Math.floor((state.durationMillis||0)/1000);
+ const timerText=String(Math.floor(seconds/60)).padStart(2,"0")+":"+String(seconds%60).padStart(2,"0");
+ const hafs=riwaya==="حفص عن عاصم";
+
  return <View style={s.root}>
-  <StatusBar style="light"/>
+  <StatusBar style="dark"/>
   <View style={s.header}>
    <Pressable onPress={()=>router.back()} style={s.backButton}><Text style={s.back}>‹</Text></Pressable>
-   <View style={s.headerCenter}><Text style={s.headerTitle}>التسميع</Text><Text style={s.headerSub}>محرك إجازة للتلاوة والتجويد</Text></View>
-   <View style={s.securePill}><Text style={s.secureDot}>●</Text><Text style={s.secureText}>آمن</Text></View>
+   <View style={s.headerCenter}>
+    <Text style={s.headerTitle}>{surahName?`سورة ${surahName}`:"التسميع"}</Text>
+    <Text style={s.headerSub}>{state.isRecording?`● ${timerText}`:`${referenceLabel} • ${riwaya}`}</Text>
+   </View>
+   <View style={s.headerSpacer}/>
   </View>
+
   <ScrollView style={s.body} contentContainerStyle={s.content}>
-   <View style={s.modeRow}>
-    <Pressable onPress={()=>setMode("deep")} style={[s.mode,mode==="deep"&&s.modeActive]}><Text style={[s.modeText,mode==="deep"&&s.modeTextActive]}>تحليل عميق</Text></Pressable>
-    <Pressable onPress={()=>setMode("live")} style={[s.mode,mode==="live"&&s.modeActive]}><Text style={[s.modeText,mode==="live"&&s.modeTextActive]}>مباشر</Text></Pressable>
-   </View>
+   {hafs?<Text style={s.mushaf}>
+    {tokens.map((token,i)=>{
+     const info=wordInfo[i];
+     const result=stateByToken[i];
+     const masked=!mushafVisible&&!info.marker&&refReady&&!result;
+     const ruleColor=showTajweedColors&&!result?RULE_COLORS[ruleByToken[i]]:undefined;
+     const style:any=[s.word];
+     if(info.marker)style.push(s.marker);
+     else if(masked)style.push(s.masked);
+     else if(result?.state==="ok")style.push({color:C.ok});
+     else if(result?.state==="bad")style.push({color:C.bad});
+     else if(result?.state==="missed")style.push({color:C.missed});
+     else if(ruleColor)style.push({color:ruleColor});
+     if(i===cursorToken&&state.isRecording&&mushafVisible)style.push(s.cursor);
+     const shown=!mushafVisible&&result?.state==="bad"&&result.heard?result.heard:token;
+     return <Fragment key={i}><Text style={style}>{shown}</Text><Text> </Text></Fragment>;
+    })}
+   </Text>:<Text style={s.unavailable}>لم نضف بعدُ قاعدة المصحف المحققة لهذه الرواية. لن نعرض نص حفص على أنه نص رواية أخرى، ولن نحلل التلاوة بهذه الرواية قبل توثيق نصها وقواعدها.</Text>}
 
-   <View style={s.surahRow}><View><Text style={s.surah}>{fullSurahMode?"تسميع السورة كاملة":"موضع التسميع"}</Text><Text style={s.meta}>{`سورة رقم ${selectedSurah} • ${referenceLabel} • ${riwaya}`}</Text></View><View style={s.badge}><Text style={s.badgeText}>{selectedSurah}</Text></View></View>
-
-   <Text style={s.riwayaTitle}>اختر الرواية من القراءات العشر</Text>
-   <View style={s.riwayaList}>{riwayat.map((item)=><Pressable key={item} onPress={()=>setRiwaya(item)} style={[s.riwayaChip,riwaya===item&&s.riwayaChipActive]}><Text style={[s.riwayaChipText,riwaya===item&&s.riwayaChipTextActive]}>{item}</Text></Pressable>)}</View>
-
-   <View style={s.mushafToolbar}>
-    <View><Text style={s.mushafToolbarTitle}>المصحف أثناء التسميع</Text><Text style={s.mushafToolbarSub}>النص الموثّق — سورة {selectedSurah}</Text></View>
-    <Pressable onPress={()=>setMushafVisible(v=>!v)} style={s.hideButton}><Text style={s.hideButtonText}>{mushafVisible?"إخفاء المصحف":"إظهار المصحف"}</Text></Pressable>
-   </View>
-   {mushafVisible&&<View style={s.ayah}>
-    <View style={s.ayahTop}><Text style={s.referenceBadge}>مرجع موثّق</Text><Text style={s.ayahNumber}>{referenceLabel}</Text></View>
-    {riwaya==="حفص عن عاصم"?<Text style={s.ayahText}>{referenceText}</Text>:<Text style={s.riwayaUnavailable}>لم نضف بعدُ قاعدة المصحف المحققة لهذه الرواية. لن نعرض نص حفص على أنه نص رواية أخرى، ولن نحلل التلاوة بهذه الرواية قبل توثيق نصها وقواعدها.</Text>}
-    <Text style={s.reference}>{riwaya==="حفص عن عاصم"?"النص القرآني ثابت من قاعدة موثّقة ولا يتم توليده بالذكاء الاصطناعي.":"اختيار الرواية متاح للمعاينة، لكن التلاوة والتحليل الفعليين لهذه الرواية غير مفعّلين حتى إضافة مرجع موثوق."}</Text>
-   </View>}
-   <View style={s.liveWordsCard}>
-    <Text style={s.liveWordsTitle}>{mushafVisible?"الكلمات التي يلتقطها الميكروفون":"التسميع دون عرض المصحف"}</Text>
-    <Text style={s.liveWordsNote}>{speechMessage}</Text>
-    {heardText.length>0?<Text style={s.heardText}>{heardText}</Text>:<Text style={s.heardPlaceholder}>{state.isRecording?"بانتظار التعرّف على الكلمات…":"ابدأ التسميع لتظهر الكلمات هنا إذا كان المتصفح يدعم التعرّف الصوتي."}</Text>}
-   </View>
+   {hafs&&<Text style={s.sourceNote}>النص القرآني ثابت من قاعدة موثّقة ولا يتم توليده بالذكاء الاصطناعي.</Text>}
 
    {analysisBusy&&<View style={s.pending}><Text style={s.pendingTitle}>جارٍ تحليل التسجيل</Text><Text style={s.pendingText}>نحوّل الصوت إلى كلمات ثم نقارنها بالنص المرجعي. تحليل التجويد الصوتي يحتاج محركًا متخصصًا منفصلًا.</Text></View>}
+
+   {recorded&&!analysis&&!analysisBusy&&!tracked&&<View style={s.pending}><Text style={s.pendingTitle}>🎙️ التسجيل تم فعليًا</Text><Text style={s.pendingText}>إذا لم يظهر تحليل، فتحقق من نشر خادم التحليل وضبط عنوانه. لن نخترع نتيجة أو تصحيحًا غير محسوب.</Text></View>}
+
    {analysis&&<View style={s.analysisCard}>
     <Text style={s.analysisTitle}>{analysis.reference?.scope==="surah"?"نتيجة المقارنة النصية المبدئية للسورة كاملة":"نتيجة المقارنة النصية المبدئية"}</Text>
-    <Text style={s.analysisTranscript}>ما تعرّف عليه النظام: {analysis.transcript}</Text>
-    <Text style={s.analysisScore}>نسبة التطابق النصي التقريبية: {analysis.matchRate}%</Text>
-    <View style={s.engineList}>
-     <Text style={s.engineTitle}>حالة محركات AI4X</Text>
-     <Text style={s.engineRow}>١. فهم الصوت: {analysis.engines?.speechRecognition?.status==="completed_preliminary"?"اكتمل مبدئيًا":"لم يكتمل"}</Text>
-     <Text style={s.engineRow}>٢. مطابقة الآية: {analysis.engines?.quranAlignment?.status==="completed"?"اكتملت":"لم تكتمل"}</Text>
-     <Text style={s.engineRow}>٣. تحليل التجويد: {analysis.engines?.acousticTajweed?.status==="not_configured"?"المحرك المتخصص غير موصول":analysis.engines?.acousticTajweed?.status==="blocked_by_content_guard"?"متوقف لحماية دقة النص":analysis.engines?.acousticTajweed?.status==="unavailable"?"الخدمة غير متاحة":analysis.engines?.acousticTajweed?.status==="invalid_response"?"استجابة غير صالحة":"نتيجة صوتية أولية"}</Text>
-     <Text style={s.engineRow}>٤. بوابة الثقة: {analysis.engines?.confidenceGate?.status==="passed_preliminary"?"اجتازت الحد النصي الأولي فقط":"أوقفت تقييم التجويد"}</Text>
-    {(analysis.expectedRuleChecks||[]).length>0&&<View style={s.engineList}><Text style={s.engineTitle}>مواضع تجويد مرشحة للفحص — ليست أخطاء مؤكدة</Text>{analysis.expectedRuleChecks.slice(0,6).map((item:any,index:number)=><Text key={"rule-check-"+index} style={s.engineRow}>{item.ruleName} • الكلمة {item.wordIndex}: {item.context}</Text>)}</View>}
+    <View style={s.statsRow}>
+     <Stat label="تطابق نصي" value={analysis.matchRate+"%"} color={C.cyanDark}/>
+     <Stat label="صحيحة" value={String(counts.ok)} color={C.ok}/>
+     <Stat label="احتمال خطأ" value={String(counts.bad)} color={C.bad}/>
+     <Stat label="متروكة" value={String(counts.missed)} color={C.missed}/>
     </View>
-    {(analysis.tajweed?.findings||[]).slice(0,8).map((item:any,index:number)=><Text key={"tajweed-"+index} style={s.analysisError}>{typeof item==="string"?item:JSON.stringify(item)}</Text>)}
     {(analysis.textAlignment?.errors||[]).length>0?(analysis.textAlignment.errors.slice(0,8).map((item:any,index:number)=><Text key={index} style={s.analysisError}>{item.type==="possible_omission"?"احتمال إسقاط":item.type==="possible_addition"?"احتمال زيادة":"احتمال اختلاف"}{typeof item.ayah==="number"?" • الآية "+item.ayah+(typeof item.wordIndex==="number"?"، الكلمة "+item.wordIndex:""):""}: {item.expected?("المتوقع «"+item.expected+"»"):""} {item.heard?("، المسموع «"+item.heard+"»"):""}</Text>)):<Text style={s.analysisError}>لم تظهر اختلافات نصية واضحة، لكن هذا لا يثبت صحة التجويد.</Text>}
+    {(analysis.tajweed?.findings||[]).slice(0,8).map((item:any,index:number)=><Text key={"tajweed-"+index} style={s.analysisError}>{typeof item==="string"?item:(item.ruleId||"حكم")+": "+(item.evidence||"")}</Text>)}
+    <Text style={s.engineLine}>محرك التجويد: {analysis.engines?.acousticTajweed?.status==="not_configured"?"المحرك المتخصص غير موصول":analysis.engines?.acousticTajweed?.status==="blocked_by_content_guard"?"متوقف لحماية دقة النص":analysis.engines?.acousticTajweed?.status==="unavailable"?"الخدمة غير متاحة":analysis.engines?.acousticTajweed?.status==="invalid_response"?"استجابة غير صالحة":"نتيجة صوتية أولية"} • بوابة الثقة: {analysis.engines?.confidenceGate?.status==="passed_preliminary"?"اجتازت الحد النصي الأولي فقط":"أوقفت تقييم التجويد"}</Text>
     <Text style={s.analysisDisclaimer}>{analysis.tajweed?.message||analysis.disclaimer}</Text>
    </View>}
-   <View style={s.liveCard}>
-    <View style={s.liveHeader}><View><Text style={s.liveTitle}>مراقبة التلاوة</Text><Text style={s.liveSub}>{mode==="live"?"مباشر — تعرّف مبدئي على الكلمات فقط":"تحليل عميق — مقارنة نصية بعد التسجيل"}</Text></View><View style={s.pulse}><View style={s.pulseInner}/></View></View>
-    <View style={s.wave}>{[10,18,28,16,34,22,40,25,14,31,20,37,16,27,12,24].map((h,i)=><View key={i} style={[s.bar,{height:h}]}/>)}</View>
-    <View style={s.metrics}>
-      <Metric label="التسجيل" value={state.isRecording?"يعمل":"جاهز"}/>
-      <Metric label="محرك التجويد" value={analysis?.engines?.acousticTajweed?.status==="not_configured"?"غير موصول":analysis?.engines?.acousticTajweed?.status==="blocked_by_content_guard"?"موقوف للحماية":analysis?.engines?.acousticTajweed?.status==="unavailable"?"غير متاح":analysis?.engines?.acousticTajweed?.status?"فُحص":"بانتظار التحليل"}/>
-      <Metric label="الجلسة" value={sessionStatus==="recording"?"تسجيل":sessionStatus==="recorded"?"جاهزة":"—"}/>
-      <Metric label="تطابق النص" value={analysis?analysis.matchRate+"%":"—"}/>
-    </View>
-   </View>
 
-   <View style={s.truth}><Text style={s.truthTitle}>⚠️ دقة قبل كل شيء</Text><Text style={s.truthText}>{fullSurahMode?"يمكنك تسجيل السورة كاملة في مقطع واحد ثم اختيار التحليل العميق لمقارنة الكلمات وتحديد مواضع الاختلاف على مستوى الآيات. تحليل التجويد الصوتي متعدد الآيات غير مفعّل بعد.":"المتاح في المرحلة الأولى هو التعرف الآلي على الكلمات ومقارنتها بالنص المرجعي. نسبة التطابق لا تقيّم مخارج الحروف أو المدود أو الغنة أو أحكام التجويد؛ نحتاج نموذجًا صوتيًا متخصصًا ومختبرًا لهذه الأحكام."}</Text></View>
-
-   <Text style={s.sectionTitle}>خط أنابيب التحليل</Text>
-   <View style={s.steps}>
-    <Step n="١" title="مطابقة القرآن" text="تحديد السورة والآية والكلمات من المرجع الموثق."/>
-    <Step n="٢" title="الصوت والنطق" text="فحص الحروف والحركات من الدليل الصوتي الفعلي."/>
-    <Step n="٣" title="التجويد" text="تحليل القواعد من سمات صوتية قابلة للقياس."/>
-    <Step n="٤" title="بوابة الثقة" text="النتيجة منخفضة الثقة لا تتحول إلى تصحيح مؤكد."/>
-   </View>
-
-   <Pressable style={[s.record,state.isRecording&&s.recording]} onPress={toggleRecording}>
-    <Text style={s.recordIcon}>{state.isRecording?"■":"●"}</Text>
-    <View><Text style={s.recordTitle}>{state.isRecording?"إيقاف التلاوة":"ابدأ التسميع"}</Text><Text style={s.recordSub}>{state.isRecording?"إجازة تستمع الآن":"تسجيل حقيقي من ميكروفون الجهاز"}</Text></View>
-   </Pressable>
-
-   <Text style={s.listening}>{message}</Text>
-   {state.isRecording&&<Text style={s.timer}>{Math.floor((state.durationMillis||0)/1000)} ث</Text>}
-
-   {recorded&&!analysis&&!analysisBusy&&<View style={s.pending}><Text style={s.pendingTitle}>🎙️ التسجيل تم فعليًا</Text><Text style={s.pendingText}>التسجيل موجود محليًا. إذا لم يظهر تحليل، فتحقق من نشر خادم التحليل وضبط عنوانه. لن نخترع نتيجة أو تصحيحًا غير محسوب.</Text></View>}
-
-   <View style={s.security}><Text style={s.securityTitle}>🔒 الأمان أولًا</Text><Text style={s.securityText}>لا توجد مفاتيح قاعدة البيانات أو مزود الذكاء الاصطناعي داخل التطبيق. التخزين الإنتاجي للتسجيلات سيكون خاصًا وبصلاحيات قصيرة العمر.</Text></View>
+   {!analysis&&tracked&&<View style={s.liveStats}><Text style={[s.liveStat,{color:C.ok}]}>✓ {counts.ok}</Text><Text style={[s.liveStat,{color:C.bad}]}>✗ {counts.bad}</Text><Text style={[s.liveStat,{color:C.missed}]}>↷ {counts.missed}</Text></View>}
   </ScrollView>
+
+  {panelOpen&&<View style={s.panel}>
+   <ScrollView style={s.panelScroll} contentContainerStyle={s.panelContent}>
+    <Text style={s.panelTitle}>وضع التحليل</Text>
+    <View style={s.modeRow}>
+     <Pressable onPress={()=>setMode("deep")} style={[s.mode,mode==="deep"&&s.modeActive]}><Text style={[s.modeText,mode==="deep"&&s.modeTextActive]}>تحليل عميق</Text></Pressable>
+     <Pressable onPress={()=>setMode("live")} style={[s.mode,mode==="live"&&s.modeActive]}><Text style={[s.modeText,mode==="live"&&s.modeTextActive]}>مباشر</Text></Pressable>
+    </View>
+    <Pressable onPress={()=>setShowTajweedColors(v=>!v)} style={s.switchRow}>
+     <Text style={s.switchLabel}>ألوان مواضع التجويد (مواضع مرشحة من النص، وليست تقييمًا للتلاوة)</Text>
+     <View style={[s.switchTrack,showTajweedColors&&s.switchTrackOn]}><View style={[s.switchKnob,showTajweedColors&&s.switchKnobOn]}/></View>
+    </Pressable>
+    <Pressable onPress={resetSession} style={s.resetButton}><Text style={s.resetText}>بدء جلسة جديدة</Text></Pressable>
+    <Text style={s.panelTitle}>الرواية</Text>
+    <View style={s.riwayaList}>{riwayat.map((item)=><Pressable key={item} onPress={()=>setRiwaya(item)} style={[s.riwayaChip,riwaya===item&&s.riwayaChipActive]}><Text style={[s.riwayaChipText,riwaya===item&&s.riwayaChipTextActive]}>{item}</Text></Pressable>)}</View>
+   </ScrollView>
+  </View>}
+
+  <View style={s.footer}>
+   <Text style={s.listening} numberOfLines={2}>{message}</Text>
+   {state.isRecording&&!speechRecognition&&<Text style={s.speechNote} numberOfLines={2}>{speechMessage}</Text>}
+   <View style={s.bar}>
+    <Pressable onPress={()=>setMushafVisible(v=>!v)} style={s.sideButton}>
+     <Text style={s.sideIcon}>{mushafVisible?"🙈":"👁"}</Text>
+     <Text style={s.sideLabel}>{mushafVisible?"إخفاء المصحف":"إظهار المصحف"}</Text>
+    </Pressable>
+    <Pressable onPress={toggleRecording} disabled={analysisBusy} style={[s.mic,state.isRecording&&s.micOn,analysisBusy&&s.micDisabled]}>
+     {state.isRecording?<View style={s.stopSquare}/>:<Text style={s.micIcon}>🎙️</Text>}
+    </Pressable>
+    <Pressable onPress={()=>setPanelOpen(v=>!v)} style={s.sideButton}>
+     <Text style={s.sideIcon}>⚙️</Text>
+     <Text style={s.sideLabel}>{sessionStatus==="processing"?"جارٍ التحليل":"الإعدادات"}</Text>
+    </Pressable>
+   </View>
+  </View>
  </View>
 }
 
-function Metric({label,value}:{label:string;value:string}){return <View style={s.metric}><Text style={s.metricValue}>{value}</Text><Text style={s.metricLabel}>{label}</Text></View>}
-function Step({n,title,text}:{n:string;title:string;text:string}){return <View style={s.step}><View style={s.stepNum}><Text style={s.stepNumText}>{n}</Text></View><View style={s.stepCopy}><Text style={s.stepTitle}>{title}</Text><Text style={s.stepText}>{text}</Text></View></View>}
+function Stat({label,value,color}:{label:string;value:string;color:string}){return <View style={s.stat}><Text style={[s.statValue,{color}]}>{value}</Text><Text style={s.statLabel}>{label}</Text></View>}
 
 const s=StyleSheet.create({
- root:{flex:1,backgroundColor:C.navy},header:{paddingTop:56,paddingHorizontal:18,paddingBottom:18,flexDirection:"row",alignItems:"center"},backButton:{width:42,height:42,alignItems:"center",justifyContent:"center"},back:{color:"white",fontSize:34,lineHeight:36},headerCenter:{flex:1,alignItems:"center"},headerTitle:{color:"white",fontSize:19,fontWeight:"800"},headerSub:{color:"#8EDFE7",fontSize:10,marginTop:3},securePill:{borderWidth:1,borderColor:"#2B6474",borderRadius:14,paddingHorizontal:9,paddingVertical:7,flexDirection:"row",alignItems:"center",gap:4},secureDot:{color:C.cyan,fontSize:8},secureText:{color:"#B8F1F4",fontSize:10,fontWeight:"800"},body:{flex:1,backgroundColor:C.surface,borderTopLeftRadius:30,borderTopRightRadius:30},content:{padding:22,paddingBottom:40},modeRow:{flexDirection:"row",backgroundColor:"#E9EEF4",borderRadius:15,padding:4,marginBottom:18},riwayaTitle:{color:C.navy,fontSize:14,fontWeight:"900",marginTop:18,marginBottom:9,textAlign:"right"},riwayaList:{flexDirection:"row",flexWrap:"wrap",gap:7,marginBottom:4},riwayaChip:{backgroundColor:C.white,borderRadius:12,paddingHorizontal:10,paddingVertical:9,borderWidth:1,borderColor:"#E4EAF0"},riwayaChipActive:{backgroundColor:C.soft,borderColor:C.cyan},riwayaChipText:{fontSize:10,color:C.muted,fontWeight:"700"},riwayaChipTextActive:{color:"#168DA5",fontWeight:"900"},riwayaUnavailable:{textAlign:"right",fontSize:15,lineHeight:28,color:"#8A6514",fontWeight:"700",marginTop:12},mode:{flex:1,paddingVertical:9,alignItems:"center",borderRadius:11},modeActive:{backgroundColor:C.white},modeText:{color:C.muted,fontSize:11,fontWeight:"700"},modeTextActive:{color:C.navy},surahRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},surah:{color:C.navy,fontSize:20,fontWeight:"800"},meta:{color:"#8391A3",marginTop:5,fontSize:12},badge:{width:38,height:38,borderRadius:19,backgroundColor:"#DDF7FA",alignItems:"center",justifyContent:"center"},badgeText:{color:"#168DA5",fontWeight:"900",fontSize:16},mushafToolbar:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:18,marginBottom:8},mushafToolbarTitle:{color:C.navy,fontSize:13,fontWeight:"900",textAlign:"right"},mushafToolbarSub:{color:C.muted,fontSize:10,marginTop:4,textAlign:"right"},hideButton:{backgroundColor:C.soft,borderWidth:1,borderColor:"#B9E8EF",borderRadius:11,paddingHorizontal:10,paddingVertical:8},hideButtonText:{color:"#168DA5",fontSize:10,fontWeight:"800"},liveWordsCard:{backgroundColor:C.white,borderRadius:20,padding:15,marginTop:14,borderWidth:1,borderColor:"#DDEAF0"},liveWordsTitle:{color:C.navy,fontSize:13,fontWeight:"900",textAlign:"right"},liveWordsNote:{color:C.muted,fontSize:10,lineHeight:17,textAlign:"right",marginTop:6},heardText:{color:C.ink,fontSize:18,lineHeight:32,textAlign:"right",marginTop:10},heardPlaceholder:{color:C.muted,fontSize:11,lineHeight:19,textAlign:"right",marginTop:10},ayah:{backgroundColor:C.white,borderRadius:24,padding:21,marginTop:18},ayahTop:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},referenceBadge:{backgroundColor:C.soft,color:"#168DA5",paddingHorizontal:9,paddingVertical:5,borderRadius:9,fontSize:9,fontWeight:"800"},ayahNumber:{color:"#9AA8B7",fontSize:12},ayahText:{textAlign:"right",fontSize:25,lineHeight:48,color:C.ink,fontWeight:"500",marginTop:8},reference:{marginTop:12,color:"#8291A2",fontSize:10,textAlign:"center",lineHeight:16},liveCard:{backgroundColor:C.navy,borderRadius:24,padding:18,marginTop:16},liveHeader:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},liveTitle:{color:C.white,fontSize:15,fontWeight:"800"},liveSub:{color:"#8FA4B9",fontSize:9,marginTop:4},pulse:{width:30,height:30,borderRadius:15,backgroundColor:"#153554",alignItems:"center",justifyContent:"center"},pulseInner:{width:10,height:10,borderRadius:5,backgroundColor:C.cyan},wave:{height:54,marginTop:18,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:5},bar:{width:4,borderRadius:3,backgroundColor:"#5BD7E1",opacity:0.8},metrics:{flexDirection:"row",gap:8,marginTop:10},metric:{flex:1,backgroundColor:C.navy2,borderRadius:15,padding:10,alignItems:"center"},metricValue:{color:"#8EDFE7",fontSize:11,fontWeight:"800"},metricLabel:{color:"#A9B8C9",fontSize:9,textAlign:"center",marginTop:5},truth:{backgroundColor:"#FFF8E6",borderRadius:18,padding:15,marginTop:16,borderWidth:1,borderColor:"#F4DFA4"},truthTitle:{color:"#8A6514",fontWeight:"900",fontSize:12},truthText:{color:"#766341",fontSize:10,lineHeight:17,marginTop:5},sectionTitle:{color:C.navy,fontSize:17,fontWeight:"800",marginTop:22,marginBottom:10},steps:{backgroundColor:C.white,borderRadius:22,padding:15},step:{flexDirection:"row",alignItems:"center",marginVertical:7},stepNum:{width:32,height:32,borderRadius:16,backgroundColor:C.soft,alignItems:"center",justifyContent:"center"},stepNumText:{color:"#168DA5",fontWeight:"900"},stepCopy:{flex:1,marginLeft:11},stepTitle:{color:C.ink,fontWeight:"800",fontSize:13},stepText:{color:C.muted,fontSize:10,marginTop:2,lineHeight:16},record:{marginTop:18,backgroundColor:C.cyan,borderRadius:20,padding:15,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:13},recording:{backgroundColor:"#FF8A8A"},recordIcon:{fontSize:25,color:C.navy},recordTitle:{color:C.navy,fontWeight:"900",fontSize:15},recordSub:{color:"#174C59",fontSize:10,marginTop:2},listening:{textAlign:"center",fontWeight:"800",color:C.navy,marginTop:12},timer:{textAlign:"center",color:"#0B9AAA",marginTop:4},analysisCard:{backgroundColor:C.white,borderRadius:22,padding:17,marginTop:16,borderWidth:1,borderColor:"#B8E8EF"},analysisTitle:{color:C.navy,fontSize:15,fontWeight:"900",textAlign:"right"},analysisTranscript:{color:C.ink,fontSize:15,lineHeight:28,textAlign:"right",marginTop:12},analysisScore:{color:"#168DA5",fontSize:14,fontWeight:"900",textAlign:"right",marginTop:10},analysisError:{color:"#875D18",fontSize:12,lineHeight:21,textAlign:"right",marginTop:5},analysisDisclaimer:{color:C.muted,fontSize:10,lineHeight:18,textAlign:"right",marginTop:12},engineList:{backgroundColor:"#F1F8FC",borderRadius:14,padding:12,marginTop:12},engineTitle:{color:C.navy,fontSize:12,fontWeight:"900",textAlign:"right",marginBottom:5},engineRow:{color:"#466276",fontSize:11,lineHeight:20,textAlign:"right"},pending:{backgroundColor:"#E5F8FC",borderRadius:20,padding:17,marginTop:17,borderWidth:1,borderColor:"#B9EDF1"},pendingTitle:{color:"#168DA5",fontWeight:"900",fontSize:14},pendingText:{color:"#496476",fontSize:11,lineHeight:19,marginTop:7},security:{backgroundColor:"#EEF2F6",borderRadius:18,padding:15,marginTop:16},securityTitle:{color:C.navy,fontWeight:"900",fontSize:12},securityText:{color:"#66798C",fontSize:10,lineHeight:17,marginTop:5}
+ root:{flex:1,backgroundColor:C.paper},
+ header:{paddingTop:52,paddingHorizontal:14,paddingBottom:10,flexDirection:"row",alignItems:"center",borderBottomWidth:1,borderBottomColor:C.line,backgroundColor:C.paper},
+ backButton:{width:42,height:42,alignItems:"center",justifyContent:"center"},
+ back:{color:C.ink,fontSize:34,lineHeight:36},
+ headerSpacer:{width:42},
+ headerCenter:{flex:1,alignItems:"center"},
+ headerTitle:{color:C.ink,fontSize:19,fontWeight:"800"},
+ headerSub:{color:C.muted,fontSize:11,marginTop:3},
+ body:{flex:1},
+ content:{paddingHorizontal:22,paddingTop:22,paddingBottom:190},
+ mushaf:{writingDirection:"rtl",textAlign:"justify",fontFamily:QURAN_FONT,fontSize:30,lineHeight:64,color:C.ink},
+ word:{color:C.ink},
+ marker:{color:C.muted,fontSize:22},
+ masked:{color:"transparent",backgroundColor:C.mask},
+ cursor:{backgroundColor:C.cursor},
+ unavailable:{textAlign:"right",fontSize:15,lineHeight:28,color:"#8A6514",fontWeight:"700"},
+ sourceNote:{marginTop:18,color:C.muted,fontSize:10,textAlign:"center",lineHeight:16},
+ pending:{backgroundColor:"#E5F8FC",borderRadius:20,padding:17,marginTop:17,borderWidth:1,borderColor:"#B9EDF1"},
+ pendingTitle:{color:C.cyanDark,fontWeight:"900",fontSize:14,textAlign:"right"},
+ pendingText:{color:"#496476",fontSize:11,lineHeight:19,marginTop:7,textAlign:"right"},
+ analysisCard:{backgroundColor:C.white,borderRadius:22,padding:17,marginTop:20,borderWidth:1,borderColor:"#B8E8EF"},
+ analysisTitle:{color:C.navy,fontSize:15,fontWeight:"900",textAlign:"right"},
+ statsRow:{flexDirection:"row",gap:8,marginTop:12},
+ stat:{flex:1,backgroundColor:"#F4F8FC",borderRadius:14,paddingVertical:10,alignItems:"center"},
+ statValue:{fontSize:17,fontWeight:"900"},
+ statLabel:{color:C.muted,fontSize:10,marginTop:3},
+ analysisError:{color:"#875D18",fontSize:12,lineHeight:21,textAlign:"right",marginTop:6},
+ engineLine:{color:"#466276",fontSize:11,lineHeight:19,textAlign:"right",marginTop:12},
+ analysisDisclaimer:{color:C.muted,fontSize:10,lineHeight:18,textAlign:"right",marginTop:10},
+ liveStats:{flexDirection:"row",justifyContent:"center",gap:22,marginTop:18},
+ liveStat:{fontSize:16,fontWeight:"900"},
+ panel:{position:"absolute",left:12,right:12,bottom:150,maxHeight:"58%",backgroundColor:C.white,borderRadius:24,borderWidth:1,borderColor:C.line,shadowColor:"#000",shadowOpacity:0.12,shadowRadius:18,shadowOffset:{width:0,height:6},elevation:8},
+ panelScroll:{flexGrow:0},
+ panelContent:{padding:16},
+ panelTitle:{color:C.navy,fontSize:13,fontWeight:"900",textAlign:"right",marginTop:6,marginBottom:9},
+ modeRow:{flexDirection:"row",backgroundColor:"#E9EEF4",borderRadius:15,padding:4},
+ mode:{flex:1,paddingVertical:9,alignItems:"center",borderRadius:11},
+ modeActive:{backgroundColor:C.white},
+ modeText:{color:"#788BA0",fontSize:12,fontWeight:"700"},
+ modeTextActive:{color:C.navy},
+ switchRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:12,marginTop:14},
+ switchLabel:{flex:1,color:"#466276",fontSize:11,lineHeight:18,textAlign:"right"},
+ switchTrack:{width:44,height:26,borderRadius:13,backgroundColor:"#CBD5DF",padding:3,justifyContent:"center"},
+ switchTrackOn:{backgroundColor:C.cyan},
+ switchKnob:{width:20,height:20,borderRadius:10,backgroundColor:C.white},
+ switchKnobOn:{alignSelf:"flex-end"},
+ resetButton:{marginTop:14,backgroundColor:"#F1F8FC",borderRadius:14,paddingVertical:11,alignItems:"center",borderWidth:1,borderColor:"#CFE7EE"},
+ resetText:{color:C.cyanDark,fontWeight:"800",fontSize:12},
+ riwayaList:{flexDirection:"row",flexWrap:"wrap",gap:7,marginBottom:4},
+ riwayaChip:{backgroundColor:C.paper,borderRadius:12,paddingHorizontal:10,paddingVertical:9,borderWidth:1,borderColor:C.line},
+ riwayaChipActive:{backgroundColor:"#E5F8FC",borderColor:C.cyan},
+ riwayaChipText:{fontSize:10,color:C.muted,fontWeight:"700"},
+ riwayaChipTextActive:{color:C.cyanDark,fontWeight:"900"},
+ footer:{position:"absolute",left:0,right:0,bottom:0,backgroundColor:C.paper,borderTopWidth:1,borderTopColor:C.line,paddingTop:10,paddingBottom:26,paddingHorizontal:18},
+ listening:{textAlign:"center",fontWeight:"700",color:C.ink,fontSize:12,lineHeight:18},
+ speechNote:{textAlign:"center",color:C.muted,fontSize:10,lineHeight:15,marginTop:3},
+ bar:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginTop:10},
+ sideButton:{width:92,alignItems:"center",gap:4},
+ sideIcon:{fontSize:22},
+ sideLabel:{color:C.muted,fontSize:10,fontWeight:"700"},
+ mic:{width:78,height:78,borderRadius:39,backgroundColor:C.cyan,alignItems:"center",justifyContent:"center",shadowColor:C.cyan,shadowOpacity:0.45,shadowRadius:14,shadowOffset:{width:0,height:6},elevation:7},
+ micOn:{backgroundColor:"#FF6B6B",shadowColor:"#FF6B6B"},
+ micDisabled:{opacity:0.5},
+ micIcon:{fontSize:32},
+ stopSquare:{width:26,height:26,borderRadius:6,backgroundColor:C.white}
 });
