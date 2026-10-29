@@ -1,253 +1,191 @@
-import { ScrollView, StyleSheet, Text, View, Pressable, Image, useWindowDimensions } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { usePreferences } from "../src/preferences";
+import { SURAHS } from "../src/quran/surahs";
 
 const C = {
-  ink: "#142A43",
-  green: "#35C7DE",
-  greenDeep: "#071A33",
-  mint: "#E5F8FC",
-  mint2: "#F1F7FB",
-  gold: "#D5AA53",
-  paper: "#F4F8FC",
+  navy: "#071A33",
+  navy2: "#102B49",
+  blue: "#397BB5",
+  cyan: "#35C7DE",
+  paper: "#F5F8FC",
   white: "#FFFFFF",
-  muted: "#788BA0",
-  line: "#E0EAF2",
-  purple: "#4F9BB5",
-  blue: "#35AFC7",
+  ink: "#142A43",
+  muted: "#71849A",
+  line: "#DFE8F1",
 };
 
 export default function Home() {
   const { language, dark } = usePreferences();
-  const english = language !== "ar";
   const { width } = useWindowDimensions();
+  const en = language !== "ar";
+  const t = (ar: string, english: string) => en ? english : ar;
   const wide = width >= 760;
-  const t = (ar: string, en: string) => english ? en : ar;
-  const bg = dark ? "#0D2A3D" : C.paper;
-  const surface = dark ? "#102B49" : C.white;
-  const text = dark ? "#F3FAFD" : C.ink;
-  const muted = dark ? "#A8D8EF" : C.muted;
+  const bg = dark ? "#061525" : C.paper;
+  const card = dark ? "#102B43" : C.white;
+  const ink = dark ? "#F4FAFD" : C.ink;
+  const muted = dark ? "#A8C8D9" : C.muted;
+  const featured = SURAHS[0];
 
   return (
     <View style={[s.root, { backgroundColor: bg }]}>
       <StatusBar style={dark ? "light" : "dark"} />
-      <ScrollView contentContainerStyle={[s.content, wide && s.wideContent]}>
-        <View style={s.header}>
+      <ScrollView contentContainerStyle={[s.page, wide && s.pageWide]}>
+        <View style={s.topbar}>
           <View style={s.brand}>
-            <Image source={require("../Ijazah profile picture.jpeg")} style={s.logoImage} resizeMode="contain" accessibilityLabel="شعار إجازة" />
+            <Image source={require("../Ijazah profile picture.jpeg")} style={s.logo} resizeMode="contain" accessibilityLabel="شعار إجازة" />
             <View>
-              <Text style={[s.brandName, { color: text }]}>{t("إجازة", "IJAAZAH")}</Text>
-              <Text style={[s.brandSub, { color: muted }]}>{t("الأكاديمية الإلكترونية للقرآن", "ONLINE QURAN ACADEMY")}</Text>
+              <Text style={[s.brandName, { color: ink }]}>{t("إجازة", "IJAAZAH")}</Text>
+              <Text style={[s.brandSub, { color: muted }]}>{t("رحلتك مع القرآن", "YOUR QURAN COMPANION")}</Text>
             </View>
           </View>
+          <Pressable accessibilityRole="button" onPress={() => router.push("/quran")} style={s.indexButton}>
+            <Text style={s.indexIcon}>☷</Text>
+            <Text style={s.indexText}>{t("فهرس السور", "Surah index")}</Text>
+          </Pressable>
         </View>
 
-        <View style={[s.welcomeRow, wide && s.welcomeWide]}>
+        <View style={[s.welcome, wide && s.welcomeWide]}>
           <View style={s.welcomeCopy}>
-            <Text style={[s.eyebrow, { color: C.green }]}>{t("بِسْمِ اللَّهِ", "YOUR QURAN SPACE")}</Text>
-            <Text style={[s.greeting, { color: text }]}>{t("السلام عليكم 👋", "Assalamu Alaikum 👋")}</Text>
-            <Text style={[s.intro, { color: muted }]}>{t("خطوة صغيرة كل يوم، وأثر يبقى مدى العمر.", "A small step every day. A lifelong impact.")}</Text>
-          </View>
-          <View style={[s.ornament, wide && s.ornamentWide]}>
-            <View style={s.orbitOne} />
-            <View style={s.orbitTwo} />
-            <Text style={s.bookEmoji}>📖</Text>
-            <View style={s.sparkle}><Text style={s.sparkleText}>✦</Text></View>
-          </View>
-        </View>
-
-        <View style={[s.streakPanel, { backgroundColor: dark ? "#102B49" : "#FFFFFF", borderColor: dark ? "#245C7B" : "#E0EAF2" }]}>
-          <View style={s.streakHead}>
-            <View style={s.streakBadge}><Text style={s.streakBadgeText}>✦</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.streakTitle, { color: text }]}>{t("خطوتك اليوم", "YOUR DAILY JOURNEY")}</Text>
-              <Text style={[s.streakSubtitle, { color: muted }]}>{t("ابدأ بالقليل، وداوم عليه", "Start small. Stay consistent.")}</Text>
-            </View>
-            <View style={s.streakCount}><Text style={s.streakCountNum}>١</Text><Text style={s.streakCountLabel}>{t("جلسة", "SESSION")}</Text></View>
-          </View>
-          <View style={s.streakTrack}><View style={s.streakTrackFill} /></View>
-          <View style={s.streakFoot}><Text style={[s.streakFootText, { color: muted }]}>{t("هدف مقترح: ١٠ دقائق قرآن اليوم", "Suggested goal: 10 minutes of Quran today")}</Text><Text style={s.streakFootMark}>بِسْمِ اللَّهِ</Text></View>
-        </View>
-
-        <View style={[s.mainGrid, wide && s.mainGridWide]}>
-          <View style={[s.primaryColumn, wide && { flex: 1.2 }]}>
-            <View style={s.hero}>
-              <View style={s.heroTop}>
-                <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>{t("ورد اليوم", "TODAY'S WIRD")}</Text></View>
-                <Text style={s.heroDecoration}>✧</Text>
-              </View>
-              <Text style={s.heroTitle}>{t("اجعل للقرآن موعدًا اليوم", "Make time for Quran today")}</Text>
-              <Text style={s.heroSub}>{t("ابدأ التلاوة، وامضِ بثبات في رحلتك.", "Begin reciting and keep moving forward.")}</Text>
-              <View style={s.heroBottom}>
-                <View style={s.progressWrap}>
-                  <View style={s.progressTrack}><View style={s.progressFill} /></View>
-                  <Text style={s.progressLabel}>{t("رحلتك تبدأ بجلسة واحدة", "Your journey starts with one session")}</Text>
-                </View>
-                <View style={s.heroActions}>
-                  <Pressable style={s.primaryButton} onPress={() => router.push("/journey")}><Text style={s.primaryButtonText}>{t("ابدأ رحلتك  ←", "Start your journey  →")}</Text></Pressable>
-                  <Pressable style={s.listenButton} onPress={() => router.push("/listen")}><Text style={s.listenButtonText}>{t("استمع للقرآن  ♫", "Listen to Quran  ♫")}</Text></Pressable>
-                </View>
-              </View>
-              <View style={s.heroGlow} />
-            </View>
-
-            <View style={s.sectionHeader}>
-              <Text style={[s.sectionTitle, { color: text }]}>{t("مساحتك اليومية", "Your daily space")}</Text>
-              <Text style={[s.sectionHint, { color: muted }]}>{t("اختر من أين تبدأ", "Choose where to begin")}</Text>
-            </View>
-            <View style={s.actionGrid}>
-              <Action title={t("القرآن الكريم", "The Holy Quran")} sub={t("تصفّح السور والآيات", "Browse surahs and ayahs")} icon="۞" tone="green" route="/quran" surface={surface} text={text} muted={muted} />
-              <Action title={t("مراجعة الحفظ", "Review memorization")} sub={t("ثبّت ما حفظته", "Strengthen what you know")} icon="↻" tone="purple" route="/smart-test" surface={surface} text={text} muted={muted} />
-              <Action title={t("أحكام التجويد", "Tajweed rules")} sub={t("تعلّم خطوة بخطوة", "Learn step by step")} icon="✧" tone="gold" route="/tajweed" surface={surface} text={text} muted={muted} />
-              <Action title={t("تقدّمي", "My progress")} sub={t("تابع رحلتك وإنجازاتك", "Track your journey")} icon="◔" tone="blue" route="/progress" surface={surface} text={text} muted={muted} />
+            <Text style={s.eyebrow}>{t("مساحة التلاوة والتسميع", "QURAN READING & RECITATION")}</Text>
+            <Text style={s.title}>{t("عِش مع القرآن، آيةً آية", "Connect with the Quran, ayah by ayah")}</Text>
+            <Text style={s.subtitle}>{t("اقرأ من المصحف الموثّق، أو سمّع محفوظك وراجع المقارنة النصية المتاحة.", "Read from a verified Quran text, or recite from memory and review the available text comparison.")}</Text>
+            <View style={s.actions}>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/quran")} style={({ pressed }) => [s.secondaryButton, pressed && s.pressed, { borderColor: dark ? "#35536B" : C.line }]}>
+                <Text style={[s.secondaryButtonText, { color: ink }]}>{t("افتح المصحف", "Read Quran")}</Text>
+              </Pressable>
             </View>
           </View>
-
-          <View style={[s.sideColumn, wide && { flex: 0.8 }]}>
-            <View style={[s.dailyCard, { backgroundColor: surface, borderColor: dark ? "#245C7B" : C.line }]}>
-              <View style={s.dailyHeader}><Text style={s.dailyIcon}>☀</Text><Text style={[s.dailyTitle, { color: text }]}>{t("وقفة اليوم", "A moment for today")}</Text></View>
-              <Text style={[s.dailyArabic, { color: text }]}>{t("وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا", "Recite the Quran with measured recitation")}</Text>
-              <Text style={[s.dailyRef, { color: muted }]}>{t("سورة المزمل · ٤", "Al-Muzzammil · 4")}</Text>
-              <View style={s.goldLine} />
-              <Text style={[s.dailyNote, { color: muted }]}>{t("خذ وقتك في التلاوة، فالجودة والطمأنينة أهم من السرعة.", "Take your time. Presence and care matter more than speed.")}</Text>
-            </View>
-
-            <Pressable style={s.premium} onPress={() => router.push("/premium")}>
-              <View style={s.premiumTop}><Text style={s.premiumCrown}>♛</Text><Text style={s.premiumLabel}>IJAZAH PREMIUM</Text></View>
-              <Text style={s.premiumTitle}>{t("رحلة أعمق، بخطتك أنت", "A deeper journey, your way")}</Text>
-              <Text style={s.premiumSub}>{t("اختبارات مخصصة • مراجعة ذكية • أدوات متقدمة", "Personalized tests • Smart review • Advanced tools")}</Text>
-              <View style={s.premiumLink}><Text style={s.premiumLinkText}>{t("اكتشف المزايا  ←", "Explore features  →")}</Text></View>
-            </Pressable>
-
-            <View style={[s.trustCard, { backgroundColor: dark ? "#102746" : C.mint2 }]}>
-              <Text style={s.trustIcon}>✓</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[s.trustTitle, { color: text }]}>{t("القرآن أولًا", "Quran comes first")}</Text>
-                <Text style={[s.trustSub, { color: muted }]}>{t("نص موثّق وتجربة مصممة باحترام ووضوح.", "Verified text and a thoughtful, transparent experience.")}</Text>
-              </View>
-            </View>
+          <View style={s.verseCard}>
+            <Text style={s.verseOrnament}>۞</Text>
+            <Text style={s.verse}>{t("وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا", "وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا")}</Text>
+            <View style={s.verseDivider} />
+            <Text style={s.verseReference}>{t("سورة المزمل · ٤", "Al-Muzzammil · 4")}</Text>
           </View>
         </View>
-        <Text style={[s.footer, { color: muted }]}>إجازة · {t("خطوتك القادمة تبدأ الآن", "Your next step starts now")}</Text>
+
+        <View style={s.sectionHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.sectionTitle, { color: ink }]}>{t("تابع رحلتك", "Continue your journey")}</Text>
+            <Text style={[s.sectionSub, { color: muted }]}>{t("اختر طريقة البدء المناسبة لك", "Choose how you would like to begin")}</Text>
+          </View>
+          <View style={s.liveDot} />
+        </View>
+
+        <View style={[s.featureGrid, wide && s.featureGridWide]}>
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/surah", params: { number: String(featured.number) } })} style={({ pressed }) => [s.surahCard, { backgroundColor: card, borderColor: dark ? "#21445E" : C.line }, pressed && s.pressed]}>
+            <View style={s.cardTop}>
+              <View style={s.numberBadge}><Text style={s.numberBadgeText}>{String(featured.number).padStart(2, "0")}</Text></View>
+              <Text style={s.cardSymbol}>۞</Text>
+            </View>
+            <Text style={[s.cardLabel, { color: muted }]}>{t("ابدأ القراءة", "START READING")}</Text>
+            <Text style={[s.cardTitle, { color: ink }]}>{featured.nameAr}</Text>
+            <Text style={[s.cardMeta, { color: muted }]}>{t("٧ آيات · رواية حفص", "7 ayahs · Hafs narration")}</Text>
+            <View style={s.cardFooter}><Text style={s.cardAction}>{t("متابعة السورة", "Open surah")}</Text><Text style={s.cardArrow}>{en ? "→" : "←"}</Text></View>
+          </Pressable>
+
+          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/recite", params: { surah: "1", ayah: "1", scope: "surah" } })} style={({ pressed }) => [s.reciteCard, pressed && s.pressed]}>
+            <View style={s.cardTop}>
+              <View style={s.micBadge}><Text style={s.mic}>◉</Text></View>
+              <Text style={s.reciteTag}>{t("تدريبك اليومي", "DAILY PRACTICE")}</Text>
+            </View>
+            <Text style={s.reciteTitle}>{t("سمّع سورة كاملة", "Recite a full surah")}</Text>
+            <Text style={s.reciteDescription}>{t("سجّل تلاوتك وراجع النص المتعرّف عليه عند توفر التحليل.", "Record your recitation and review recognized text when analysis is available.")}</Text>
+            <View style={s.reciteButton}><Text style={s.reciteButtonText}>{t("ابدأ جلسة التسميع", "Start a recitation session")}</Text><Text style={s.reciteButtonArrow}>{en ? "→" : "←"}</Text></View>
+          </Pressable>
+        </View>
+
+        <View style={[s.toolsRow, { backgroundColor: card, borderColor: dark ? "#21445E" : C.line }]}>
+          <Pressable accessibilityRole="button" onPress={() => router.push("/quran")} style={s.tool}>
+            <View style={s.toolIcon}><Text style={s.toolGlyph}>۞</Text></View>
+            <View style={s.toolCopy}><Text style={[s.toolTitle, { color: ink }]}>{t("فهرس المصحف", "Quran index")}</Text><Text style={[s.toolSub, { color: muted }]}>{t("١١٤ سورة", "114 surahs")}</Text></View>
+            <Text style={[s.toolArrow, { color: muted }]}>{en ? "→" : "←"}</Text>
+          </Pressable>
+          <View style={[s.toolDivider, { backgroundColor: dark ? "#29475F" : C.line }]} />
+          <Pressable accessibilityRole="button" onPress={() => router.push("/listen")} style={s.tool}>
+            <View style={[s.toolIcon, s.listenIcon]}><Text style={s.toolGlyph}>♫</Text></View>
+            <View style={s.toolCopy}><Text style={[s.toolTitle, { color: ink }]}>{t("استمع للتلاوة", "Listen to Quran")}</Text><Text style={[s.toolSub, { color: muted }]}>{t("السور والتسجيلات المتاحة", "Available surahs and audio")}</Text></View>
+            <Text style={[s.toolArrow, { color: muted }]}>{en ? "→" : "←"}</Text>
+          </Pressable>
+        </View>
+
+        <View style={s.sourceNote}>
+          <Text style={s.sourceCheck}>✓</Text>
+          <Text style={[s.sourceText, { color: muted }]}>{t("نص المصحف من Tanzil Uthmani 1.1 برواية حفص؛ لا يُنشأ بالذكاء الاصطناعي. تحليل التلاوة النصي مبدئي ولا يُعدّ حكمًا على التجويد.", "Quran text uses Tanzil Uthmani 1.1, Hafs narration. Text comparison is preliminary and does not certify tajweed.")}</Text>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-function Action({ title, sub, icon, tone, route, surface, text, muted }: {
-  title: string; sub: string; icon: string; tone: "green" | "purple" | "gold" | "blue";
-  route: "/quran" | "/smart-test" | "/tajweed" | "/progress";
-  surface: string; text: string; muted: string;
-}) {
-  const tones = { green: "#35C7DE", purple: "#4F9BB5", gold: "#B78A37", blue: "#D5AA53" };
-  const pale = { green: "#EAF7FC", purple: "#E5F8FC", gold: "#EAF7FC", blue: "#EAF7FC" };
-  return (
-    <Pressable style={[s.actionCard, { backgroundColor: surface, borderColor: "#E0EAF2" }]} onPress={() => router.push(route)}>
-      <View style={[s.actionIconBox, { backgroundColor: pale[tone] }]}><Text style={[s.actionIcon, { color: tones[tone] }]}>{icon}</Text></View>
-      <Text style={[s.actionTitle, { color: text }]}>{title}</Text>
-      <Text style={[s.actionSub, { color: muted }]}>{sub}</Text>
-      <Text style={[s.actionArrow, { color: tones[tone] }]}>↗</Text>
-    </Pressable>
-  );
-}
-
 const s = StyleSheet.create({
   root: { flex: 1 },
-  streakPanel: { borderRadius: 22, padding: 17, marginBottom: 22, borderWidth: 1, shadowColor: "#071A33", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
-  streakHead: { flexDirection: "row", alignItems: "center", gap: 11 },
-  streakBadge: { width: 42, height: 42, borderRadius: 15, backgroundColor: "#F4EBD7", alignItems: "center", justifyContent: "center" },
-  streakBadgeText: { color: "#A57A2C", fontSize: 22, fontWeight: "900" },
-  streakTitle: { fontSize: 13, fontWeight: "900", textAlign: "right" },
-  streakSubtitle: { fontSize: 10, marginTop: 4, textAlign: "right" },
-  streakCount: { minWidth: 52, paddingVertical: 7, paddingHorizontal: 10, borderRadius: 13, backgroundColor: "#E5F8FC", alignItems: "center" },
-  streakCountNum: { color: "#168DA5", fontSize: 18, fontWeight: "900" },
-  streakCountLabel: { color: "#5C9CC2", fontSize: 8, fontWeight: "800", marginTop: 1 },
-  streakTrack: { height: 6, backgroundColor: "#DCEEF6", borderRadius: 8, overflow: "hidden", marginTop: 16 },
-  streakTrackFill: { width: "18%", height: 6, borderRadius: 8, backgroundColor: "#D5AA53" },
-  streakFoot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 10 },
-  streakFootText: { fontSize: 10, textAlign: "right", flex: 1 },
-  streakFootMark: { color: "#A57A2C", fontSize: 10, fontWeight: "900" },
-  content: { paddingHorizontal: 20, paddingTop: 26, paddingBottom: 40, maxWidth: 1120, width: "100%", alignSelf: "center" },
-  wideContent: { paddingHorizontal: 34, paddingTop: 30 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
-  brand: { flexDirection: "row", alignItems: "center", gap: 11 },
-  logoImage: { width: 52, height: 52 },
-  logo: { width: 47, height: 47, borderRadius: 16, backgroundColor: C.green, alignItems: "center", justifyContent: "center", shadowColor: C.greenDeep, shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
-  logoMark: { color: "#FFFFFF", fontSize: 27, fontWeight: "900" },
-  logoBook: { position: "absolute", bottom: 8, width: 25, height: 7, borderTopWidth: 2, borderColor: "#B7E8F6", transform: [{ rotate: "-8deg" }] },
-  brandName: { fontSize: 21, fontWeight: "900", textAlign: "right" },
-  brandSub: { fontSize: 10, marginTop: 2, textAlign: "right" },
-  controls: { flexDirection: "row", alignItems: "center", gap: 7 },
-  control: { height: 39, minWidth: 39, paddingHorizontal: 9, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  controlText: { color: C.ink, fontSize: 12, fontWeight: "900" },
-  avatar: { width: 39, height: 39, borderRadius: 14, backgroundColor: C.mint, alignItems: "center", justifyContent: "center", marginLeft: 2 },
-  avatarText: { color: C.green, fontWeight: "900", fontSize: 16 },
-  welcomeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 24, minHeight: 118 },
-  welcomeWide: { paddingHorizontal: 6, minHeight: 150 },
+  page: { width: "100%", maxWidth: 1080, alignSelf: "center", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 40, gap: 22 },
+  pageWide: { paddingHorizontal: 32, paddingTop: 24, gap: 25 },
+  topbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  brand: { flexDirection: "row", alignItems: "center", gap: 10 },
+  logo: { width: 47, height: 47, borderRadius: 14, backgroundColor: "#FFFFFF" },
+  brandName: { fontSize: 20, fontWeight: "900", textAlign: "right" },
+  brandSub: { fontSize: 8, fontWeight: "800", letterSpacing: 1, marginTop: 3, textAlign: "right" },
+  indexButton: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: "#E5F8FC" },
+  indexIcon: { color: "#168DA5", fontSize: 18 },
+  indexText: { color: "#126A82", fontSize: 10, fontWeight: "900" },
+  welcome: { backgroundColor: C.navy, borderRadius: 27, padding: 22, gap: 22, overflow: "hidden", borderWidth: 1, borderColor: "#1B4A68" },
+  welcomeWide: { flexDirection: "row", alignItems: "center", padding: 30, gap: 30 },
   welcomeCopy: { flex: 1, alignItems: "flex-end" },
-  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5, marginBottom: 7 },
-  greeting: { fontSize: 27, fontWeight: "900", textAlign: "right" },
-  intro: { fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 6 },
-  ornament: { width: 102, height: 102, borderRadius: 34, backgroundColor: C.mint, alignItems: "center", justifyContent: "center", overflow: "hidden", transform: [{ rotate: "-5deg" }] },
-  ornamentWide: { width: 128, height: 128, borderRadius: 42 },
-  orbitOne: { position: "absolute", width: 92, height: 92, borderWidth: 1, borderColor: "#7ABED8", borderRadius: 28, transform: [{ rotate: "35deg" }] },
-  orbitTwo: { position: "absolute", width: 67, height: 67, borderWidth: 1, borderColor: "#B7E8F6", borderRadius: 23, transform: [{ rotate: "55deg" }] },
-  bookEmoji: { fontSize: 39 },
-  sparkle: { position: "absolute", top: 9, right: 10, width: 24, height: 24, borderRadius: 12, backgroundColor: C.gold, alignItems: "center", justifyContent: "center" },
-  sparkleText: { color: "#FFFFFF", fontSize: 14 },
-  mainGrid: { gap: 22 },
-  mainGridWide: { flexDirection: "row", alignItems: "flex-start", gap: 24 },
-  primaryColumn: { flex: 1 },
-  sideColumn: { gap: 14, marginTop: 0 },
-  hero: { backgroundColor: C.greenDeep, borderRadius: 28, padding: 23, minHeight: 255, overflow: "hidden", borderWidth: 1, borderColor: "#246A8C" },
-  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  livePill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20, backgroundColor: "#164B6A" },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#80D6F0" },
-  liveText: { color: "#B7E8F6", fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
-  heroDecoration: { color: "#D5AA53", fontSize: 32 },
-  heroTitle: { color: "#FFFFFF", fontSize: 25, lineHeight: 35, fontWeight: "900", textAlign: "right", marginTop: 16, maxWidth: 430, alignSelf: "flex-end" },
-  heroSub: { color: "#C5E4F1", fontSize: 12, lineHeight: 20, textAlign: "right", marginTop: 8 },
-  heroBottom: { marginTop: 20, gap: 14 },
-  progressWrap: { gap: 8 },
-  progressTrack: { height: 5, backgroundColor: "#246A8C", borderRadius: 5, overflow: "hidden" },
-  progressFill: { width: "8%", height: 5, backgroundColor: "#D5AA53", borderRadius: 5 },
-  progressLabel: { color: "#B7D7E8", fontSize: 10, textAlign: "right" },
-  heroActions: { flexDirection: "row", flexWrap: "wrap", gap: 9, justifyContent: "flex-end" },
-  primaryButton: { backgroundColor: "#D5AA53", paddingVertical: 13, paddingHorizontal: 16, borderRadius: 14, alignSelf: "flex-end" },
-  primaryButtonText: { color: "#071A33", fontSize: 12, fontWeight: "900" },
-  listenButton: { borderColor: "#80D6F0", borderWidth: 1, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 14, alignSelf: "flex-end" },
-  listenButtonText: { color: "#E7F7FD", fontSize: 12, fontWeight: "900" },
-  heroGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "#247CA5", opacity: 0.35, right: -92, top: 54 },
-  sectionHeader: { marginTop: 26, marginBottom: 13, gap: 4, alignItems: "flex-end" },
-  sectionTitle: { fontSize: 18, fontWeight: "900" },
-  sectionHint: { fontSize: 11 },
-  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  actionCard: { width: "48%", minHeight: 145, borderRadius: 21, padding: 15, borderWidth: 1, overflow: "hidden" },
-  actionIconBox: { width: 43, height: 43, borderRadius: 15, alignItems: "center", justifyContent: "center", alignSelf: "flex-end" },
-  actionIcon: { fontSize: 25, fontWeight: "700" },
-  actionTitle: { fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 11 },
-  actionSub: { fontSize: 10, textAlign: "right", marginTop: 5, lineHeight: 16 },
-  actionArrow: { fontSize: 16, fontWeight: "900", position: "absolute", bottom: 13, left: 14 },
-  dailyCard: { borderRadius: 23, padding: 19, borderWidth: 1 },
-  dailyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
-  dailyIcon: { color: C.gold, fontSize: 20 },
-  dailyTitle: { fontSize: 15, fontWeight: "900" },
-  dailyArabic: { fontSize: 21, fontWeight: "900", textAlign: "center", lineHeight: 38, marginTop: 18 },
-  dailyRef: { fontSize: 10, textAlign: "center", marginTop: 7 },
-  goldLine: { height: 1, backgroundColor: "#A8DDED", width: 54, alignSelf: "center", marginTop: 15 },
-  dailyNote: { fontSize: 11, lineHeight: 19, textAlign: "center", marginTop: 13 },
-  premium: { backgroundColor: "#071A33", borderRadius: 23, padding: 20, borderWidth: 1, borderColor: "#1A4B70" },
-  premiumTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  premiumCrown: { color: "#D5AA53", fontSize: 24 },
-  premiumLabel: { color: "#D5AA53", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
-  premiumTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", textAlign: "right", marginTop: 13, lineHeight: 28 },
-  premiumSub: { color: "#D1E5EE", fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 7 },
-  premiumLink: { backgroundColor: "#D5AA53", borderRadius: 13, padding: 12, marginTop: 15, alignItems: "center" },
-  premiumLinkText: { color: "#071A33", fontSize: 11, fontWeight: "900" },
-  trustCard: { borderRadius: 18, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
-  trustIcon: { width: 31, height: 31, borderRadius: 16, overflow: "hidden", textAlign: "center", textAlignVertical: "center", backgroundColor: "#E5F8FC", color: "#168DA5", fontWeight: "900", fontSize: 18, paddingTop: 4 },
-  trustTitle: { fontSize: 12, fontWeight: "900", textAlign: "right" },
-  trustSub: { fontSize: 10, lineHeight: 16, textAlign: "right", marginTop: 3 },
-  footer: { fontSize: 10, textAlign: "center", marginTop: 28 }
+  eyebrow: { color: C.cyan, fontSize: 9, fontWeight: "900", letterSpacing: 1.1, textAlign: "right" },
+  title: { color: C.white, fontSize: 27, lineHeight: 37, fontWeight: "900", textAlign: "right", marginTop: 11 },
+  subtitle: { color: "#C8E0EC", fontSize: 12, lineHeight: 21, textAlign: "right", marginTop: 8 },
+  actions: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 9, marginTop: 19, alignSelf: "flex-end" },
+  primaryButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, backgroundColor: C.cyan, borderRadius: 13, paddingHorizontal: 15, paddingVertical: 12 },
+  primaryButtonText: { color: C.navy, fontSize: 11, fontWeight: "900" },
+  buttonArrow: { color: C.navy, fontSize: 17, fontWeight: "900" },
+  secondaryButton: { borderWidth: 1, borderRadius: 13, paddingHorizontal: 15, paddingVertical: 12, backgroundColor: "rgba(255,255,255,0.04)" },
+  secondaryButtonText: { fontSize: 11, fontWeight: "800" },
+  verseCard: { minHeight: 170, borderRadius: 22, backgroundColor: "#102B49", borderWidth: 1, borderColor: "#2B5670", alignItems: "center", justifyContent: "center", padding: 17 },
+  verseOrnament: { color: "#D5AA53", fontSize: 27 },
+  verse: { color: "#FFFFFF", fontSize: 23, lineHeight: 39, textAlign: "center", marginTop: 5 },
+  verseDivider: { width: 42, height: 2, backgroundColor: C.cyan, borderRadius: 2, marginTop: 12 },
+  verseReference: { color: "#A9D9E5", fontSize: 10, marginTop: 9 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  sectionTitle: { fontSize: 19, fontWeight: "900", textAlign: "right" },
+  sectionSub: { fontSize: 11, textAlign: "right", marginTop: 4 },
+  liveDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#35C7DE" },
+  featureGrid: { gap: 13 },
+  featureGridWide: { flexDirection: "row", alignItems: "stretch" },
+  surahCard: { flex: 1, borderRadius: 22, padding: 18, borderWidth: 1, minHeight: 200 },
+  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  numberBadge: { width: 35, height: 35, borderRadius: 12, backgroundColor: "#E5F8FC", alignItems: "center", justifyContent: "center" },
+  numberBadgeText: { color: "#168DA5", fontSize: 10, fontWeight: "900" },
+  cardSymbol: { color: "#168DA5", fontSize: 28 },
+  cardLabel: { fontSize: 8, fontWeight: "900", letterSpacing: 1, textAlign: "right", marginTop: 16 },
+  cardTitle: { fontSize: 23, fontWeight: "900", textAlign: "right", marginTop: 5 },
+  cardMeta: { fontSize: 10, textAlign: "right", marginTop: 5 },
+  cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 18 },
+  cardAction: { color: "#168DA5", fontSize: 11, fontWeight: "900" },
+  cardArrow: { color: "#168DA5", fontSize: 17, fontWeight: "900" },
+  reciteCard: { flex: 1, borderRadius: 22, padding: 18, minHeight: 200, backgroundColor: "#EAF3FC", borderWidth: 1, borderColor: "#D3E4F5" },
+  micBadge: { width: 35, height: 35, borderRadius: 12, backgroundColor: "#D6E7F8", alignItems: "center", justifyContent: "center" },
+  mic: { color: "#397BB5", fontSize: 22, fontWeight: "900" },
+  reciteTag: { color: "#397BB5", fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  reciteTitle: { color: "#142A43", fontSize: 21, fontWeight: "900", textAlign: "right", marginTop: 15 },
+  reciteDescription: { color: "#607A92", fontSize: 11, lineHeight: 19, textAlign: "right", marginTop: 7 },
+  reciteButton: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 15 },
+  reciteButtonText: { color: "#285F98", fontSize: 11, fontWeight: "900" },
+  reciteButtonArrow: { color: "#285F98", fontSize: 17, fontWeight: "900" },
+  toolsRow: { borderRadius: 20, borderWidth: 1, paddingHorizontal: 14 },
+  tool: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 12 },
+  toolIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#E5F8FC", alignItems: "center", justifyContent: "center" },
+  listenIcon: { backgroundColor: "#F8F0DE" },
+  toolGlyph: { color: "#168DA5", fontSize: 23 },
+  toolCopy: { flex: 1 },
+  toolTitle: { fontSize: 12, fontWeight: "900", textAlign: "right" },
+  toolSub: { fontSize: 10, marginTop: 4, textAlign: "right" },
+  toolArrow: { fontSize: 17, fontWeight: "800" },
+  toolDivider: { height: 1, marginHorizontal: 4 },
+  sourceNote: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 4 },
+  sourceCheck: { color: "#168DA5", fontSize: 16, fontWeight: "900" },
+  sourceText: { flex: 1, fontSize: 10, lineHeight: 17, textAlign: "right" },
+  pressed: { opacity: 0.82 },
 });
