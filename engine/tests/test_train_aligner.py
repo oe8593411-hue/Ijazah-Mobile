@@ -19,7 +19,7 @@ class AlignerTrainingDataTests(unittest.TestCase):
             transcript_for_row({"surah": 1, "ayah_start": 1, "ayah_end": 2}, {(1, 1): "بسم الله"})
 
     def test_minimum_ctc_length_accounts_for_repeated_characters(self):
-        self.assertEqual(minimum_ctc_frames([1, 1, 2, 2, 2]), 7)
+        self.assertEqual(minimum_ctc_frames([1, 1, 2, 2, 2]), 8)
         self.assertEqual(minimum_ctc_frames([1, 2, 3]), 3)
 
     def test_split_isolation_requires_distinct_reciters_and_recordings(self):
