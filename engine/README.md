@@ -23,6 +23,33 @@ PYTHONPATH=engine uvicorn tajweed_engine.api:app --app-dir engine --host 127.0.0
 
 `GET /health` reports whether the full reference corpus loaded and separately shows `trusted_server_alignment: false`. Until a trusted server-side audio-to-word aligner is integrated, analysis intentionally returns no tajweed findings. Keep the service on a private network during development.
 
+## Local CTC word-alignment integration
+
+The engine now contains a local CTC Viterbi forced aligner. It aligns characters in the already-verified ayah text to frame-level probabilities produced by an **Ijazah-controlled TorchScript model**. It does not send audio to a third-party API and does not transcribe unknown speech. The CTC model weights are not included; without a trained, reviewed, calibrated model the API correctly refuses to produce word timings or tajweed findings.
+
+The model directory must contain both files below before the aligner can load:
+
+- `/models/quran_ctc_aligner.pt`: locally trained TorchScript model. Input is a float tensor shaped `[1, samples]` at 16 kHz; output is logits shaped `[1, frames, classes]`.
+- `/models/quran_ctc_aligner.json`: metadata matching the following contract. `vocabulary` maps each single normalized Quranic character to a unique integer ID; the blank ID is the remaining class ID. The model hash is SHA-256 of the exact `.pt` file.
+
+```json
+{
+  "task": "quran_ctc_character_alignment_v1",
+  "teacher_reviewed": true,
+  "calibrated": true,
+  "alignment_quality_passed": true,
+  "sample_rate": 16000,
+  "frame_hop_samples": 160,
+  "blank_id": 0,
+  "vocabulary": {"ا": 1, "ب": 2},
+  "minimum_mean_character_confidence": 0.75,
+  "model_sha256": "<sha256-of-the-trained-model-file>"
+}
+```
+
+The JSON is a schema example, not an operational model configuration. **Never copy the review/calibration flags into production metadata until independent teachers and held-out tests have actually passed.** The loader checks those gates, vocabulary IDs, model hash, output shape, reference coverage and confidence; missing or invalid artifacts fail closed. When alignment weights are absent, client-supplied timestamps still cannot create findings. When only the aligner is available, the API can return aligned words but will not evaluate tajweed until the separately reviewed qalqalah classifier is also configured.
+
+
 ## Dataset manifest
 
 Each JSONL line is one teacher-reviewed audio segment and requires:
