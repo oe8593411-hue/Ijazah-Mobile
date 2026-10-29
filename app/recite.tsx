@@ -141,10 +141,10 @@ export default function Recite() {
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
 
-  // Mushaf-style lines: break the text into lines of about the same length, then
-  // spread each line's words across the full width (justified), like traditional mushaf pages.
+  // Mushaf-style lines: break the text into lines of about the same length, and center
+  // each line in the column, like the traditional mushaf page layout.
   const lines = useMemo(() => {
-    const capacity = Math.max(12, Math.floor(columnWidth / 17)); // letters per line
+    const capacity = Math.max(12, Math.floor(columnWidth / 19)); // letters per line
     const out: number[][] = [];
     let cur: number[] = [];
     let len = 0;
@@ -277,7 +277,7 @@ export default function Recite() {
         {ready ? (
           <View style={s.column}>
             {lines.map((line, li) => (
-              <View key={li} style={[s.line, li === lines.length - 1 && s.lastLine]}>
+              <View key={li} style={s.line}>
                 {line.map((i) => {
                   const info = wordInfo[i];
                   if (info.marker) return <Text key={i} style={s.ayahMark}>{` ${info.num} `}</Text>;
@@ -373,9 +373,8 @@ const s = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 250, alignItems: "center" },
   column: { width: "100%", maxWidth: COLUMN_MAX },
-  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  lastLine: { justifyContent: "flex-start" },
-  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 34, lineHeight: 72, writingDirection: "rtl" },
+  line: { flexDirection: "row-reverse", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", marginBottom: 10 },
+  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 34, lineHeight: 72, marginHorizontal: 4, writingDirection: "rtl" },
   ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 16, lineHeight: 34, borderRadius: 16, overflow: "hidden" },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
