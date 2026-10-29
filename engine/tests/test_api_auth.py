@@ -111,6 +111,7 @@ class ModelReleaseGateTests(unittest.TestCase):
                 "teacher_reviewed": True,
                 "calibrated": True,
                 "validation_threshold_meets_minimum_precision": True,
+                "validation_positive_support_met": True,
                 "decision_threshold": 0.9,
                 "temperature_fitted_on_validation": True,
                 "calibration_temperature": 0.0,
@@ -132,6 +133,7 @@ class ModelReleaseGateTests(unittest.TestCase):
                 "calibrated": True,
                 "decision_threshold": 0.9,
                 "validation_threshold_meets_minimum_precision": False,
+                "validation_positive_support_met": False,
             }}
             with patch.object(api, "MODEL_PATH", path), patch.object(api.torch, "load", return_value=checkpoint):
                 api.model = None

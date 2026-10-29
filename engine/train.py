@@ -125,13 +125,19 @@ def metrics_from_probabilities(labels, probabilities, threshold):
     return {"precision": precision, "recall": recall, "f1": f1, "tp": tp, "fp": fp, "fn": fn}
 
 
-def select_decision_threshold(labels, probabilities, minimum_precision=0.90):
-    """Select an operating threshold on validation data only; never inspect test labels."""
+def select_decision_threshold(labels, probabilities, minimum_precision=0.90, minimum_positive_predictions=20):
+    """Select a validation threshold with minimum precision and prediction support."""
     if (
         isinstance(minimum_precision, bool) or not isinstance(minimum_precision, (int, float))
         or not math.isfinite(minimum_precision) or not 0.5 <= minimum_precision <= 1
     ):
         raise ValueError("minimum_precision_must_be_between_0_5_and_1")
+    if (
+        isinstance(minimum_positive_predictions, bool)
+        or not isinstance(minimum_positive_predictions, int)
+        or minimum_positive_predictions < 1
+    ):
+        raise ValueError("minimum_positive_predictions_must_be_positive_integer")
     if len(labels) != len(probabilities) or not labels:
         raise ValueError("empty_or_mismatched_probability_data")
     if any(not math.isfinite(float(p)) or not 0 <= float(p) <= 1 for p in probabilities):
@@ -142,7 +148,11 @@ def select_decision_threshold(labels, probabilities, minimum_precision=0.90):
     candidates = []
     for threshold in thresholds:
         metrics = metrics_from_probabilities(labels, probabilities, threshold)
-        if metrics["tp"] > 0 and metrics["precision"] >= minimum_precision:
+        if (
+            metrics["tp"] > 0
+            and metrics["tp"] + metrics["fp"] >= minimum_positive_predictions
+            and metrics["precision"] >= minimum_precision
+        ):
             candidates.append((threshold, metrics))
     if not candidates:
         safe_threshold = 1.0
@@ -150,6 +160,9 @@ def select_decision_threshold(labels, probabilities, minimum_precision=0.90):
             "threshold": safe_threshold,
             "metrics": metrics_from_probabilities(labels, probabilities, safe_threshold),
             "meets_minimum_precision": False,
+            "meets_minimum_positive_predictions": False,
+            "positive_predictions": metrics_from_probabilities(labels, probabilities, safe_threshold)["tp"] + metrics_from_probabilities(labels, probabilities, safe_threshold)["fp"],
+            "minimum_positive_predictions": minimum_positive_predictions,
             "minimum_precision": float(minimum_precision),
         }
     threshold, metrics = max(
@@ -160,6 +173,9 @@ def select_decision_threshold(labels, probabilities, minimum_precision=0.90):
         "threshold": threshold,
         "metrics": metrics,
         "meets_minimum_precision": True,
+        "meets_minimum_positive_predictions": True,
+        "positive_predictions": metrics["tp"] + metrics["fp"],
+        "minimum_positive_predictions": minimum_positive_predictions,
         "minimum_precision": float(minimum_precision),
     }
 
@@ -174,12 +190,15 @@ def main():
     p.add_argument("--output", default="models/qalqalah_classifier.pt")
     p.add_argument("--epochs", type=int, default=20); p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--minimum-validation-precision", type=float, default=0.90)
+    p.add_argument("--minimum-validation-positive-predictions", type=int, default=20)
     p.add_argument("--validate-only", action="store_true", help="validate the full manifest and report split counts without training")
     a=p.parse_args()
     if a.epochs < 1 or a.batch_size < 1:
         raise SystemExit("epochs and batch-size must be positive")
     if not 0.5 <= a.minimum_validation_precision <= 1:
         raise SystemExit("minimum-validation-precision must be between 0.5 and 1")
+    if a.minimum_validation_positive_predictions < 1:
+        raise SystemExit("minimum-validation-positive-predictions must be positive")
     torch.manual_seed(42)
     root=Path(a.data_root).resolve()
     rows=[json.loads(x) for x in Path(a.manifest).read_text(encoding="utf-8").splitlines() if x.strip()]
@@ -267,7 +286,8 @@ def main():
         validation_logits, temperature_fit["temperature"]
     )
     calibration = select_decision_threshold(
-        validation_labels, validation_probabilities, a.minimum_validation_precision
+        validation_labels, validation_probabilities, a.minimum_validation_precision,
+        a.minimum_validation_positive_predictions,
     )
     threshold = calibration["threshold"]
     validation_at_threshold = calibration["metrics"]
@@ -295,6 +315,8 @@ def main():
         "temperature_validation_nll_after":temperature_fit["validation_nll_after"],
         "temperature_validation_examples":temperature_fit["validation_examples"],
         "minimum_validation_precision":a.minimum_validation_precision,
+        "minimum_validation_positive_predictions":a.minimum_validation_positive_predictions,
+        "validation_positive_support_met":calibration["meets_minimum_positive_predictions"],
         "validation_threshold_meets_minimum_precision":calibration["meets_minimum_precision"],
         "validation_f1_at_0_5_before_temperature":best,
         "validation_at_threshold":validation_at_threshold,

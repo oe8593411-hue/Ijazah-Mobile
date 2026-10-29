@@ -50,6 +50,7 @@ def load_model():
             or info.get("teacher_reviewed") is not True
             or info.get("calibrated") is not True
             or info.get("validation_threshold_meets_minimum_precision") is not True
+            or info.get("validation_positive_support_met") is not True
             or info.get("temperature_fitted_on_validation") is not True
             or isinstance(temperature, bool)
             or not isinstance(temperature, (int, float))

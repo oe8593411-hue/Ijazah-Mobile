@@ -9,8 +9,11 @@ class ClassifierThresholdSelectionTests(unittest.TestCase):
             labels=[0, 1, 0, 1],
             probabilities=[0.2, 0.9, 0.8, 0.95],
             minimum_precision=0.9,
+            minimum_positive_predictions=2,
         )
         self.assertTrue(result["meets_minimum_precision"])
+        self.assertTrue(result["meets_minimum_positive_predictions"])
+        self.assertEqual(result["positive_predictions"], 2)
         self.assertGreaterEqual(result["metrics"]["precision"], 0.9)
         self.assertEqual(result["metrics"]["tp"], 2)
         self.assertEqual(result["metrics"]["fp"], 0)
@@ -24,6 +27,17 @@ class ClassifierThresholdSelectionTests(unittest.TestCase):
         )
         self.assertFalse(result["meets_minimum_precision"])
         self.assertEqual(result["threshold"], 1.0)
+
+    def test_high_precision_on_too_few_predictions_does_not_pass_gate(self):
+        result = select_decision_threshold(
+            labels=[0, 1],
+            probabilities=[0.1, 0.99],
+            minimum_precision=0.9,
+            minimum_positive_predictions=20,
+        )
+        self.assertFalse(result["meets_minimum_precision"])
+        self.assertFalse(result["meets_minimum_positive_predictions"])
+        self.assertEqual(result["minimum_positive_predictions"], 20)
 
     def test_metrics_reject_empty_or_invalid_inputs(self):
         with self.assertRaisesRegex(ValueError, "empty_or_mismatched"):
