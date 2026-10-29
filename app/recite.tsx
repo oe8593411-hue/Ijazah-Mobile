@@ -272,6 +272,11 @@ export default function Recite() {
     setNotice("");
   }
 
+  function openSurahs() {
+    stopListening();
+    router.push({ pathname: "/surahs", params: { current: String(surahNumber) } });
+  }
+
   function goSurah(n: number) {
     stopListening();
     router.replace({ pathname: "/recite", params: { surah: String(n), ayah: "1", scope: "surah" } });
@@ -372,19 +377,27 @@ export default function Recite() {
         {!!notice && <Text style={s.notice}>{notice}</Text>}
         <Text style={s.status}>{status}</Text>
         <View style={s.dock}>
-          <Pressable onPress={restart} disabled={restartDisabled} style={[s.dockSide, restartDisabled && s.disabled]}>
-            <Text style={s.dockIcon}>↻</Text>
-            <Text style={s.dockLabel}>إعادة</Text>
-          </Pressable>
+          <View style={s.dockEnd}>
+            <Pressable onPress={restart} disabled={restartDisabled} style={[s.dockSide, restartDisabled && s.disabled]}>
+              <Text style={s.dockIcon}>↻</Text>
+              <Text style={s.dockLabel}>إعادة</Text>
+            </Pressable>
+          </View>
 
           <Pressable onPress={toggle} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.disabled]}>
             {recording ? <View style={s.stopSquare} /> : <Text style={s.micIcon}>🎙️</Text>}
           </Pressable>
 
-          <Pressable onPress={() => setHidden(v => !v)} style={s.dockSide}>
-            <Text style={s.dockIcon}>{hidden ? "👁" : "🙈"}</Text>
-            <Text style={s.dockLabel}>{hidden ? "إظهار الآيات" : "إخفاء الآيات"}</Text>
-          </Pressable>
+          <View style={[s.dockEnd, { justifyContent: "flex-end" }]}>
+            <Pressable onPress={openSurahs} disabled={recording} style={[s.dockSide, recording && s.disabled]}>
+              <Text style={s.dockIcon}>📖</Text>
+              <Text style={s.dockLabel}>السورة</Text>
+            </Pressable>
+            <Pressable onPress={() => setHidden(v => !v)} style={s.dockSide}>
+              <Text style={s.dockIcon}>{hidden ? "👁" : "🙈"}</Text>
+              <Text style={s.dockLabel}>{hidden ? "إظهار" : "إخفاء"}</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -440,7 +453,8 @@ const s = StyleSheet.create({
   notice: { textAlign: "center", color: C.gold, fontSize: 11, lineHeight: 17, marginBottom: 6 },
   status: { textAlign: "center", fontWeight: "600", color: C.ink, fontSize: 13 },
   dock: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, backgroundColor: C.card, borderRadius: 40, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: C.line },
-  dockSide: { width: 96, alignItems: "center", gap: 2 },
+  dockSide: { alignItems: "center", gap: 2, paddingHorizontal: 6 },
+  dockEnd: { flex: 1, flexDirection: "row", alignItems: "center" },
   dockIcon: { fontSize: 20, color: C.ink },
   dockLabel: { color: C.muted, fontSize: 11, fontWeight: "600" },
   mic: { width: 84, height: 84, borderRadius: 42, backgroundColor: C.gold, alignItems: "center", justifyContent: "center", shadowColor: C.gold, shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
