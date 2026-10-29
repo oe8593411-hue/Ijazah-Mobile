@@ -33,20 +33,79 @@ class Segments(Dataset):
             segment = np.pad(segment, (0, max_samples - len(segment)))
         return log_mel(segment).squeeze(0), torch.tensor(int(r["label"]), dtype=torch.long)
 
-def predict_probabilities(model, loader, device):
-    """Collect model probabilities and labels without making threshold decisions."""
+def predict_logits(model, loader, device):
+    """Collect raw finite binary logits and labels without threshold decisions."""
     model.eval()
-    labels, probabilities = [], []
+    labels, logits_rows = [], []
     with torch.inference_mode():
         for x, y in loader:
             logits = model(x.to(device))
             if logits.ndim != 2 or logits.shape[1] != 2 or not torch.isfinite(logits).all():
                 raise ValueError("classifier_output_invalid")
-            prob = torch.softmax(logits.float(), dim=-1)[:, 1].cpu().tolist()
-            probabilities.extend(float(value) for value in prob)
+            logits_rows.extend(logits.float().cpu().tolist())
             labels.extend(int(value) for value in y.tolist())
-    return labels, probabilities
+    if not labels:
+        raise ValueError("empty_probability_data")
+    return labels, logits_rows
 
+
+def probabilities_from_logits(logits, temperature=1.0):
+    """Return positive-class probabilities after a bounded temperature transform."""
+    if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+        raise ValueError("invalid_calibration_temperature")
+    if not math.isfinite(temperature) or not 0.05 <= temperature <= 20.0:
+        raise ValueError("invalid_calibration_temperature")
+    tensor = torch.as_tensor(logits, dtype=torch.float64)
+    if tensor.ndim != 2 or tensor.shape[1] != 2 or tensor.shape[0] == 0:
+        raise ValueError("invalid_classifier_logits")
+    if not torch.isfinite(tensor).all():
+        raise ValueError("invalid_classifier_logits")
+    return torch.softmax(tensor / float(temperature), dim=-1)[:, 1].tolist()
+
+
+def fit_temperature(labels, logits, max_iter=50):
+    """Fit one scalar temperature on validation logits; this is not approval to release."""
+    if len(labels) != len(logits) or not labels:
+        raise ValueError("empty_or_mismatched_calibration_data")
+    if any(isinstance(label, bool) or label not in (0, 1) for label in labels):
+        raise ValueError("invalid_calibration_labels")
+    logits_tensor = torch.as_tensor(logits, dtype=torch.float64)
+    label_tensor = torch.as_tensor(labels, dtype=torch.long)
+    if logits_tensor.shape != (len(labels), 2) or not torch.isfinite(logits_tensor).all():
+        raise ValueError("invalid_classifier_logits")
+    if isinstance(max_iter, bool) or not isinstance(max_iter, int) or not 1 <= max_iter <= 500:
+        raise ValueError("invalid_temperature_optimizer_iterations")
+
+    before = float(torch.nn.functional.cross_entropy(logits_tensor, label_tensor).item())
+    log_temperature = nn.Parameter(torch.zeros((), dtype=torch.float64))
+    optimizer = torch.optim.LBFGS(
+        [log_temperature], lr=0.1, max_iter=max_iter, line_search_fn="strong_wolfe"
+    )
+
+    def closure():
+        optimizer.zero_grad(set_to_none=True)
+        temperature = torch.exp(log_temperature).clamp(min=0.05, max=20.0)
+        loss = torch.nn.functional.cross_entropy(logits_tensor / temperature, label_tensor)
+        if not torch.isfinite(loss):
+            raise ValueError("temperature_fit_loss_non_finite")
+        loss.backward()
+        return loss
+
+    optimizer.step(closure)
+    temperature = float(torch.exp(log_temperature.detach()).clamp(min=0.05, max=20.0).item())
+    after = float(torch.nn.functional.cross_entropy(logits_tensor / temperature, label_tensor).item())
+    return {
+        "temperature": temperature,
+        "validation_nll_before": before,
+        "validation_nll_after": after,
+        "validation_examples": len(labels),
+        "temperature_fitted_on_validation": True,
+    }
+
+
+def predict_probabilities(model, loader, device, temperature=1.0):
+    labels, logits = predict_logits(model, loader, device)
+    return labels, probabilities_from_logits(logits, temperature)
 
 def metrics_from_probabilities(labels, probabilities, threshold):
     if len(labels) != len(probabilities) or not labels:
@@ -202,15 +261,23 @@ def main():
             best_state={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
     # Select the operating threshold using validation only, then measure the held-out test once.
     model.load_state_dict(best_state); model.eval()
-    validation_labels, validation_probabilities = predict_probabilities(model, vl, device)
+    validation_labels, validation_logits = predict_logits(model, vl, device)
+    temperature_fit = fit_temperature(validation_labels, validation_logits)
+    validation_probabilities = probabilities_from_logits(
+        validation_logits, temperature_fit["temperature"]
+    )
     calibration = select_decision_threshold(
         validation_labels, validation_probabilities, a.minimum_validation_precision
     )
     threshold = calibration["threshold"]
     validation_at_threshold = calibration["metrics"]
-    test_labels, test_probabilities = predict_probabilities(model, testl, device)
+
+    # Only after model and threshold selection, evaluate held-out data once.
+    test_labels, test_logits = predict_logits(model, testl, device)
+    test_probabilities = probabilities_from_logits(test_logits, temperature_fit["temperature"])
     heldout = metrics_from_probabilities(test_labels, test_probabilities, threshold)
     print(json.dumps({
+        "temperature_fit": temperature_fit,
         "validation_threshold": threshold,
         "validation_at_threshold": validation_at_threshold,
         "minimum_validation_precision": a.minimum_validation_precision,
@@ -219,16 +286,21 @@ def main():
     print(json.dumps({"heldout_test": heldout, "decision_threshold": threshold}, sort_keys=True))
     out=Path(a.output); out.parent.mkdir(parents=True,exist_ok=True)
     torch.save({"state_dict":best_state,"metadata":{
-        "task":"qalqalah_segment_v1","model_version":"ijazah-qalqalah-cnn-v0.3",
+        "task":"qalqalah_segment_v1","model_version":"ijazah-qalqalah-cnn-v0.4",
         "teacher_reviewed":False,"calibrated":False,
         "decision_threshold":threshold,
+        "calibration_temperature":temperature_fit["temperature"],
+        "temperature_fitted_on_validation":True,
+        "temperature_validation_nll_before":temperature_fit["validation_nll_before"],
+        "temperature_validation_nll_after":temperature_fit["validation_nll_after"],
+        "temperature_validation_examples":temperature_fit["validation_examples"],
         "minimum_validation_precision":a.minimum_validation_precision,
         "validation_threshold_meets_minimum_precision":calibration["meets_minimum_precision"],
-        "validation_f1_at_0_5":best,
+        "validation_f1_at_0_5_before_temperature":best,
         "validation_at_threshold":validation_at_threshold,
         "heldout_test":heldout,
-        "note":"Research checkpoint only; independent review and probability calibration still required."
+        "note":"Research checkpoint only; independent reviewer sign-off is still required."
     }},out)
-    print(f"Saved research checkpoint to {out}; release gates remain closed pending independent review and calibration.")
+    print(f"Saved research checkpoint to {out}; release gates remain closed pending independent review.")
 if __name__=="__main__":
     main()

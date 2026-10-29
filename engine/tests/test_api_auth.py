@@ -102,6 +102,26 @@ class ModelReleaseGateTests(unittest.TestCase):
             api.load_model()
         self.assertIsNone(api.model)
 
+    def test_model_temperature_metadata_must_be_valid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.pt"
+            path.touch()
+            checkpoint = {"metadata": {
+                "task": "qalqalah_segment_v1",
+                "teacher_reviewed": True,
+                "calibrated": True,
+                "validation_threshold_meets_minimum_precision": True,
+                "decision_threshold": 0.9,
+                "temperature_fitted_on_validation": True,
+                "calibration_temperature": 0.0,
+            }}
+            with patch.object(api, "MODEL_PATH", path), patch.object(api.torch, "load", return_value=checkpoint):
+                api.model = None
+                api.metadata = {}
+                api.load_model()
+        self.assertIsNone(api.model)
+        self.assertEqual(api.metadata, {})
+
     def test_validation_precision_gate_is_required_even_when_other_flags_are_true(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "model.pt"

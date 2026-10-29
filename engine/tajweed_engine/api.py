@@ -44,11 +44,17 @@ def load_model():
         checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True)
         info = checkpoint.get("metadata", {})
         threshold = info.get("decision_threshold")
+        temperature = info.get("calibration_temperature")
         if (
             info.get("task") != "qalqalah_segment_v1"
             or info.get("teacher_reviewed") is not True
             or info.get("calibrated") is not True
             or info.get("validation_threshold_meets_minimum_precision") is not True
+            or info.get("temperature_fitted_on_validation") is not True
+            or isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not math.isfinite(temperature)
+            or not 0.05 <= temperature <= 20.0
             or not isinstance(threshold, (int, float))
             or isinstance(threshold, bool)
             or not math.isfinite(threshold)
@@ -220,7 +226,7 @@ def score_aligned_candidates(
                 or not torch.isfinite(logits).all()
             ):
                 raise HTTPException(status_code=503, detail="tajweed_model_output_invalid")
-            confidence = float(torch.softmax(logits.float(), dim=-1)[0, 1].item())
+            confidence = float(torch.softmax(logits.float() / float(metadata["calibration_temperature"]), dim=-1)[0, 1].item())
         if not math.isfinite(confidence):
             raise HTTPException(status_code=503, detail="tajweed_model_output_invalid")
         if confidence >= threshold:

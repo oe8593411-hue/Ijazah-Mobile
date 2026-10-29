@@ -34,3 +34,31 @@ class ClassifierThresholdSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClassifierTemperatureScalingTests(unittest.TestCase):
+    def test_temperature_fit_returns_finite_bounded_value_and_nll(self):
+        from train import fit_temperature
+
+        logits = [[0.0, 4.0], [4.0, 0.0], [0.0, 2.0], [2.0, 0.0]]
+        labels = [1, 0, 0, 1]
+        result = fit_temperature(labels, logits)
+        self.assertTrue(result["temperature_fitted_on_validation"])
+        self.assertGreaterEqual(result["temperature"], 0.05)
+        self.assertLessEqual(result["temperature"], 20.0)
+        self.assertLess(result["validation_nll_after"], result["validation_nll_before"])
+
+    def test_temperature_scaling_preserves_probability_bounds(self):
+        from train import probabilities_from_logits
+
+        probabilities = probabilities_from_logits([[0.0, 4.0], [4.0, 0.0]], 2.0)
+        self.assertEqual(len(probabilities), 2)
+        self.assertTrue(all(0 <= p <= 1 for p in probabilities))
+        self.assertGreater(probabilities[0], probabilities[1])
+
+    def test_invalid_temperature_is_rejected(self):
+        from train import probabilities_from_logits
+
+        for temperature in (0, float("nan"), float("inf"), True):
+            with self.subTest(temperature=temperature), self.assertRaises(ValueError):
+                probabilities_from_logits([[0.0, 1.0]], temperature)
