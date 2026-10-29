@@ -6,16 +6,17 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import { SURAHS } from "../src/quran/surahs";
 
 const C = {
-  bg: "#FFFFFF", ink: "#0F2233", muted: "#7B8794", line: "#EEF1F4",
-  teal: "#0FA3B1", tealSoft: "#E3F6F8", tealInk: "#0B7F8B",
-  ok: "#12A150", bad: "#E0413B", skipped: "#E08A00", mask: "#EEF2F5",
-  cursor: "#FFF3C4", danger: "#F05A4F", white: "#FFFFFF",
+  bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
+  ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)",
+  ok: "#5FD38A", bad: "#FF6B6B", skipped: "#F5B041", mask: "#34373E",
+  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F",
 };
 const QURAN_FONT = Platform.select({
   ios: "Geeza Pro",
   android: "serif",
-  default: "'Amiri', 'Scheherazade New', 'Traditional Arabic', serif",
+  default: "'Amiri Quran', 'Amiri', 'Scheherazade New', serif",
 });
+const COLUMN_MAX = 560;
 
 // ---------- Arabic matching helpers ----------
 
@@ -98,14 +99,14 @@ export default function Recite() {
   const state = useAudioRecorderState(recorder);
   const recording = state.isRecording;
 
-  // Web only: load the Amiri Quran font so the mushaf looks like a mushaf.
+  // Web only: load the Amiri Quran font (SIL OFL) for the mushaf text.
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
-    if (document.getElementById("amiri-font")) return;
+    if (document.getElementById("amiri-quran-font")) return;
     const link = document.createElement("link");
-    link.id = "amiri-font";
+    link.id = "amiri-quran-font";
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap";
+    link.href = "https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:wght@400;700&display=swap";
     document.head.appendChild(link);
   }, []);
 
@@ -138,10 +139,12 @@ export default function Recite() {
     [wordInfo]
   );
 
+  const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
+
   // Mushaf-style lines: break the text into lines of about the same length, then
   // spread each line's words across the full width (justified), like traditional mushaf pages.
   const lines = useMemo(() => {
-    const capacity = Math.max(12, Math.floor((screenWidth - 48) / 15)); // letters per line
+    const capacity = Math.max(12, Math.floor(columnWidth / 17)); // letters per line
     const out: number[][] = [];
     let cur: number[] = [];
     let len = 0;
@@ -153,7 +156,7 @@ export default function Recite() {
     });
     if (cur.length) out.push(cur);
     return out;
-  }, [wordInfo, screenWidth]);
+  }, [wordInfo, columnWidth]);
 
   const tracked = useMemo(() => {
     if (!expectedIdx.length || !heardText) return null;
@@ -175,6 +178,7 @@ export default function Recite() {
   const needReview = expectedIdx
     .filter(i => byToken[i] && byToken[i].state !== "ok")
     .slice(0, 8);
+  const progress = expectedIdx.length && tracked ? Math.min(1, tracked.cursor / expectedIdx.length) : 0;
 
   // ---------- Live word recognition (browser) ----------
 
@@ -248,19 +252,30 @@ export default function Recite() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="dark" />
-      <View style={s.header}>
+      <StatusBar style="light" />
+
+      <View style={s.topBar}>
         <Pressable onPress={() => router.back()} style={s.backButton}><Text style={s.back}>›</Text></Pressable>
-        <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>{surahName ? `سورة ${surahName}` : "التسميع"}</Text>
-          <Text style={s.headerSub}>{recording ? `● ${timer}` : "رواية حفص عن عاصم"}</Text>
+        <View style={s.titleBlock}>
+          <Text style={s.title} numberOfLines={1}>{surahName ? `سورة ${surahName}` : "التسميع"}</Text>
+          <Text style={s.subtitle} numberOfLines={1}>
+            {recording ? `● ${timer}` : `${fullSurah ? "السورة كاملة" : `الآية ${startAyah}`} • حفص عن عاصم`}
+          </Text>
         </View>
-        <View style={s.headerSpacer} />
+        <View style={s.segment}>
+          <Pressable onPress={() => setHidden(false)} style={[s.segItem, !hidden && s.segActive]}>
+            <Text style={[s.segText, !hidden && s.segTextActive]}>الآيات</Text>
+          </Pressable>
+          <Pressable onPress={() => setHidden(true)} style={[s.segItem, hidden && s.segActive]}>
+            <Text style={[s.segText, hidden && s.segTextActive]}>مخفية</Text>
+          </Pressable>
+        </View>
       </View>
+      <View style={s.progressTrack}><View style={[s.progressFill, { width: `${progress * 100}%` }]} /></View>
 
       <ScrollView style={s.body} contentContainerStyle={s.content}>
         {ready ? (
-          <View style={s.page}>
+          <View style={s.column}>
             {lines.map((line, li) => (
               <View key={li} style={[s.line, li === lines.length - 1 && s.lastLine]}>
                 {line.map((i) => {
@@ -274,7 +289,7 @@ export default function Recite() {
                   else if (result?.state === "bad") style.push({ color: C.bad });
                   else if (result?.state === "skipped") style.push({ color: C.skipped });
                   if (isCursor) style.push(s.cursor);
-                  // With the mushaf hidden, show what the reader actually said for wrong words.
+                  // With the verses hidden, show what the reader actually said for wrong words.
                   const shown = hidden && result?.state === "bad" && result.heard ? result.heard : info.text;
                   return <Text key={i} style={style}>{shown}</Text>;
                 })}
@@ -312,18 +327,18 @@ export default function Recite() {
         {!!notice && <Text style={s.notice}>{notice}</Text>}
         <Text style={s.status}>{status}</Text>
         <View style={s.dock}>
-          <Pressable onPress={() => setHidden(v => !v)} style={s.dockSide}>
-            <Text style={s.dockIcon}>{hidden ? "👁" : "🙈"}</Text>
-            <Text style={s.dockLabel}>{hidden ? "إظهار المصحف" : "إخفاء المصحف"}</Text>
+          <Pressable onPress={restart} disabled={restartDisabled} style={[s.dockSide, restartDisabled && s.disabled]}>
+            <Text style={s.dockIcon}>↻</Text>
+            <Text style={s.dockLabel}>إعادة</Text>
           </Pressable>
 
-          <Pressable onPress={toggle} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.micDisabled]}>
+          <Pressable onPress={toggle} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.disabled]}>
             {recording ? <View style={s.stopSquare} /> : <Text style={s.micIcon}>🎙️</Text>}
           </Pressable>
 
-          <Pressable onPress={restart} disabled={restartDisabled} style={[s.dockSide, restartDisabled && s.micDisabled]}>
-            <Text style={s.dockIcon}>↻</Text>
-            <Text style={s.dockLabel}>إعادة</Text>
+          <Pressable onPress={() => setHidden(v => !v)} style={s.dockSide}>
+            <Text style={s.dockIcon}>{hidden ? "👁" : "🙈"}</Text>
+            <Text style={s.dockLabel}>{hidden ? "إظهار الآيات" : "إخفاء الآيات"}</Text>
           </Pressable>
         </View>
       </View>
@@ -342,42 +357,48 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  header: { paddingTop: 52, paddingHorizontal: 12, paddingBottom: 12, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: C.line },
-  backButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center" },
-  back: { color: C.ink, fontSize: 34, lineHeight: 36 },
-  headerSpacer: { width: 42 },
-  headerCenter: { flex: 1, alignItems: "center" },
-  headerTitle: { color: C.ink, fontSize: 20, fontWeight: "700", fontFamily: QURAN_FONT },
-  headerSub: { color: C.muted, fontSize: 12, marginTop: 2 },
+  topBar: { paddingTop: 52, paddingHorizontal: 12, paddingBottom: 12, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.bar },
+  backButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  back: { color: C.gold, fontSize: 34, lineHeight: 36 },
+  titleBlock: { flex: 1, alignItems: "flex-start" },
+  title: { color: C.ink, fontSize: 17, fontWeight: "700" },
+  subtitle: { color: C.muted, fontSize: 11, marginTop: 2 },
+  segment: { flexDirection: "row", backgroundColor: C.card, borderRadius: 20, padding: 3, borderWidth: 1, borderColor: C.line },
+  segItem: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  segActive: { backgroundColor: C.gold },
+  segText: { color: C.muted, fontSize: 12, fontWeight: "600" },
+  segTextActive: { color: C.dark },
+  progressTrack: { height: 3, backgroundColor: C.line },
+  progressFill: { height: 3, backgroundColor: C.gold },
   body: { flex: 1 },
-  content: { paddingHorizontal: 22, paddingTop: 26, paddingBottom: 250 },
-  page: { backgroundColor: C.bg, paddingVertical: 6 },
-  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 250, alignItems: "center" },
+  column: { width: "100%", maxWidth: COLUMN_MAX },
+  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   lastLine: { justifyContent: "flex-start" },
-  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 32, lineHeight: 66, writingDirection: "rtl" },
-  ayahMark: { color: C.tealInk, backgroundColor: C.tealSoft, fontSize: 17, lineHeight: 30, borderRadius: 14, overflow: "hidden" },
+  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 34, lineHeight: 72, writingDirection: "rtl" },
+  ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 16, lineHeight: 34, borderRadius: 16, overflow: "hidden" },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
   loading: { textAlign: "center", color: C.muted, marginTop: 40 },
-  summary: { backgroundColor: C.white, borderRadius: 22, padding: 18, marginTop: 22, borderWidth: 1, borderColor: C.line, shadowColor: "#0F2233", shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
-  summaryTitle: { color: C.ink, fontSize: 16, fontWeight: "800", textAlign: "right" },
+  summary: { width: "100%", maxWidth: COLUMN_MAX, backgroundColor: C.card, borderRadius: 20, padding: 18, marginTop: 24, borderWidth: 1, borderColor: C.line },
+  summaryTitle: { color: C.gold, fontSize: 16, fontWeight: "800", textAlign: "right" },
   statsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  stat: { flex: 1, backgroundColor: "#F6F8FA", borderRadius: 14, paddingVertical: 10, alignItems: "center" },
+  stat: { flex: 1, backgroundColor: C.bar, borderRadius: 14, paddingVertical: 10, alignItems: "center" },
   statValue: { fontSize: 18, fontWeight: "800" },
   statLabel: { color: C.muted, fontSize: 10, marginTop: 3 },
   reviewTitle: { color: C.ink, fontWeight: "700", fontSize: 13, textAlign: "right", marginTop: 16 },
-  reviewRow: { color: "#8A5A00", fontSize: 13, lineHeight: 22, textAlign: "right", marginTop: 4 },
+  reviewRow: { color: C.skipped, fontSize: 13, lineHeight: 22, textAlign: "right", marginTop: 4 },
   disclaimer: { color: C.muted, fontSize: 10, lineHeight: 17, textAlign: "right", marginTop: 14 },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 10, paddingBottom: 28, paddingHorizontal: 18, backgroundColor: C.bg, borderTopWidth: 1, borderTopColor: C.line },
-  notice: { textAlign: "center", color: "#8A5A00", fontSize: 11, lineHeight: 17, marginBottom: 6 },
+  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 10, paddingBottom: 28, paddingHorizontal: 18, backgroundColor: C.bar, borderTopWidth: 1, borderTopColor: C.line },
+  notice: { textAlign: "center", color: C.gold, fontSize: 11, lineHeight: 17, marginBottom: 6 },
   status: { textAlign: "center", fontWeight: "600", color: C.ink, fontSize: 13 },
-  dock: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, backgroundColor: "#F6F8FA", borderRadius: 40, paddingHorizontal: 14, paddingVertical: 8 },
+  dock: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, backgroundColor: C.card, borderRadius: 40, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: C.line },
   dockSide: { width: 96, alignItems: "center", gap: 2 },
-  dockIcon: { fontSize: 20 },
+  dockIcon: { fontSize: 20, color: C.ink },
   dockLabel: { color: C.muted, fontSize: 11, fontWeight: "600" },
-  mic: { width: 84, height: 84, borderRadius: 42, backgroundColor: C.teal, alignItems: "center", justifyContent: "center", shadowColor: C.teal, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
+  mic: { width: 84, height: 84, borderRadius: 42, backgroundColor: C.gold, alignItems: "center", justifyContent: "center", shadowColor: C.gold, shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
   micOn: { backgroundColor: C.danger, shadowColor: C.danger },
-  micDisabled: { opacity: 0.45 },
+  disabled: { opacity: 0.4 },
   micIcon: { fontSize: 34 },
-  stopSquare: { width: 26, height: 26, borderRadius: 6, backgroundColor: C.white },
+  stopSquare: { width: 26, height: 26, borderRadius: 6, backgroundColor: "#FFFFFF" },
 });
