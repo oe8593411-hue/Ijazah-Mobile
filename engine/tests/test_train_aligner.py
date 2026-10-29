@@ -6,7 +6,7 @@ from train_aligner import build_vocabulary, minimum_ctc_frames, transcript_for_r
 class AlignerTrainingDataTests(unittest.TestCase):
     def test_vocabulary_is_dense_and_uses_zero_for_ctc_blank(self):
         vocabulary = build_vocabulary({(1, 1): "بِسْمِ اللَّهِ", (1, 2): "الحمد لله"})
-        self.assertEqual(sorted(vocabulary.values()), list(range(1, len(vocabulary) + 1))
+        self.assertEqual(sorted(vocabulary.values()), list(range(1, len(vocabulary) + 1)))
         self.assertIn("ب", vocabulary)
 
     def test_transcript_is_built_only_from_verified_corpus(self):

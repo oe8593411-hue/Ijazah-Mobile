@@ -29,7 +29,7 @@ The engine now contains a local CTC Viterbi forced aligner. It aligns characters
 
 The model directory must contain both files below before the aligner can load:
 
-- `/models/quran_ctc_aligner.pt`: locally trained TorchScript model. Input is a float tensor shaped `[1, samples]` at 16 kHz; output is logits shaped `[1, frames, classes]`.
+- `/models/quran_ctc_aligner.pt`: locally trained TorchScript model. Input is a log-mel tensor shaped `[1, 1, 80, frames]`; output is logits shaped `[1, frames, classes]`.
 - `/models/quran_ctc_aligner.json`: metadata matching the following contract. `vocabulary` maps each single normalized Quranic character to a unique integer ID; the blank ID is the remaining class ID. The model hash is SHA-256 of the exact `.pt` file.
 
 ```json
@@ -48,6 +48,27 @@ The model directory must contain both files below before the aligner can load:
 ```
 
 The JSON is a schema example, not an operational model configuration. **Never copy the review/calibration flags into production metadata until independent teachers and held-out tests have actually passed.** The loader checks those gates, vocabulary IDs, model hash, output shape, reference coverage and confidence; missing or invalid artifacts fail closed. When alignment weights are absent, client-supplied timestamps still cannot create findings. When only the aligner is available, the API can return aligned words but will not evaluate tajweed until the separately reviewed qalqalah classifier is also configured.
+
+
+### Training the local alignment model
+
+Use only recordings with explicit training permission and reciter consent. Each manifest line identifies a surah and a contiguous ayah range; transcript strings are not accepted from the manifest. The trainer takes exact text from the pinned Quran corpus, checks independent teacher confirmations of the recording/reference pairing, and requires train/validation/test splits with separate reciters and recordings.
+
+Required fields: audio_path, surah, ayah_start, ayah_end, split, teacher_reviewed, recording_id, reciter_id, rights, and reviewers. The rights object must include license, reference, training_rights_confirmed=true, and consent_confirmed=true. At least two different reviewers must each provide reference_confirmed=true and an ISO review date.
+
+Example schema (permission references and reviews must correspond to real records):
+```json
+{"audio_path":"clips/reader001-fatiha.wav","surah":1,"ayah_start":1,"ayah_end":7,"split":"train","teacher_reviewed":true,"recording_id":"clip-001","reciter_id":"reader-001","rights":{"license":"written_permission","reference":"permission-record-001","training_rights_confirmed":true,"consent_confirmed":true},"reviewers":[{"reviewer_id":"teacher-a","reference_confirmed":true,"reviewed_at":"2026-10-01"},{"reviewer_id":"teacher-b","reference_confirmed":true,"reviewed_at":"2026-10-02"}]}
+```
+
+From the repository root, validate a real manifest first and then train:
+```bash
+export IJAZAH_QURAN_CORPUS_PATH="$PWD/src/quran/verified-corpus.json"
+PYTHONPATH=engine python engine/train_aligner.py --manifest data/aligner-manifest.jsonl --data-root data --validate-only
+PYTHONPATH=engine python engine/train_aligner.py --manifest data/aligner-manifest.jsonl --data-root data --output-dir models --epochs 20 --batch-size 2
+```
+
+The trainer chooses a checkpoint by validation CTC loss and measures the held-out test loss after selection. It writes a TorchScript model and its SHA-256 sidecar, but deliberately leaves teacher_reviewed, calibrated, and alignment_quality_passed set to false. Those flags must not be changed just because training completed; independent alignment-quality review and confidence calibration are still required before the API will load the model.
 
 
 ## Dataset manifest
@@ -96,7 +117,7 @@ Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` as a long random server-side secret when
 A tab-separated TSV corpus is accepted only when `IJAZAH_ALLOW_UNPINNED_TSV=true` is explicitly set, for isolated local tests or separately managed deployments; each line contains `surah<TAB>ayah<TAB>exact Uthmani ayah text`. The production Docker image pins this flag to `false` and uses the exact versioned JSON corpus from the app. Never enable unpinned TSV loading in production or replace the reference with generated/unverified text.
 
 ## Critical integration gap
-The mobile app currently provides textual rule candidates and can submit timestamps, but client-supplied timestamps are untrusted and are not used to issue findings. The API deliberately returns no findings until a server-side, validated audio-to-word alignment stage is integrated. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
+The mobile app can submit textual rule candidates and timestamps, but client timestamps are stripped and never used as alignment evidence. The local CTC alignment algorithm and supervised training path are now present; no trained alignment weights or reviewed qalqalah checkpoint are included, so production findings remain disabled until the required release gates pass. Text transcription or alignment alone is not evidence that a tajweed rule was violated.
 
 ## Deployment and security
 Deploy this Python/PyTorch service separately from the Expo/Vercel frontend on a container-capable host. Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` only as a server-side secret; never include it in browser or mobile code. Before real users: add authenticated caller identity, shared rate limiting, concurrency limits, request logging without raw audio, a privacy/retention policy, and monitoring. The current in-memory app scaffold is not production-ready.
