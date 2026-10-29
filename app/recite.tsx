@@ -155,22 +155,39 @@ export default function Recite() {
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
 
-  // Mushaf-style lines: break the text into lines of about the same length, and center
-  // each line in the column, like the traditional mushaf page layout.
+  // Measure each word with the mushaf font (web canvas) so the lines really fill the column.
+  const [wordWidths, setWordWidths] = useState<number[] | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined" || !wordInfo.length) return;
+    let cancelled = false;
+    const measure = () => {
+      const ctx = document.createElement("canvas").getContext("2d");
+      if (!ctx || cancelled) return;
+      ctx.font = `30px 'Amiri Quran', 'Amiri', serif`;
+      setWordWidths(wordInfo.map(w => (w.marker ? 26 : ctx.measureText(w.text).width)));
+    };
+    const fonts = (document as any).fonts;
+    if (fonts?.load) fonts.load(`30px 'Amiri Quran'`).then(measure, measure);
+    else measure();
+    return () => { cancelled = true; };
+  }, [wordInfo]);
+
+  // Break the surah into lines that fill the column, like a mushaf page.
   const lines = useMemo(() => {
-    const capacity = Math.max(12, Math.floor(columnWidth / 17)); // letters per line
+    const gap = 8; // 4px margin on each side of a word
     const out: number[][] = [];
     let cur: number[] = [];
-    let len = 0;
+    let used = 0;
     wordInfo.forEach((w, i) => {
-      const l = w.marker ? 3 : Math.max(1, w.norm.length);
-      if (cur.length && len + l > capacity) { out.push(cur); cur = []; len = 0; }
+      const width = wordWidths ? wordWidths[i] : w.marker ? 26 : Math.max(1, w.norm.length) * 15;
+      const wd = width + gap;
+      if (cur.length && used + wd > columnWidth) { out.push(cur); cur = []; used = 0; }
       cur.push(i);
-      len += l + 1;
+      used += wd;
     });
     if (cur.length) out.push(cur);
     return out;
-  }, [wordInfo, columnWidth]);
+  }, [wordInfo, wordWidths, columnWidth]);
 
   const tracked = useMemo(() => {
     if (!readable.length || !heardText) return null;
@@ -405,7 +422,7 @@ const s = StyleSheet.create({
   column: { width: "100%", maxWidth: COLUMN_MAX },
   line: { flexDirection: "row-reverse", justifyContent: "center", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
   word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
-  ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 16, lineHeight: 34, borderRadius: 16, overflow: "hidden" },
+  ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 14, lineHeight: 26, marginHorizontal: 4, borderRadius: 13, overflow: "hidden" },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
   loading: { textAlign: "center", color: C.muted, marginTop: 40 },
