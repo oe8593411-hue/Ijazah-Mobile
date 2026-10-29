@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
@@ -84,6 +84,7 @@ export default function Recite() {
   const startAyah = Math.max(1, Number(params.ayah) || 1);
   const fullSurah = params.scope === "surah";
   const surahName = SURAHS.find(x => x.number === surahNumber)?.nameAr || "";
+  const { width: screenWidth } = useWindowDimensions();
 
   const [referenceText, setReferenceText] = useState("");
   const [ready, setReady] = useState(false);
@@ -136,6 +137,23 @@ export default function Recite() {
     () => wordInfo.map((w, i) => (!w.marker && w.norm ? i : -1)).filter(i => i >= 0),
     [wordInfo]
   );
+
+  // Mushaf-style lines: break the text into lines of about the same length, then
+  // spread each line's words across the full width (justified), like traditional mushaf pages.
+  const lines = useMemo(() => {
+    const capacity = Math.max(12, Math.floor((screenWidth - 48) / 15)); // letters per line
+    const out: number[][] = [];
+    let cur: number[] = [];
+    let len = 0;
+    wordInfo.forEach((w, i) => {
+      const l = w.marker ? 3 : Math.max(1, w.norm.length);
+      if (cur.length && len + l > capacity) { out.push(cur); cur = []; len = 0; }
+      cur.push(i);
+      len += l + 1;
+    });
+    if (cur.length) out.push(cur);
+    return out;
+  }, [wordInfo, screenWidth]);
 
   const tracked = useMemo(() => {
     if (!expectedIdx.length || !heardText) return null;
@@ -242,25 +260,27 @@ export default function Recite() {
 
       <ScrollView style={s.body} contentContainerStyle={s.content}>
         {ready ? (
-          <Text style={s.mushaf}>
-            {tokens.map((token, i) => {
-              const info = wordInfo[i];
-              if (info.marker) {
-                return <Fragment key={i}><Text style={s.ayahMark}>{` ${info.num} `}</Text><Text> </Text></Fragment>;
-              }
-              const result = byToken[i];
-              const isCursor = i === cursorToken && recording && !hidden;
-              const style: any[] = [s.word];
-              if (hidden && !result) style.push(s.masked);
-              else if (result?.state === "ok") style.push({ color: C.ok });
-              else if (result?.state === "bad") style.push({ color: C.bad });
-              else if (result?.state === "skipped") style.push({ color: C.skipped });
-              if (isCursor) style.push(s.cursor);
-              // With the mushaf hidden, show what the reader actually said for wrong words.
-              const shown = hidden && result?.state === "bad" && result.heard ? result.heard : token;
-              return <Fragment key={i}><Text style={style}>{shown}</Text><Text> </Text></Fragment>;
-            })}
-          </Text>
+          <View style={s.page}>
+            {lines.map((line, li) => (
+              <View key={li} style={[s.line, li === lines.length - 1 && s.lastLine]}>
+                {line.map((i) => {
+                  const info = wordInfo[i];
+                  if (info.marker) return <Text key={i} style={s.ayahMark}>{` ${info.num} `}</Text>;
+                  const result = byToken[i];
+                  const isCursor = i === cursorToken && recording && !hidden;
+                  const style: any[] = [s.word];
+                  if (hidden && !result) style.push(s.masked);
+                  else if (result?.state === "ok") style.push({ color: C.ok });
+                  else if (result?.state === "bad") style.push({ color: C.bad });
+                  else if (result?.state === "skipped") style.push({ color: C.skipped });
+                  if (isCursor) style.push(s.cursor);
+                  // With the mushaf hidden, show what the reader actually said for wrong words.
+                  const shown = hidden && result?.state === "bad" && result.heard ? result.heard : info.text;
+                  return <Text key={i} style={style}>{shown}</Text>;
+                })}
+              </View>
+            ))}
+          </View>
         ) : (
           <Text style={s.loading}>جارٍ تحميل المصحف…</Text>
         )}
@@ -331,8 +351,10 @@ const s = StyleSheet.create({
   headerSub: { color: C.muted, fontSize: 12, marginTop: 2 },
   body: { flex: 1 },
   content: { paddingHorizontal: 22, paddingTop: 26, paddingBottom: 250 },
-  mushaf: { writingDirection: "rtl", textAlign: "justify", fontFamily: QURAN_FONT, fontSize: 32, lineHeight: 72, color: C.ink },
-  word: { color: C.ink },
+  page: { backgroundColor: C.bg, paddingVertical: 6 },
+  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  lastLine: { justifyContent: "flex-start" },
+  word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 32, lineHeight: 66, writingDirection: "rtl" },
   ayahMark: { color: C.tealInk, backgroundColor: C.tealSoft, fontSize: 17, lineHeight: 30, borderRadius: 14, overflow: "hidden" },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
