@@ -6,12 +6,16 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import { SURAHS } from "../src/quran/surahs";
 
 const C = {
-  paper: "#FBF7EE", ink: "#1B2A3A", muted: "#8A8576", line: "#E7E0CF",
-  navy: "#071A33", cyan: "#35C7DE", cyanDark: "#168DA5",
-  ok: "#1E8E4E", bad: "#D93A3A", skipped: "#E08A00", mask: "#E4DDCB",
-  cursor: "#FFE9A6", white: "#FFFFFF", danger: "#FF6B6B",
+  bg: "#FFFFFF", ink: "#0F2233", muted: "#7B8794", line: "#EEF1F4",
+  teal: "#0FA3B1", tealSoft: "#E3F6F8", tealInk: "#0B7F8B",
+  ok: "#12A150", bad: "#E0413B", skipped: "#E08A00", mask: "#EEF2F5",
+  cursor: "#FFF3C4", danger: "#F05A4F", white: "#FFFFFF",
 };
-const QURAN_FONT = Platform.select({ ios: "Geeza Pro", android: "serif", default: "'Amiri','Scheherazade New','Traditional Arabic',serif" });
+const QURAN_FONT = Platform.select({
+  ios: "Geeza Pro",
+  android: "serif",
+  default: "'Amiri', 'Scheherazade New', 'Traditional Arabic', serif",
+});
 
 // ---------- Arabic matching helpers ----------
 
@@ -93,6 +97,17 @@ export default function Recite() {
   const state = useAudioRecorderState(recorder);
   const recording = state.isRecording;
 
+  // Web only: load the Amiri Quran font so the mushaf looks like a mushaf.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    if (document.getElementById("amiri-font")) return;
+    const link = document.createElement("link");
+    link.id = "amiri-font";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap";
+    document.head.appendChild(link);
+  }, []);
+
   // Load the verified Hafs text (surah or single ayah).
   useEffect(() => {
     import("../src/quran/verified-corpus.json").then((m) => {
@@ -109,8 +124,13 @@ export default function Recite() {
 
   const tokens = useMemo(() => referenceText.split(/\s+/u).filter(Boolean), [referenceText]);
   const wordInfo = useMemo(() => tokens.map(text => {
-    const marker = /^﴿.*﴾$/u.test(text);
-    return { text, marker, norm: marker ? "" : normalizeArabic(text).replace(/ /g, "") };
+    const marker = /^﴿\d+﴾$/u.test(text);
+    return {
+      text,
+      marker,
+      num: marker ? text.replace(/[﴿﴾]/g, "") : "",
+      norm: marker ? "" : normalizeArabic(text).replace(/ /g, ""),
+    };
   }), [tokens]);
   const expectedIdx = useMemo(
     () => wordInfo.map((w, i) => (!w.marker && w.norm ? i : -1)).filter(i => i >= 0),
@@ -144,7 +164,7 @@ export default function Recite() {
     const g = globalThis as any;
     const Cls = g.SpeechRecognition || g.webkitSpeechRecognition;
     if (!Cls) {
-      setNotice("التسميع يسجّل صوتك، لكن عرض الكلمات أثناء القراءة متاح حاليًا في المتصفح (Chrome).");
+      setNotice("التسميع يسجّل صوتك، لكن عرض الكلمات أثناء القراءة متاح حاليًا في متصفح Chrome.");
       return;
     }
     try {
@@ -202,16 +222,17 @@ export default function Recite() {
 
   const seconds = Math.floor((state.durationMillis || 0) / 1000);
   const timer = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+  const restartDisabled = recording || (!finished && !heardText);
 
   let status = "اضغط الميكروفون وابدأ التسميع";
-  if (recording) status = "جارٍ الاستماع… اضغط للإيقاف عند الانتهاء";
-  else if (finished) status = "انتهى التسميع. راجع الملخص بالأسفل";
+  if (recording) status = "جارٍ الاستماع… اضغط للإنهاء";
+  else if (finished) status = "انتهى التسميع";
 
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
       <View style={s.header}>
-        <Pressable onPress={() => router.back()} style={s.backButton}><Text style={s.back}>‹</Text></Pressable>
+        <Pressable onPress={() => router.back()} style={s.backButton}><Text style={s.back}>›</Text></Pressable>
         <View style={s.headerCenter}>
           <Text style={s.headerTitle}>{surahName ? `سورة ${surahName}` : "التسميع"}</Text>
           <Text style={s.headerSub}>{recording ? `● ${timer}` : "رواية حفص عن عاصم"}</Text>
@@ -221,25 +242,25 @@ export default function Recite() {
 
       <ScrollView style={s.body} contentContainerStyle={s.content}>
         {ready ? (
-          <View style={s.page}>
-            <Text style={s.mushaf}>
-              {tokens.map((token, i) => {
-                const info = wordInfo[i];
-                const result = byToken[i];
-                const isCursor = i === cursorToken && recording && !hidden;
-                const style: any[] = [s.word];
-                if (info.marker) style.push(s.marker);
-                else if (hidden && !result) style.push(s.masked);
-                else if (result?.state === "ok") style.push({ color: C.ok });
-                else if (result?.state === "bad") style.push({ color: C.bad });
-                else if (result?.state === "skipped") style.push({ color: C.skipped });
-                if (isCursor) style.push(s.cursor);
-                // With the mushaf hidden, show what the reader actually said for wrong words.
-                const shown = hidden && result?.state === "bad" && result.heard ? result.heard : token;
-                return <Fragment key={i}><Text style={style}>{shown}</Text><Text> </Text></Fragment>;
-              })}
-            </Text>
-          </View>
+          <Text style={s.mushaf}>
+            {tokens.map((token, i) => {
+              const info = wordInfo[i];
+              if (info.marker) {
+                return <Fragment key={i}><Text style={s.ayahMark}>{` ${info.num} `}</Text><Text> </Text></Fragment>;
+              }
+              const result = byToken[i];
+              const isCursor = i === cursorToken && recording && !hidden;
+              const style: any[] = [s.word];
+              if (hidden && !result) style.push(s.masked);
+              else if (result?.state === "ok") style.push({ color: C.ok });
+              else if (result?.state === "bad") style.push({ color: C.bad });
+              else if (result?.state === "skipped") style.push({ color: C.skipped });
+              if (isCursor) style.push(s.cursor);
+              // With the mushaf hidden, show what the reader actually said for wrong words.
+              const shown = hidden && result?.state === "bad" && result.heard ? result.heard : token;
+              return <Fragment key={i}><Text style={style}>{shown}</Text><Text> </Text></Fragment>;
+            })}
+          </Text>
         ) : (
           <Text style={s.loading}>جارٍ تحميل المصحف…</Text>
         )}
@@ -265,32 +286,24 @@ export default function Recite() {
             </Text>
           </View>
         )}
-
-        {recording && !finished && tracked && (
-          <View style={s.liveRow}>
-            <Text style={[s.liveStat, { color: C.ok }]}>✓ {counts.ok}</Text>
-            <Text style={[s.liveStat, { color: C.bad }]}>✗ {counts.bad}</Text>
-            <Text style={[s.liveStat, { color: C.skipped }]}>↷ {counts.skipped}</Text>
-          </View>
-        )}
       </ScrollView>
 
       <View style={s.footer}>
         {!!notice && <Text style={s.notice}>{notice}</Text>}
         <Text style={s.status}>{status}</Text>
-        <View style={s.bar}>
-          <Pressable onPress={() => setHidden(v => !v)} style={s.sideButton}>
-            <Text style={s.sideIcon}>{hidden ? "👁" : "🙈"}</Text>
-            <Text style={s.sideLabel}>{hidden ? "إظهار المصحف" : "إخفاء المصحف"}</Text>
+        <View style={s.dock}>
+          <Pressable onPress={() => setHidden(v => !v)} style={s.dockSide}>
+            <Text style={s.dockIcon}>{hidden ? "👁" : "🙈"}</Text>
+            <Text style={s.dockLabel}>{hidden ? "إظهار المصحف" : "إخفاء المصحف"}</Text>
           </Pressable>
 
           <Pressable onPress={toggle} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.micDisabled]}>
             {recording ? <View style={s.stopSquare} /> : <Text style={s.micIcon}>🎙️</Text>}
           </Pressable>
 
-          <Pressable onPress={restart} disabled={recording || (!finished && !heardText)} style={[s.sideButton, (recording || (!finished && !heardText)) && s.micDisabled]}>
-            <Text style={s.sideIcon}>↻</Text>
-            <Text style={s.sideLabel}>إعادة</Text>
+          <Pressable onPress={restart} disabled={restartDisabled} style={[s.dockSide, restartDisabled && s.micDisabled]}>
+            <Text style={s.dockIcon}>↻</Text>
+            <Text style={s.dockLabel}>إعادة</Text>
           </Pressable>
         </View>
       </View>
@@ -308,44 +321,41 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.paper },
-  header: { paddingTop: 52, paddingHorizontal: 14, paddingBottom: 10, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.paper },
+  root: { flex: 1, backgroundColor: C.bg },
+  header: { paddingTop: 52, paddingHorizontal: 12, paddingBottom: 12, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: C.line },
   backButton: { width: 42, height: 42, alignItems: "center", justifyContent: "center" },
   back: { color: C.ink, fontSize: 34, lineHeight: 36 },
   headerSpacer: { width: 42 },
   headerCenter: { flex: 1, alignItems: "center" },
-  headerTitle: { color: C.ink, fontSize: 19, fontWeight: "800" },
-  headerSub: { color: C.muted, fontSize: 11, marginTop: 3 },
+  headerTitle: { color: C.ink, fontSize: 20, fontWeight: "700", fontFamily: QURAN_FONT },
+  headerSub: { color: C.muted, fontSize: 12, marginTop: 2 },
   body: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 230 },
-  page: { backgroundColor: C.white, borderRadius: 18, borderWidth: 1, borderColor: C.line, paddingVertical: 22, paddingHorizontal: 16 },
-  mushaf: { writingDirection: "rtl", textAlign: "justify", fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 64, color: C.ink },
+  content: { paddingHorizontal: 22, paddingTop: 26, paddingBottom: 250 },
+  mushaf: { writingDirection: "rtl", textAlign: "justify", fontFamily: QURAN_FONT, fontSize: 32, lineHeight: 72, color: C.ink },
   word: { color: C.ink },
-  marker: { color: C.muted, fontSize: 22 },
-  masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 4 },
-  cursor: { backgroundColor: C.cursor, borderRadius: 4 },
+  ayahMark: { color: C.tealInk, backgroundColor: C.tealSoft, fontSize: 17, lineHeight: 30, borderRadius: 14, overflow: "hidden" },
+  masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
+  cursor: { backgroundColor: C.cursor, borderRadius: 6 },
   loading: { textAlign: "center", color: C.muted, marginTop: 40 },
-  summary: { backgroundColor: C.white, borderRadius: 20, padding: 18, marginTop: 18, borderWidth: 1, borderColor: "#B8E8EF" },
-  summaryTitle: { color: C.navy, fontSize: 16, fontWeight: "900", textAlign: "right" },
+  summary: { backgroundColor: C.white, borderRadius: 22, padding: 18, marginTop: 22, borderWidth: 1, borderColor: C.line, shadowColor: "#0F2233", shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 4 },
+  summaryTitle: { color: C.ink, fontSize: 16, fontWeight: "800", textAlign: "right" },
   statsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  stat: { flex: 1, backgroundColor: "#F4F8FC", borderRadius: 14, paddingVertical: 10, alignItems: "center" },
-  statValue: { fontSize: 18, fontWeight: "900" },
+  stat: { flex: 1, backgroundColor: "#F6F8FA", borderRadius: 14, paddingVertical: 10, alignItems: "center" },
+  statValue: { fontSize: 18, fontWeight: "800" },
   statLabel: { color: C.muted, fontSize: 10, marginTop: 3 },
-  reviewTitle: { color: C.ink, fontWeight: "800", fontSize: 13, textAlign: "right", marginTop: 16 },
-  reviewRow: { color: "#875D18", fontSize: 13, lineHeight: 22, textAlign: "right", marginTop: 4 },
+  reviewTitle: { color: C.ink, fontWeight: "700", fontSize: 13, textAlign: "right", marginTop: 16 },
+  reviewRow: { color: "#8A5A00", fontSize: 13, lineHeight: 22, textAlign: "right", marginTop: 4 },
   disclaimer: { color: C.muted, fontSize: 10, lineHeight: 17, textAlign: "right", marginTop: 14 },
-  liveRow: { flexDirection: "row", justifyContent: "center", gap: 24, marginTop: 16 },
-  liveStat: { fontSize: 16, fontWeight: "900" },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: C.paper, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12, paddingBottom: 28, paddingHorizontal: 18 },
-  notice: { textAlign: "center", color: "#8A6514", fontSize: 11, lineHeight: 17, marginBottom: 6 },
-  status: { textAlign: "center", fontWeight: "700", color: C.ink, fontSize: 13 },
-  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
-  sideButton: { width: 92, alignItems: "center", gap: 4 },
-  sideIcon: { fontSize: 22 },
-  sideLabel: { color: C.muted, fontSize: 10, fontWeight: "700" },
-  mic: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.cyan, alignItems: "center", justifyContent: "center", shadowColor: C.cyan, shadowOpacity: 0.45, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
+  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 10, paddingBottom: 28, paddingHorizontal: 18, backgroundColor: C.bg, borderTopWidth: 1, borderTopColor: C.line },
+  notice: { textAlign: "center", color: "#8A5A00", fontSize: 11, lineHeight: 17, marginBottom: 6 },
+  status: { textAlign: "center", fontWeight: "600", color: C.ink, fontSize: 13 },
+  dock: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, backgroundColor: "#F6F8FA", borderRadius: 40, paddingHorizontal: 14, paddingVertical: 8 },
+  dockSide: { width: 96, alignItems: "center", gap: 2 },
+  dockIcon: { fontSize: 20 },
+  dockLabel: { color: C.muted, fontSize: 11, fontWeight: "600" },
+  mic: { width: 84, height: 84, borderRadius: 42, backgroundColor: C.teal, alignItems: "center", justifyContent: "center", shadowColor: C.teal, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
   micOn: { backgroundColor: C.danger, shadowColor: C.danger },
   micDisabled: { opacity: 0.45 },
-  micIcon: { fontSize: 32 },
+  micIcon: { fontSize: 34 },
   stopSquare: { width: 26, height: 26, borderRadius: 6, backgroundColor: C.white },
 });
