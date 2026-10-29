@@ -43,7 +43,7 @@ class HealthReadinessTests(unittest.TestCase):
 class RuleCheckValidationTests(unittest.TestCase):
     def test_valid_timestamped_candidate_accepted(self):
         candidate = {"ruleId": "qalqalah", "startMs": 100, "endMs": 450, "wordIndex": 3}
-        self.assertEqual(api.validate_rule_checks([candidate], 1000), [candidate])
+        self.assertEqual(api.validate_rule_checks([candidate], 1000), [{"ruleId": "qalqalah", "wordIndex": 3}])
 
     def test_nan_and_infinite_timestamps_rejected(self):
         for start, end in [(float("nan"), 500), (100, float("inf")), (100, float("-inf"))]:

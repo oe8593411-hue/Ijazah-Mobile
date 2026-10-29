@@ -149,12 +149,13 @@ def align_audio_to_reference(audio: np.ndarray, reference_text: str) -> dict[str
     if missing:
         raise AlignmentError("aligner_vocabulary_missing_character")
 
-    waveform = torch.from_numpy(np.ascontiguousarray(audio, dtype=np.float32)).to(DEVICE).unsqueeze(0)
+    features = log_mel(np.ascontiguousarray(audio, dtype=np.float32)).to(DEVICE)
     with torch.inference_mode():
-        logits = aligner(waveform)
+        logits = aligner(features)
     if (
         not torch.is_tensor(logits) or logits.ndim != 3 or logits.shape[0] != 1
-        or logits.shape[1] < 1 or logits.shape[2] != len(vocabulary) + 1
+        or logits.shape[1] != features.shape[-1]
+        or logits.shape[2] != len(vocabulary) + 1
         or not torch.isfinite(logits).all()
     ):
         raise AlignmentError("aligner_model_output_invalid")
@@ -357,7 +358,12 @@ async def analyze(
             },
         }
 
-    findings = score_aligned_candidates(audio, alignment["words"], candidates)
+    try:
+        findings = score_aligned_candidates(audio, alignment["words"], candidates)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="trusted_tajweed_scoring_failed") from exc
     return {
         "status": "ok",
         "rulesEvaluated": sorted({candidate["ruleId"] for candidate in candidates}),

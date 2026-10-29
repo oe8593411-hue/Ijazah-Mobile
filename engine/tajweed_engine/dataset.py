@@ -106,3 +106,61 @@ def validate_segment_timestamps(start_ms: Any, end_ms: Any, duration_ms: Any) ->
         raise ValueError("segment_outside_recording")
     if end - start < 250:
         raise ValueError("segment_too_short")
+
+
+
+def validate_transcript_provenance(row: dict[str, Any]) -> None:
+    """Require explicit rights and two teachers confirming the audio/reference pairing."""
+    recording_id = row.get("recording_id")
+    if not isinstance(recording_id, str) or len(recording_id.strip()) < 2:
+        raise ValueError("recording_id_required")
+    reciter_id = row.get("reciter_id")
+    if not isinstance(reciter_id, str) or len(reciter_id.strip()) < 2:
+        raise ValueError("reciter_id_required")
+    if row.get("teacher_reviewed") is not True:
+        raise ValueError("teacher_reviewed_must_be_true")
+    if row.get("split") not in ("train", "validation", "test"):
+        raise ValueError("invalid_transcript_split")
+
+    for field in ("surah", "ayah_start", "ayah_end"):
+        value = row.get(field)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"invalid_transcript_reference:{field}")
+    if (
+        not 1 <= row["surah"] <= 114
+        or row["ayah_start"] < 1
+        or row["ayah_end"] < row["ayah_start"]
+        or row["ayah_end"] - row["ayah_start"] > 29
+    ):
+        raise ValueError("invalid_transcript_reference_range")
+
+    rights = row.get("rights")
+    if not isinstance(rights, dict):
+        raise ValueError("rights_record_required")
+    for field in ("license", "reference"):
+        value = rights.get(field)
+        if not isinstance(value, str) or len(value.strip()) < 3:
+            raise ValueError(f"rights_{field}_required")
+    if rights.get("training_rights_confirmed") is not True:
+        raise ValueError("training_rights_not_confirmed")
+    if rights.get("consent_confirmed") is not True:
+        raise ValueError("reciter_consent_not_confirmed")
+
+    reviewers = row.get("reviewers")
+    if not isinstance(reviewers, list) or len(reviewers) < 2:
+        raise ValueError("at_least_two_independent_reviewers_required")
+    reviewer_ids: set[str] = set()
+    for index, review in enumerate(reviewers, 1):
+        if not isinstance(review, dict):
+            raise ValueError(f"invalid_reviewer_record:{index}")
+        reviewer_id = review.get("reviewer_id")
+        if not isinstance(reviewer_id, str) or len(reviewer_id.strip()) < 2:
+            raise ValueError(f"invalid_reviewer_id:{index}")
+        reviewer_id = reviewer_id.strip()
+        if reviewer_id in reviewer_ids:
+            raise ValueError("reviewers_must_be_independent")
+        if review.get("reference_confirmed") is not True:
+            raise ValueError(f"reviewer_did_not_confirm_reference:{index}")
+        if not _valid_review_date(review.get("reviewed_at")):
+            raise ValueError(f"invalid_review_date:{index}")
+        reviewer_ids.add(reviewer_id)

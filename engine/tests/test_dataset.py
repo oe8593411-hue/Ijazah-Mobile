@@ -1,6 +1,6 @@
 import unittest
 
-from tajweed_engine.dataset import validate_label_provenance, validate_segment_timestamps
+from tajweed_engine.dataset import validate_label_provenance, validate_segment_timestamps, validate_transcript_provenance
 
 
 def valid_row():
@@ -110,3 +110,59 @@ class DatasetProvenanceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+def valid_transcript_row():
+    return {
+        "audio_path": "clip.wav",
+        "surah": 1,
+        "ayah_start": 1,
+        "ayah_end": 1,
+        "split": "train",
+        "teacher_reviewed": True,
+        "recording_id": "rec-001",
+        "reciter_id": "reader-001",
+        "rights": {
+            "license": "written_permission",
+            "reference": "permission-record-001",
+            "training_rights_confirmed": True,
+            "consent_confirmed": True,
+        },
+        "reviewers": [
+            {"reviewer_id": "teacher-a", "reference_confirmed": True, "reviewed_at": "2026-10-01"},
+            {"reviewer_id": "teacher-b", "reference_confirmed": True, "reviewed_at": "2026-10-02"},
+        ],
+    }
+
+
+class TranscriptProvenanceTests(unittest.TestCase):
+    def test_two_reviewers_confirming_trusted_reference_are_accepted(self):
+        validate_transcript_provenance(valid_transcript_row())
+
+    def test_missing_consent_or_reference_confirmation_is_rejected(self):
+        row = valid_transcript_row()
+        row["rights"]["consent_confirmed"] = False
+        with self.assertRaisesRegex(ValueError, "reciter_consent_not_confirmed"):
+            validate_transcript_provenance(row)
+        row = valid_transcript_row()
+        row["reviewers"][0]["reference_confirmed"] = False
+        with self.assertRaisesRegex(ValueError, "reviewer_did_not_confirm_reference"):
+            validate_transcript_provenance(row)
+
+    def test_boolean_or_reversed_reference_range_is_rejected(self):
+        for update in (
+            {"surah": True},
+            {"ayah_start": 0},
+            {"ayah_start": 2, "ayah_end": 1},
+        ):
+            row = valid_transcript_row()
+            row.update(update)
+            with self.subTest(update=update), self.assertRaises(ValueError):
+                validate_transcript_provenance(row)
+
+    def test_duplicate_reviewer_ids_are_rejected(self):
+        row = valid_transcript_row()
+        row["reviewers"][1]["reviewer_id"] = row["reviewers"][0]["reviewer_id"]
+        with self.assertRaisesRegex(ValueError, "reviewers_must_be_independent"):
+            validate_transcript_provenance(row)
