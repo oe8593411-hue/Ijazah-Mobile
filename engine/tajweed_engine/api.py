@@ -48,6 +48,7 @@ def load_model():
             info.get("task") != "qalqalah_segment_v1"
             or info.get("teacher_reviewed") is not True
             or info.get("calibrated") is not True
+            or info.get("validation_threshold_meets_minimum_precision") is not True
             or not isinstance(threshold, (int, float))
             or isinstance(threshold, bool)
             or not math.isfinite(threshold)

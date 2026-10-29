@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, json
+import argparse, json, math
 from pathlib import Path
 import numpy as np
 import soundfile as sf
@@ -33,29 +33,94 @@ class Segments(Dataset):
             segment = np.pad(segment, (0, max_samples - len(segment)))
         return log_mel(segment).squeeze(0), torch.tensor(int(r["label"]), dtype=torch.long)
 
-def score(model, loader, device, threshold=0.5):
-    ys, ps = [], []
+def predict_probabilities(model, loader, device):
+    """Collect model probabilities and labels without making threshold decisions."""
+    model.eval()
+    labels, probabilities = [], []
     with torch.inference_mode():
         for x, y in loader:
-            prob = torch.softmax(model(x.to(device)), dim=-1)[:, 1].cpu()
-            ps.extend((prob >= threshold).int().tolist())
-            ys.extend(y.tolist())
-    tp=sum(p==1 and y==1 for p,y in zip(ps,ys))
-    fp=sum(p==1 and y==0 for p,y in zip(ps,ys))
-    fn=sum(p==0 and y==1 for p,y in zip(ps,ys))
-    precision=tp/max(1,tp+fp); recall=tp/max(1,tp+fn)
-    f1=2*precision*recall/max(1e-9,precision+recall)
-    return {"precision":precision,"recall":recall,"f1":f1,"tp":tp,"fp":fp,"fn":fn}
+            logits = model(x.to(device))
+            if logits.ndim != 2 or logits.shape[1] != 2 or not torch.isfinite(logits).all():
+                raise ValueError("classifier_output_invalid")
+            prob = torch.softmax(logits.float(), dim=-1)[:, 1].cpu().tolist()
+            probabilities.extend(float(value) for value in prob)
+            labels.extend(int(value) for value in y.tolist())
+    return labels, probabilities
+
+
+def metrics_from_probabilities(labels, probabilities, threshold):
+    if len(labels) != len(probabilities) or not labels:
+        raise ValueError("empty_or_mismatched_probability_data")
+    if (
+        isinstance(threshold, bool) or not isinstance(threshold, (int, float))
+        or not math.isfinite(threshold) or not 0 < threshold <= 1
+    ):
+        raise ValueError("invalid_decision_threshold")
+    predictions = [int(value >= threshold) for value in probabilities]
+    tp = sum(pred == 1 and actual == 1 for pred, actual in zip(predictions, labels))
+    fp = sum(pred == 1 and actual == 0 for pred, actual in zip(predictions, labels))
+    fn = sum(pred == 0 and actual == 1 for pred, actual in zip(predictions, labels))
+    precision = tp / max(1, tp + fp)
+    recall = tp / max(1, tp + fn)
+    f1 = 2 * precision * recall / max(1e-9, precision + recall)
+    return {"precision": precision, "recall": recall, "f1": f1, "tp": tp, "fp": fp, "fn": fn}
+
+
+def select_decision_threshold(labels, probabilities, minimum_precision=0.90):
+    """Select an operating threshold on validation data only; never inspect test labels."""
+    if (
+        isinstance(minimum_precision, bool) or not isinstance(minimum_precision, (int, float))
+        or not math.isfinite(minimum_precision) or not 0.5 <= minimum_precision <= 1
+    ):
+        raise ValueError("minimum_precision_must_be_between_0_5_and_1")
+    if len(labels) != len(probabilities) or not labels:
+        raise ValueError("empty_or_mismatched_probability_data")
+    if any(not math.isfinite(float(p)) or not 0 <= float(p) <= 1 for p in probabilities):
+        raise ValueError("invalid_probability")
+
+    # A fixed grid avoids quadratic work on large validation sets.
+    thresholds = [step / 1000 for step in range(1, 1001)]
+    candidates = []
+    for threshold in thresholds:
+        metrics = metrics_from_probabilities(labels, probabilities, threshold)
+        if metrics["tp"] > 0 and metrics["precision"] >= minimum_precision:
+            candidates.append((threshold, metrics))
+    if not candidates:
+        safe_threshold = 1.0
+        return {
+            "threshold": safe_threshold,
+            "metrics": metrics_from_probabilities(labels, probabilities, safe_threshold),
+            "meets_minimum_precision": False,
+            "minimum_precision": float(minimum_precision),
+        }
+    threshold, metrics = max(
+        candidates,
+        key=lambda item: (item[1]["f1"], item[1]["recall"], item[0]),
+    )
+    return {
+        "threshold": threshold,
+        "metrics": metrics,
+        "meets_minimum_precision": True,
+        "minimum_precision": float(minimum_precision),
+    }
+
+
+def score(model, loader, device, threshold=0.5):
+    labels, probabilities = predict_probabilities(model, loader, device)
+    return metrics_from_probabilities(labels, probabilities, threshold)
 
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--manifest", required=True); p.add_argument("--data-root", default=".")
     p.add_argument("--output", default="models/qalqalah_classifier.pt")
     p.add_argument("--epochs", type=int, default=20); p.add_argument("--batch-size", type=int, default=16)
+    p.add_argument("--minimum-validation-precision", type=float, default=0.90)
     p.add_argument("--validate-only", action="store_true", help="validate the full manifest and report split counts without training")
     a=p.parse_args()
     if a.epochs < 1 or a.batch_size < 1:
         raise SystemExit("epochs and batch-size must be positive")
+    if not 0.5 <= a.minimum_validation_precision <= 1:
+        raise SystemExit("minimum-validation-precision must be between 0.5 and 1")
     torch.manual_seed(42)
     root=Path(a.data_root).resolve()
     rows=[json.loads(x) for x in Path(a.manifest).read_text(encoding="utf-8").splitlines() if x.strip()]
@@ -135,17 +200,35 @@ def main():
         if result["f1"]>best:
             best=result["f1"]
             best_state={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
-    # Held-out test is measured only after checkpoint selection using validation.
+    # Select the operating threshold using validation only, then measure the held-out test once.
     model.load_state_dict(best_state); model.eval()
-    heldout=score(model,testl,device)
-    print(json.dumps({"heldout_test":heldout}))
+    validation_labels, validation_probabilities = predict_probabilities(model, vl, device)
+    calibration = select_decision_threshold(
+        validation_labels, validation_probabilities, a.minimum_validation_precision
+    )
+    threshold = calibration["threshold"]
+    validation_at_threshold = calibration["metrics"]
+    test_labels, test_probabilities = predict_probabilities(model, testl, device)
+    heldout = metrics_from_probabilities(test_labels, test_probabilities, threshold)
+    print(json.dumps({
+        "validation_threshold": threshold,
+        "validation_at_threshold": validation_at_threshold,
+        "minimum_validation_precision": a.minimum_validation_precision,
+        "threshold_target_met": calibration["meets_minimum_precision"],
+    }, sort_keys=True))
+    print(json.dumps({"heldout_test": heldout, "decision_threshold": threshold}, sort_keys=True))
     out=Path(a.output); out.parent.mkdir(parents=True,exist_ok=True)
     torch.save({"state_dict":best_state,"metadata":{
-        "task":"qalqalah_segment_v1","model_version":"ijazah-qalqalah-cnn-v0.2",
+        "task":"qalqalah_segment_v1","model_version":"ijazah-qalqalah-cnn-v0.3",
         "teacher_reviewed":False,"calibrated":False,
-        "validation_f1":best,"heldout_test":heldout,
-        "note":"Research checkpoint only; loader refuses it until independent audit and calibration."
+        "decision_threshold":threshold,
+        "minimum_validation_precision":a.minimum_validation_precision,
+        "validation_threshold_meets_minimum_precision":calibration["meets_minimum_precision"],
+        "validation_f1_at_0_5":best,
+        "validation_at_threshold":validation_at_threshold,
+        "heldout_test":heldout,
+        "note":"Research checkpoint only; independent review and probability calibration still required."
     }},out)
-    print(f"Saved research checkpoint to {out}; not production-loadable until independent audit and calibration.")
+    print(f"Saved research checkpoint to {out}; release gates remain closed pending independent review and calibration.")
 if __name__=="__main__":
     main()

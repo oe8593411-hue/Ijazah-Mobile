@@ -100,7 +100,7 @@ python train.py --manifest data/manifest.jsonl --data-root data --validate-only
 python train.py --manifest data/manifest.jsonl --data-root data --output models/qalqalah_classifier.pt
 ```
 
-The output is a research checkpoint with `teacher_reviewed=false` and `calibrated=false`, so the API deliberately refuses to load it. Do not change these flags just to force deployment. Independent audit and confidence calibration must be completed and documented before a release checkpoint can be produced.
+The trainer selects a decision threshold using validation probabilities only, with `--minimum-validation-precision 0.90` by default, then evaluates the held-out test exactly once at that threshold. The output is still a research checkpoint with `teacher_reviewed=false` and `calibrated=false`. The API also requires `validation_threshold_meets_minimum_precision=true`, so a checkpoint that fails the configured validation precision target remains blocked even if someone edits the other flags. Independent review and probability calibration must be completed and documented before release.
 
 ## Trusted Quran reference corpus
 
