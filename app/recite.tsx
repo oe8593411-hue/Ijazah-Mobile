@@ -93,6 +93,29 @@ function trackRecitation(expected: string[], spoken: string, final: boolean) {
   return { states, heardAt, cursor: p };
 }
 
+// The recognizer offers up to three guesses per phrase. For each phrase, keep the guess that fits
+// the verified text best from where the reading currently stands; ties keep the top guess.
+function pickPhrases(expected: string[], phrases: string[][], from: number) {
+  const out: string[] = [];
+  let cursor = from;
+  for (const alts of phrases) {
+    if (!alts.length) continue;
+    const ahead = expected.slice(cursor, cursor + 60);
+    let pick = alts[0];
+    let advance = 0;
+    let best = -Infinity;
+    for (const alt of alts) {
+      const r = trackRecitation(ahead, alt, true);
+      let score = 0;
+      for (const st of r.states) score += st === "ok" ? 1 : st === "bad" ? -1 : st === "skipped" ? -0.5 : 0;
+      if (score > best) { best = score; pick = alt; advance = r.cursor; }
+    }
+    out.push(pick);
+    cursor += advance;
+  }
+  return { text: out.join(" "), cursor };
+}
+
 // ---------- Screen ----------
 
 export default function Recite() {
@@ -113,6 +136,13 @@ export default function Recite() {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder);
   const recording = state.isRecording;
+
+  // Live recognition state: the recognizer's event handlers read these without re-subscribing.
+  const expectedRef = useRef<string[]>([]);
+  const settledRef = useRef({ text: "", cursor: 0 }); // text of recognizer sessions that have ended
+  const currentRef = useRef<string[][]>([]);          // phrases of the running recognizer session
+  const listeningRef = useRef(false);
+  const idleRestartsRef = useRef(0);
 
   // Web only: load the Amiri Quran font (SIL OFL) for the mushaf text.
   useEffect(() => {
@@ -137,6 +167,8 @@ export default function Recite() {
     }).catch(() => setNotice("تعذّر تحميل المصحف داخل التطبيق."));
     setFinished(false);
     setHeardText("");
+    settledRef.current = { text: "", cursor: 0 };
+    currentRef.current = [];
   }, [surahNumber]);
 
   const tokens = useMemo(() => referenceText.split(/\s+/u).filter(Boolean), [referenceText]);
@@ -168,6 +200,10 @@ export default function Recite() {
     return k < 0 ? 0 : k;
   }, [expectedIdx, ayahOfToken, startAyah]);
   const readable = useMemo(() => expectedIdx.slice(startPos), [expectedIdx, startPos]);
+
+  useEffect(() => {
+    expectedRef.current = readable.map(i => wordInfo[i].norm);
+  }, [readable, wordInfo]);
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
 
@@ -235,25 +271,66 @@ export default function Recite() {
       setNotice("التسميع يسجّل صوتك، لكن عرض الكلمات أثناء القراءة متاح حاليًا في متصفح Chrome.");
       return;
     }
-    try {
-      const r = new Cls();
-      r.lang = "ar-SA";
-      r.continuous = true;
-      r.interimResults = true;
-      r.onresult = (e: any) => {
-        let t = "";
-        for (let i = 0; i < e.results.length; i++) t += e.results[i][0]?.transcript || "";
-        setHeardText(t.trim());
-      };
-      r.onerror = () => setNotice("تعذّر التعرّف على الصوت. تأكد من إذن الميكروفون.");
-      r.start();
-      recognitionRef.current = r;
-    } catch {
-      setNotice("تعذّر تشغيل التعرّف على الصوت في هذا المتصفح.");
-    }
+    listeningRef.current = true;
+    // Chrome ends continuous recognition after pauses. Keep listening while recording, and keep
+    // the phrases of ended sessions so the reading is never cut.
+    const launch = () => {
+      try {
+        const r = new Cls();
+        r.lang = "ar-SA";
+        r.continuous = true;
+        r.interimResults = true;
+        r.maxAlternatives = 3;
+        r.onresult = (e: any) => {
+          const phrases: string[][] = [];
+          for (let i = 0; i < e.results.length; i++) {
+            const alts: string[] = [];
+            for (let j = 0; j < e.results[i].length; j++) {
+              const t = e.results[i][j]?.transcript;
+              if (t) alts.push(t);
+            }
+            if (alts.length) phrases.push(alts);
+          }
+          currentRef.current = phrases;
+          idleRestartsRef.current = 0;
+          const now = pickPhrases(expectedRef.current, phrases, settledRef.current.cursor);
+          setHeardText([settledRef.current.text, now.text].filter(Boolean).join(" "));
+        };
+        r.onerror = (e: any) => {
+          if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
+            listeningRef.current = false;
+            setNotice("تعذّر التعرّف على الصوت. تأكد من إذن الميكروفون.");
+          }
+        };
+        r.onend = () => {
+          if (!listeningRef.current) return;
+          const done = pickPhrases(expectedRef.current, currentRef.current, settledRef.current.cursor);
+          settledRef.current = {
+            text: [settledRef.current.text, done.text].filter(Boolean).join(" "),
+            cursor: done.cursor,
+          };
+          currentRef.current = [];
+          // Stop if the recognizer keeps ending without hearing anything (no permission, no microphone).
+          idleRestartsRef.current += 1;
+          if (idleRestartsRef.current > 20) {
+            listeningRef.current = false;
+            setNotice("توقّف التعرّف على الصوت. اضغط الميكروفون تاني.");
+            return;
+          }
+          setTimeout(() => { if (listeningRef.current) launch(); }, 250);
+        };
+        r.start();
+        recognitionRef.current = r;
+      } catch {
+        listeningRef.current = false;
+        setNotice("تعذّر تشغيل التعرّف على الصوت في هذا المتصفح.");
+      }
+    };
+    launch();
   }
 
   function stopListening() {
+    listeningRef.current = false;
     try { recognitionRef.current?.stop?.(); } catch {}
     recognitionRef.current = null;
   }
@@ -271,6 +348,8 @@ export default function Recite() {
       if (!perm.granted) { setNotice("اسمح بالميكروفون عشان تبدأ التسميع."); return; }
       setFinished(false);
       setHeardText("");
+      settledRef.current = { text: "", cursor: 0 };
+      currentRef.current = [];
       setNotice("");
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
@@ -284,6 +363,8 @@ export default function Recite() {
   function restart() {
     stopListening();
     setHeardText("");
+    settledRef.current = { text: "", cursor: 0 };
+    currentRef.current = [];
     setFinished(false);
     setNotice("");
   }
