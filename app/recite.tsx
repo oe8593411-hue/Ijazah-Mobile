@@ -9,7 +9,7 @@ const C = {
   bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
   ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)",
   ok: "#5FD38A", bad: "#FF6B6B", skipped: "#F5B041", mask: "#34373E",
-  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F",
+  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F", unsure: "#8E98A6",
 };
 const QURAN_FONT = Platform.select({
   ios: "Geeza Pro",
@@ -22,37 +22,47 @@ const COLUMN_MAX = 540;
 
 function normalizeArabic(value: string) {
   return value.normalize("NFC")
+    .replace(/ٰ/g, "ا") // dagger alif is a real long "a": مَٰلِكِ matches what is said: مالك
     .replace(/[ً-ٰٟۖ-ۭ]/g, "")
     .replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ـ/g, "")
     .replace(/[^ء-ي\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function levenshtein(a: string, b: string) {
-  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+type WordState = "ok" | "unsure" | "bad" | "skipped";
+
+// Letters that speech recognition often confuses: a mismatch on them costs half an error.
+const CONFUSABLE: Record<string, string> = { "ة": "ه", "ظ": "ض", "ط": "ت", "ذ": "ز", "ث": "س", "ؤ": "و", "ئ": "ي" };
+function letterCost(a: string, b: string) {
+  if (a === b) return 0;
+  if (CONFUSABLE[a] === b || CONFUSABLE[b] === a || (CONFUSABLE[a] && CONFUSABLE[a] === CONFUSABLE[b])) return 0.5;
+  return 1;
+}
+function weightedDistance(a: string, b: string) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
-    let prev = row[0]; row[0] = i;
+    const cur: number[] = [i];
     for (let j = 1; j <= b.length; j++) {
-      const tmp = row[j];
-      row[j] = a[i - 1] === b[j - 1] ? prev : Math.min(prev, row[j], row[j - 1]) + 1;
-      prev = tmp;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + letterCost(a[i - 1], b[j - 1]));
     }
+    prev = cur;
   }
-  return row[b.length];
+  return prev[b.length];
+}
+// ok: the same word (or nearly); unsure: close enough that the recognizer may be at fault; diff: a different word.
+function wordMatch(expected: string, heard: string): "ok" | "unsure" | "diff" {
+  if (expected === heard) return "ok";
+  if (Math.min(expected.length, heard.length) < 2) return "diff";
+  const ratio = weightedDistance(expected, heard) / Math.max(expected.length, heard.length);
+  if (ratio <= 0.2) return "ok";
+  if (ratio <= 0.4) return "unsure";
+  return "diff";
 }
 
-// Speech-to-text is noisy: a heard word counts as the expected one when it is
-// identical, or within one (short) / two (long) letters of it.
-function sameWord(expected: string, heard: string) {
-  if (expected === heard) return true;
-  if (Math.min(expected.length, heard.length) < 4) return false;
-  return levenshtein(expected, heard) <= (Math.max(expected.length, heard.length) > 6 ? 2 : 1);
-}
-
-type WordState = "ok" | "bad" | "skipped";
-
-// Follows the recitation word by word along the verified text.
-// match -> ok; a word found 1-3 positions ahead -> the words in between were skipped;
-// anything else -> wrong word. While still speaking, the last interim word is held back.
+// Follows the recitation word by word along the verified text. The recognizer is noisy, so:
+// - a close match -> ok; a looser match -> unsure (gray, never counted as an error);
+// - a different word is red (bad), unless the next heard word fits this spot: then it was an extra word and is ignored;
+// - one missing word -> unsure; two or more skipped words -> skipped (orange);
+// While still speaking, the last interim word is held back.
 function trackRecitation(expected: string[], spoken: string, final: boolean) {
   const heard = normalizeArabic(spoken).split(" ").filter(Boolean);
   const states: (WordState | undefined)[] = Array(expected.length).fill(undefined);
@@ -60,17 +70,23 @@ function trackRecitation(expected: string[], spoken: string, final: boolean) {
   let p = 0;
   for (let idx = 0; idx < heard.length && p < expected.length; idx++) {
     const h = heard[idx];
-    if (sameWord(expected[p], h)) { states[p] = "ok"; p++; continue; }
+    const m = wordMatch(expected[p], h);
+    // Still speaking: an uncertain last word waits until the recognizer settles on it.
+    if (m === "unsure" && !final && idx === heard.length - 1) break;
+    if (m !== "diff") { states[p] = m === "ok" ? "ok" : "unsure"; p++; continue; }
+    // The word may be a few positions further on: the words in between were skipped.
     let found = -1;
     for (let k = 1; k <= 3 && p + k < expected.length; k++) {
-      if (sameWord(expected[p + k], h)) { found = k; break; }
+      if (wordMatch(expected[p + k], h) === "ok") { found = k; break; }
     }
     if (found > 0) {
-      for (let k = 0; k < found; k++) states[p + k] = "skipped";
+      for (let k = 0; k < found; k++) states[p + k] = found === 1 ? "unsure" : "skipped";
       states[p + found] = "ok";
       p += found + 1;
       continue;
     }
+    // The recognizer may have invented this word: if the next heard word fits here, ignore this one.
+    if (idx + 1 < heard.length && wordMatch(expected[p], heard[idx + 1]) !== "diff") continue;
     if (!final && idx === heard.length - 1) break;
     states[p] = "bad"; heardAt[p] = h; p++;
   }
@@ -202,11 +218,11 @@ export default function Recite() {
     });
     if (tracked.cursor < readable.length) cursorToken = readable[tracked.cursor];
   }
-  const counts = { ok: 0, bad: 0, skipped: 0 };
+  const counts = { ok: 0, unsure: 0, bad: 0, skipped: 0 };
   Object.values(byToken).forEach(v => { counts[v.state]++; });
-  const notReached = readable.length - counts.ok - counts.bad - counts.skipped;
+  const notReached = readable.length - counts.ok - counts.unsure - counts.bad - counts.skipped;
   const needReview = readable
-    .filter(i => byToken[i] && byToken[i].state !== "ok")
+    .filter(i => byToken[i] && (byToken[i].state === "bad" || byToken[i].state === "skipped"))
     .slice(0, 8);
   const progress = readable.length && tracked ? Math.min(1, tracked.cursor / readable.length) : 0;
 
@@ -325,6 +341,7 @@ export default function Recite() {
                   if (hidden && !result) style.push(s.masked);
                   else if (result?.state === "ok") style.push({ color: C.ok });
                   else if (result?.state === "bad") style.push({ color: C.bad });
+                  else if (result?.state === "unsure") style.push({ color: C.unsure });
                   else if (result?.state === "skipped") style.push({ color: C.skipped });
                   if (isCursor) style.push(s.cursor);
                   // With the verses hidden, show what the reader actually said for wrong words.
@@ -343,19 +360,20 @@ export default function Recite() {
             <Text style={s.summaryTitle}>ملخص التسميع</Text>
             <View style={s.statsRow}>
               <Stat label="صحيحة" value={counts.ok} color={C.ok} />
-              <Stat label="خطأ" value={counts.bad} color={C.bad} />
+              <Stat label="خطأ محتمل" value={counts.bad} color={C.bad} />
+              <Stat label="غير متأكد" value={counts.unsure} color={C.unsure} />
               <Stat label="متخطّاة" value={counts.skipped} color={C.skipped} />
               <Stat label="لم تُقرأ" value={notReached} color={C.muted} />
             </View>
             {needReview.length > 0 && <Text style={s.reviewTitle}>كلمات تحتاج مراجعة</Text>}
             {needReview.map((i) => {
               const r = byToken[i];
-              const label = r.state === "skipped" ? "متخطّاة" : "خطأ";
+              const label = r.state === "skipped" ? "متخطّاة" : "خطأ محتمل";
               const heardPart = r.state === "bad" && r.heard ? `  — سمعنا «${r.heard}»` : "";
               return <Text key={i} style={s.reviewRow}>{label}: {wordInfo[i].text}{heardPart}</Text>;
             })}
             <Text style={s.disclaimer}>
-              هذا تعرّف تقريبي على الكلمات، وليس حكمًا على التجويد. راجع مع معلّمك للتأكد.
+              الأحمر خطأ محتمل، والرمادي غير متأكد ولا يُحسب خطأ. هذا تعرّف تقريبي على الكلمات، وليس حكمًا على التجويد. راجع مع معلّمك للتأكد.
             </Text>
             <View style={s.navRow}>
               {surahNumber > 1 && (
