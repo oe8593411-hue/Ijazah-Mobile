@@ -116,6 +116,55 @@ function pickPhrases(expected: string[], phrases: string[][], from: number) {
   return { text: out.join(" "), cursor };
 }
 
+// ---------- Reading across recognizer sessions ----------
+
+// What has been read so far (text) and the next expected word (cursor). It only moves forward.
+type Reading = { text: string; cursor: number };
+// One recognizer session: its results so far, and how many of them are final and already read.
+type Session = { id: number; phrases: string[][]; committed: number };
+type Heard = { alts: string[]; isFinal: boolean };
+
+function addPhrases(expected: string[], reading: Reading, phrases: string[][]): Reading {
+  const picked = pickPhrases(expected, phrases, reading.cursor);
+  return { text: [reading.text, picked.text].filter(Boolean).join(" "), cursor: picked.cursor };
+}
+
+// Chrome sends the whole list of results of a session on every event. A final result never changes,
+// so it is read once, as soon as it arrives. Only the results still in progress are read again.
+function takeResults(expected: string[], reading: Reading, session: Session, results: Heard[]) {
+  const phrases = results.map(r => r.alts);
+  let committed = session.committed;
+  while (committed < results.length && results[committed].isFinal) committed++;
+  const next = committed > session.committed
+    ? addPhrases(expected, reading, phrases.slice(session.committed, committed))
+    : reading;
+  const live = pickPhrases(expected, phrases.slice(committed), next.cursor);
+  return {
+    reading: next,
+    session: { ...session, phrases, committed },
+    heard: [next.text, live.text].filter(Boolean).join(" "),
+  };
+}
+
+// The session has ended (Chrome ends it after a pause, or the page stopped it): what it still holds is read as it is.
+function endSession(expected: string[], reading: Reading, session: Session): Reading {
+  return addPhrases(expected, reading, session.phrases.slice(session.committed));
+}
+
+// The recognizer's result list as plain data.
+function readResults(list: any): Heard[] {
+  const out: Heard[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const alts: string[] = [];
+    for (let j = 0; j < list[i].length; j++) {
+      const t = list[i][j]?.transcript;
+      if (t) alts.push(t);
+    }
+    out.push({ alts, isFinal: !!list[i].isFinal });
+  }
+  return out;
+}
+
 // ---------- Screen ----------
 
 export default function Recite() {
@@ -139,8 +188,10 @@ export default function Recite() {
 
   // Live recognition state: the recognizer's event handlers read these without re-subscribing.
   const expectedRef = useRef<string[]>([]);
-  const settledRef = useRef({ text: "", cursor: 0 }); // text of recognizer sessions that have ended
-  const currentRef = useRef<string[][]>([]);          // phrases of the running recognizer session
+  const readingRef = useRef<Reading>({ text: "", cursor: 0 }); // what has been read, kept across pauses
+  const sessionRef = useRef<Session | null>(null);             // the recognizer session that is running
+  const sessionCountRef = useRef(0);
+  const openRef = useRef(false);                               // a session has started and not ended yet
   const listeningRef = useRef(false);
   const idleRestartsRef = useRef(0);
 
@@ -167,8 +218,7 @@ export default function Recite() {
     }).catch(() => setNotice("تعذّر تحميل المصحف داخل التطبيق."));
     setFinished(false);
     setHeardText("");
-    settledRef.current = { text: "", cursor: 0 };
-    currentRef.current = [];
+    clearReading();
   }, [surahNumber]);
 
   const tokens = useMemo(() => referenceText.split(/\s+/u).filter(Boolean), [referenceText]);
@@ -272,8 +322,8 @@ export default function Recite() {
       return;
     }
     listeningRef.current = true;
-    // Chrome ends continuous recognition after pauses. Keep listening while recording, and keep
-    // the phrases of ended sessions so the reading is never cut.
+    // Chrome ends continuous recognition after pauses. While listening, a new session starts as soon as
+    // the old one has ended, and the reading carries on from the same place.
     const launch = () => {
       try {
         const r = new Cls();
@@ -281,20 +331,17 @@ export default function Recite() {
         r.continuous = true;
         r.interimResults = true;
         r.maxAlternatives = 3;
+        const id = ++sessionCountRef.current;
+        sessionRef.current = { id, phrases: [], committed: 0 };
+        openRef.current = true;
         r.onresult = (e: any) => {
-          const phrases: string[][] = [];
-          for (let i = 0; i < e.results.length; i++) {
-            const alts: string[] = [];
-            for (let j = 0; j < e.results[i].length; j++) {
-              const t = e.results[i][j]?.transcript;
-              if (t) alts.push(t);
-            }
-            if (alts.length) phrases.push(alts);
-          }
-          currentRef.current = phrases;
+          const session = sessionRef.current;
+          if (!session || session.id !== id) return; // a session that was dropped
+          const next = takeResults(expectedRef.current, readingRef.current, session, readResults(e.results));
+          readingRef.current = next.reading;
+          sessionRef.current = next.session;
           idleRestartsRef.current = 0;
-          const now = pickPhrases(expectedRef.current, phrases, settledRef.current.cursor);
-          setHeardText([settledRef.current.text, now.text].filter(Boolean).join(" "));
+          setHeardText(next.heard);
         };
         r.onerror = (e: any) => {
           if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
@@ -303,13 +350,15 @@ export default function Recite() {
           }
         };
         r.onend = () => {
+          openRef.current = false;
+          const session = sessionRef.current;
+          if (session && session.id === id) {
+            // What the session still held is read as it is, even when the page has stopped listening.
+            readingRef.current = endSession(expectedRef.current, readingRef.current, session);
+            sessionRef.current = null;
+            setHeardText(readingRef.current.text);
+          }
           if (!listeningRef.current) return;
-          const done = pickPhrases(expectedRef.current, currentRef.current, settledRef.current.cursor);
-          settledRef.current = {
-            text: [settledRef.current.text, done.text].filter(Boolean).join(" "),
-            cursor: done.cursor,
-          };
-          currentRef.current = [];
           // Stop if the recognizer keeps ending without hearing anything (no permission, no microphone).
           idleRestartsRef.current += 1;
           if (idleRestartsRef.current > 20) {
@@ -317,16 +366,19 @@ export default function Recite() {
             setNotice("توقّف التعرّف على الصوت. اضغط الميكروفون تاني.");
             return;
           }
-          setTimeout(() => { if (listeningRef.current) launch(); }, 250);
+          setTimeout(() => { if (listeningRef.current && !openRef.current) launch(); }, 100);
         };
         r.start();
         recognitionRef.current = r;
       } catch {
+        openRef.current = false;
+        sessionRef.current = null;
         listeningRef.current = false;
         setNotice("تعذّر تشغيل التعرّف على الصوت في هذا المتصفح.");
       }
     };
-    launch();
+    // If the previous session has not ended yet, its onend starts the next one.
+    if (!openRef.current) launch();
   }
 
   function stopListening() {
@@ -346,10 +398,10 @@ export default function Recite() {
       }
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) { setNotice("اسمح بالميكروفون عشان تبدأ التسميع."); return; }
+      // A paused recitation picks up where it stopped; a finished one starts over.
+      if (readingRef.current.cursor >= expectedRef.current.length) clearReading();
       setFinished(false);
-      setHeardText("");
-      settledRef.current = { text: "", cursor: 0 };
-      currentRef.current = [];
+      setHeardText(readingRef.current.text);
       setNotice("");
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
@@ -360,11 +412,15 @@ export default function Recite() {
     }
   }
 
+  function clearReading() {
+    readingRef.current = { text: "", cursor: 0 };
+    sessionRef.current = null; // whatever the old recognizer still sends is dropped
+  }
+
   function restart() {
     stopListening();
+    clearReading();
     setHeardText("");
-    settledRef.current = { text: "", cursor: 0 };
-    currentRef.current = [];
     setFinished(false);
     setNotice("");
   }
@@ -384,8 +440,9 @@ export default function Recite() {
   const restartDisabled = recording || (!finished && !heardText);
 
   let status = startAyah > 1 ? `ابدأ من الآية ${startAyah} • اضغط الميكروفون` : "اضغط الميكروفون وابدأ التسميع";
-  if (recording) status = `● ${timer} • جارٍ الاستماع… اضغط للإنهاء`;
-  else if (finished) status = "انتهى التسميع";
+  const done = readable.length > 0 && readingRef.current.cursor >= readable.length;
+  if (recording) status = `● ${timer} • جارٍ الاستماع… اضغط للإيقاف المؤقت`;
+  else if (finished) status = done ? "انتهى التسميع" : "متوقّف مؤقتًا • اضغط الميكروفون للمتابعة";
 
   return (
     <View style={s.root}>
