@@ -48,109 +48,9 @@ function weightedDistance(a: string, b: string) {
   }
   return prev[b.length];
 }
-// ok: the same word (or nearly); unsure: close enough that the recognizer may be at fault; diff: a different word.
-function wordMatch(expected: string, heard: string): "ok" | "unsure" | "diff" {
-  if (expected === heard) return "ok";
-  if (Math.min(expected.length, heard.length) < 2) return "diff";
-  const ratio = weightedDistance(expected, heard) / Math.max(expected.length, heard.length);
-  if (ratio <= 0.2) return "ok";
-  if (ratio <= 0.4) return "unsure";
-  return "diff";
-}
+// ---------- Results of the recognizer ----------
 
-// Follows the recitation word by word along the verified text. The recognizer is noisy, so:
-// - a close match -> ok; a looser match -> unsure (gray, never counted as an error);
-// - a different word is red (bad), unless the next heard word fits this spot: then it was an extra word and is ignored;
-// - one missing word -> unsure; two or more skipped words -> skipped (orange);
-// While still speaking, the last interim word is held back.
-function trackRecitation(expected: string[], spoken: string, final: boolean) {
-  const heard = normalizeArabic(spoken).split(" ").filter(Boolean);
-  const states: (WordState | undefined)[] = Array(expected.length).fill(undefined);
-  const heardAt: (string | undefined)[] = Array(expected.length).fill(undefined);
-  let p = 0;
-  for (let idx = 0; idx < heard.length && p < expected.length; idx++) {
-    const h = heard[idx];
-    const m = wordMatch(expected[p], h);
-    // Still speaking: an uncertain last word waits until the recognizer settles on it.
-    if (m === "unsure" && !final && idx === heard.length - 1) break;
-    if (m !== "diff") { states[p] = m === "ok" ? "ok" : "unsure"; p++; continue; }
-    // The word may be a few positions further on: the words in between were skipped.
-    let found = -1;
-    for (let k = 1; k <= 3 && p + k < expected.length; k++) {
-      if (wordMatch(expected[p + k], h) === "ok") { found = k; break; }
-    }
-    if (found > 0) {
-      for (let k = 0; k < found; k++) states[p + k] = found === 1 ? "unsure" : "skipped";
-      states[p + found] = "ok";
-      p += found + 1;
-      continue;
-    }
-    // The recognizer may have invented this word: if the next heard word fits here, ignore this one.
-    if (idx + 1 < heard.length && wordMatch(expected[p], heard[idx + 1]) !== "diff") continue;
-    if (!final && idx === heard.length - 1) break;
-    states[p] = "bad"; heardAt[p] = h; p++;
-  }
-  return { states, heardAt, cursor: p };
-}
-
-// The recognizer offers up to three guesses per phrase. For each phrase, keep the guess that fits
-// the verified text best from where the reading currently stands; ties keep the top guess.
-function pickPhrases(expected: string[], phrases: string[][], from: number) {
-  const out: string[] = [];
-  let cursor = from;
-  for (const alts of phrases) {
-    if (!alts.length) continue;
-    const ahead = expected.slice(cursor, cursor + 60);
-    let pick = alts[0];
-    let advance = 0;
-    let best = -Infinity;
-    for (const alt of alts) {
-      const r = trackRecitation(ahead, alt, true);
-      let score = 0;
-      for (const st of r.states) score += st === "ok" ? 1 : st === "bad" ? -1 : st === "skipped" ? -0.5 : 0;
-      if (score > best) { best = score; pick = alt; advance = r.cursor; }
-    }
-    out.push(pick);
-    cursor += advance;
-  }
-  return { text: out.join(" "), cursor };
-}
-
-// ---------- Reading across recognizer sessions ----------
-
-// What has been read so far (text) and the next expected word (cursor). It only moves forward.
-type Reading = { text: string; cursor: number };
-// One recognizer session: its results so far, and how many of them are final and already read.
-type Session = { id: number; phrases: string[][]; committed: number };
 type Heard = { alts: string[]; isFinal: boolean };
-
-function addPhrases(expected: string[], reading: Reading, phrases: string[][]): Reading {
-  const picked = pickPhrases(expected, phrases, reading.cursor);
-  return { text: [reading.text, picked.text].filter(Boolean).join(" "), cursor: picked.cursor };
-}
-
-// Chrome sends the whole list of results of a session on every event. A final result never changes,
-// so it is read once, as soon as it arrives. Only the results still in progress are read again.
-function takeResults(expected: string[], reading: Reading, session: Session, results: Heard[]) {
-  const phrases = results.map(r => r.alts);
-  let committed = session.committed;
-  while (committed < results.length && results[committed].isFinal) committed++;
-  const next = committed > session.committed
-    ? addPhrases(expected, reading, phrases.slice(session.committed, committed))
-    : reading;
-  const live = pickPhrases(expected, phrases.slice(committed), next.cursor);
-  return {
-    reading: next,
-    session: { ...session, phrases, committed },
-    heard: [next.text, live.text].filter(Boolean).join(" "),
-    live: live.text,
-  };
-}
-
-// The session has ended (Chrome ends it after a pause, or the page stopped it): what it still holds is read as it is.
-function endSession(expected: string[], reading: Reading, session: Session): Reading {
-  return addPhrases(expected, reading, session.phrases.slice(session.committed));
-}
 
 // The recognizer's result list as plain data.
 function readResults(list: any): Heard[] {
@@ -166,6 +66,179 @@ function readResults(list: any): Heard[] {
   return out;
 }
 
+// ---------- Alignment of the heard words with the verified words ----------
+
+// The recognizer may drop a word, add a filler, write two words as one, or one word as two.
+// The alignment finds the most likely reading: a verified word that is not heard costs something,
+// a heard word that matches nothing costs something, and the cheapest reading wins.
+const MISS_COST = 0.2;  // a verified word that was not heard
+const EXTRA_COST = 0.8; // a heard word that is not in the verified text
+const JOIN_COST = 0.3;  // two heard words for one verified word, or one heard word for two
+
+// 0.1 or less: ok. Up to 0.5: unsure (the recognizer may be at fault). Otherwise (0.7): a different word.
+// It must cost less than a skipped word plus an extra word, or a wrong word would be read as a skip.
+function wordCost(expected: string, heard: string) {
+  if (expected === heard) return 0;
+  if (Math.min(expected.length, heard.length) < 2) return 0.7;
+  const ratio = weightedDistance(expected, heard) / Math.max(expected.length, heard.length);
+  return ratio <= 0.2 ? 0.1 : ratio <= 0.4 ? 0.5 : 0.7;
+}
+function costState(cost: number): WordState {
+  return cost <= 0.1 ? "ok" : cost <= 0.5 ? "unsure" : "bad";
+}
+
+// What has been read: per verified word a state (and what was heard for a wrong one), and the next word to read.
+type Track = { text: string; cursor: number; states: (WordState | undefined)[]; heardAt: (string | undefined)[] };
+type Cell = { state: WordState; heard?: string };
+
+function emptyTrack(n: number): Track {
+  return { text: "", cursor: 0, states: Array(n).fill(undefined), heardAt: Array(n).fill(undefined) };
+}
+
+// Aligns the heard words with the verified words from `from` on. It may skip verified words (at a cost),
+// and it may ignore heard words. Returns the cells of the verified words it covers, and the new cursor.
+function alignFrom(expected: string[], from: number, heard: string[]) {
+  const W = Math.min(expected.length - from, 90);
+  const m = heard.length;
+  const INF = 1e9;
+  const D: number[][] = Array.from({ length: m + 1 }, () => Array(W + 1).fill(INF));
+  const B: string[][] = Array.from({ length: m + 1 }, () => Array(W + 1).fill(""));
+  D[0][0] = 0;
+  for (let j = 1; j <= W; j++) { D[0][j] = D[0][j - 1] + MISS_COST; B[0][j] = "D"; }
+  for (let i = 1; i <= m; i++) {
+    D[i][0] = D[i - 1][0] + EXTRA_COST; B[i][0] = "I";
+    for (let j = 1; j <= W; j++) {
+      const e = expected[from + j - 1];
+      let best = D[i - 1][j - 1] + wordCost(e, heard[i - 1]);
+      let op = "S";
+      const tryOp = (cost: number, name: string) => { if (cost < best) { best = cost; op = name; } };
+      tryOp(D[i][j - 1] + MISS_COST, "D");
+      tryOp(D[i - 1][j] + EXTRA_COST, "I");
+      if (i >= 2) tryOp(D[i - 2][j - 1] + wordCost(e, heard[i - 2] + heard[i - 1]) + JOIN_COST, "M");
+      if (j >= 2) tryOp(D[i - 1][j - 2] + wordCost(expected[from + j - 2] + e, heard[i - 1]) + JOIN_COST, "P");
+      D[i][j] = best;
+      B[i][j] = op;
+    }
+  }
+  let jEnd = 0;
+  for (let j = 1; j <= W; j++) if (D[m][j] < D[m][jEnd]) jEnd = j;
+
+  // Walk back from the best end: what each verified word was.
+  const cells: (Cell | undefined)[] = Array(jEnd).fill(undefined);
+  const missed: boolean[] = Array(jEnd).fill(false);
+  let i = m, j = jEnd;
+  while (i > 0 || j > 0) {
+    const op = i === 0 ? "D" : j === 0 ? "I" : B[i][j];
+    if (op === "S") {
+      cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 1])), heard: heard[i - 1] };
+      i--; j--;
+    } else if (op === "D") {
+      missed[j - 1] = true;
+      j--;
+    } else if (op === "I") {
+      i--;
+    } else if (op === "M") {
+      const joined = heard[i - 2] + " " + heard[i - 1];
+      cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 2] + heard[i - 1])), heard: joined };
+      i -= 2; j--;
+    } else {
+      const c = costState(wordCost(expected[from + j - 2] + expected[from + j - 1], heard[i - 1]));
+      cells[j - 2] = { state: c, heard: heard[i - 1] };
+      cells[j - 1] = cells[j - 2];
+      i--; j -= 2;
+    }
+  }
+  // A verified word missed on its own is unsure (the recognizer may have dropped it); two in a row are skipped.
+  for (let c = 0; c < jEnd; c++) {
+    if (!missed[c]) continue;
+    const run = (c > 0 && missed[c - 1]) || (c + 1 < jEnd && missed[c + 1]);
+    cells[c] = { state: run ? "skipped" : "unsure" };
+  }
+  return { cursor: from + jEnd, cells, cost: D[m][jEnd] };
+}
+
+// What the recognizer has said in one session. Its results are cumulative: the first `done` of them are final
+// and already read into the track; the rest are still changing.
+type Speech = { from: number; done: number; results: Heard[] };
+
+function startSpeech(track: Track): Speech {
+  return { from: track.cursor, done: 0, results: [] };
+}
+
+// Reads one final result into the track, with the guess that fits it best from where the reading stands.
+function readFinal(expected: string[], track: Track, alts: string[]): Track {
+  let best: { r: ReturnType<typeof alignFrom>; } | null = null;
+  for (const alt of alts) {
+    const words = normalizeArabic(alt).split(" ").filter(Boolean);
+    if (!words.length) continue;
+    const r = alignFrom(expected, track.cursor, words);
+    if (!best || r.cost < best.r.cost) best = { r };
+  }
+  return best ? applyAlignment(track, track.cursor, best.r) : track;
+}
+
+// The words still changing: each of the newest results keeps the guess that fits the session best.
+function pendingWords(expected: string[], speech: Speech) {
+  const pending = speech.results.slice(speech.done);
+  const choice = pending.map(() => 0);
+  const wordsOf = (k: number, c: number) => normalizeArabic(pending[k].alts[c] ?? "").split(" ").filter(Boolean);
+  const joint = () => pending.flatMap((_, k) => wordsOf(k, choice[k]));
+  let best = alignFrom(expected, speech.from, joint()).cost;
+  for (let k = Math.max(0, pending.length - 3); k < pending.length; k++) {
+    for (let c = 1; c < pending[k].alts.length; c++) {
+      const keep = choice[k];
+      choice[k] = c;
+      const cost = alignFrom(expected, speech.from, joint()).cost;
+      if (cost < best) best = cost; else choice[k] = keep;
+    }
+  }
+  return joint();
+}
+
+// Writes an alignment onto the track, from the word where it starts.
+function applyAlignment(track: Track, from: number, r: { cursor: number; cells: (Cell | undefined)[] }): Track {
+  const next: Track = { text: track.text, cursor: r.cursor, states: track.states.slice(), heardAt: track.heardAt.slice() };
+  r.cells.forEach((c, k) => {
+    if (!c) return;
+    next.states[from + k] = c.state;
+    next.heardAt[from + k] = c.state === "bad" ? c.heard : undefined;
+  });
+  return next;
+}
+
+// What the session shows now: the track with the words still changing on top. The newest word of a result
+// still being said waits until it settles.
+function viewOf(expected: string[], track: Track, speech: Speech): Track {
+  const words = pendingWords(expected, speech);
+  let r = alignFrom(expected, speech.from, words);
+  const last = speech.results[speech.results.length - 1];
+  if (last && !last.isFinal && words.length) {
+    const newest = words[words.length - 1];
+    const settled = r.cells.some(c => c && c.state === "ok" && c.heard !== undefined && c.heard.split(" ").pop() === newest);
+    if (!settled) r = alignFrom(expected, speech.from, words.slice(0, -1));
+  }
+  return applyAlignment(track, speech.from, r);
+}
+
+// One event of a recognizer session: final results are read into the track, and the view is what is shown now.
+function takeSpeech(expected: string[], track: Track, speech: Speech, results: Heard[]) {
+  let t = track;
+  let done = speech.done;
+  while (done < results.length && results[done].isFinal) {
+    t = readFinal(expected, t, results[done].alts);
+    done++;
+  }
+  const next: Speech = { from: t.cursor, done, results };
+  return { track: t, speech: next, view: viewOf(expected, t, next) };
+}
+
+// The session has ended: whatever it still holds is read as it is.
+function endSpeech(expected: string[], track: Track, speech: Speech): Track {
+  let t = track;
+  for (let k = speech.done; k < speech.results.length; k++) t = readFinal(expected, t, speech.results[k].alts);
+  return t;
+}
+
 // ---------- Screen ----------
 
 export default function Recite() {
@@ -178,8 +251,7 @@ export default function Recite() {
   const [referenceText, setReferenceText] = useState("");
   const [ready, setReady] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const [heardText, setHeardText] = useState("");
-  const [liveText, setLiveText] = useState(""); // the part of heardText that is still being said (not final yet)
+  const [view, setView] = useState<Track | null>(null); // what is shown: the words read so far
   const [finished, setFinished] = useState(false);
   const [notice, setNotice] = useState("");
   const recognitionRef = useRef<any>(null);
@@ -190,8 +262,9 @@ export default function Recite() {
 
   // Live recognition state: the recognizer's event handlers read these without re-subscribing.
   const expectedRef = useRef<string[]>([]);
-  const readingRef = useRef<Reading>({ text: "", cursor: 0 }); // what has been read, kept across pauses
-  const sessionRef = useRef<Session | null>(null);             // the recognizer session that is running
+  const trackRef = useRef<Track>(emptyTrack(0));                // what has been read, kept across pauses
+  const peakRef = useRef(0);                                    // the furthest word reached: the shown place never steps back
+  const sessionRef = useRef<{ id: number; speech: Speech } | null>(null); // the recognizer session that is running
   const sessionCountRef = useRef(0);
   const openRef = useRef(false);                               // a session has started and not ended yet
   const listeningRef = useRef(false);
@@ -219,8 +292,7 @@ export default function Recite() {
       }
     }).catch(() => setNotice("تعذّر تحميل المصحف داخل التطبيق."));
     setFinished(false);
-    setHeardText("");
-    setLiveText("");
+    setView(null);
     clearReading();
   }, [surahNumber]);
 
@@ -294,11 +366,7 @@ export default function Recite() {
     return out;
   }, [wordInfo, wordWidths, columnWidth]);
 
-  const tracked = useMemo(() => {
-    if (!readable.length || !heardText) return null;
-    // Only the words still being said can change, so only they wait. A word from a final result shows at once.
-    return trackRecitation(readable.map(i => wordInfo[i].norm), heardText, finished || !liveText);
-  }, [readable, wordInfo, heardText, liveText, finished]);
+  const tracked = useMemo(() => (view && readable.length ? view : null), [view, readable]);
 
   const byToken: Record<number, { state: WordState; heard?: string }> = {};
   let cursorToken = -1;
@@ -336,17 +404,18 @@ export default function Recite() {
         r.interimResults = true;
         r.maxAlternatives = 3;
         const id = ++sessionCountRef.current;
-        sessionRef.current = { id, phrases: [], committed: 0 };
+        sessionRef.current = { id, speech: startSpeech(trackRef.current) };
         openRef.current = true;
         r.onresult = (e: any) => {
           const session = sessionRef.current;
           if (!session || session.id !== id) return; // a session that was dropped
-          const next = takeResults(expectedRef.current, readingRef.current, session, readResults(e.results));
-          readingRef.current = next.reading;
-          sessionRef.current = next.session;
+          const n = takeSpeech(expectedRef.current, trackRef.current, session.speech, readResults(e.results));
+          trackRef.current = n.track;
+          session.speech = n.speech;
           idleRestartsRef.current = 0;
-          setLiveText(next.live);
-          setHeardText(next.heard);
+          const cursor = Math.max(n.view.cursor, peakRef.current);
+          peakRef.current = cursor;
+          setView(cursor === n.view.cursor ? n.view : { ...n.view, cursor });
         };
         r.onerror = (e: any) => {
           if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
@@ -356,13 +425,14 @@ export default function Recite() {
         };
         r.onend = () => {
           openRef.current = false;
-          setLiveText("");
           const session = sessionRef.current;
           if (session && session.id === id) {
             // What the session still held is read as it is, even when the page has stopped listening.
-            readingRef.current = endSession(expectedRef.current, readingRef.current, session);
+            trackRef.current = endSpeech(expectedRef.current, trackRef.current, session.speech);
             sessionRef.current = null;
-            setHeardText(readingRef.current.text);
+            const cursor = Math.max(trackRef.current.cursor, peakRef.current);
+            peakRef.current = cursor;
+            setView(cursor === trackRef.current.cursor ? trackRef.current : { ...trackRef.current, cursor });
           }
           if (!listeningRef.current) return;
           // Stop if the recognizer keeps ending without hearing anything (no permission, no microphone).
@@ -405,10 +475,10 @@ export default function Recite() {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) { setNotice("اسمح بالميكروفون عشان تبدأ التسميع."); return; }
       // A paused recitation picks up where it stopped; a finished one starts over.
-      if (readingRef.current.cursor >= expectedRef.current.length) clearReading();
+      if (trackRef.current.cursor >= expectedRef.current.length) clearReading();
       setFinished(false);
-      setHeardText(readingRef.current.text);
-      setLiveText("");
+      peakRef.current = trackRef.current.cursor;
+      setView(trackRef.current);
       setNotice("");
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
@@ -420,15 +490,15 @@ export default function Recite() {
   }
 
   function clearReading() {
-    readingRef.current = { text: "", cursor: 0 };
+    trackRef.current = emptyTrack(expectedRef.current.length);
+    peakRef.current = 0;
     sessionRef.current = null; // whatever the old recognizer still sends is dropped
   }
 
   function restart() {
     stopListening();
     clearReading();
-    setHeardText("");
-    setLiveText("");
+    setView(null);
     setFinished(false);
     setNotice("");
   }
@@ -445,10 +515,10 @@ export default function Recite() {
 
   const seconds = Math.floor((state.durationMillis || 0) / 1000);
   const timer = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
-  const restartDisabled = recording || (!finished && !heardText);
+  const restartDisabled = recording || (!finished && !(view && view.cursor > 0));
 
   let status = startAyah > 1 ? `ابدأ من الآية ${startAyah} • اضغط الميكروفون` : "اضغط الميكروفون وابدأ التسميع";
-  const done = readable.length > 0 && readingRef.current.cursor >= readable.length;
+  const done = readable.length > 0 && trackRef.current.cursor >= readable.length;
   if (recording) status = `● ${timer} • جارٍ الاستماع… اضغط للإيقاف المؤقت`;
   else if (finished) status = done ? "انتهى التسميع" : "متوقّف مؤقتًا • اضغط الميكروفون للمتابعة";
 
