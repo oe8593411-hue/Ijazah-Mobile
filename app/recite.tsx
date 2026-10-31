@@ -143,6 +143,7 @@ function takeResults(expected: string[], reading: Reading, session: Session, res
     reading: next,
     session: { ...session, phrases, committed },
     heard: [next.text, live.text].filter(Boolean).join(" "),
+    live: live.text,
   };
 }
 
@@ -178,6 +179,7 @@ export default function Recite() {
   const [ready, setReady] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [heardText, setHeardText] = useState("");
+  const [liveText, setLiveText] = useState(""); // the part of heardText that is still being said (not final yet)
   const [finished, setFinished] = useState(false);
   const [notice, setNotice] = useState("");
   const recognitionRef = useRef<any>(null);
@@ -218,6 +220,7 @@ export default function Recite() {
     }).catch(() => setNotice("تعذّر تحميل المصحف داخل التطبيق."));
     setFinished(false);
     setHeardText("");
+    setLiveText("");
     clearReading();
   }, [surahNumber]);
 
@@ -293,8 +296,9 @@ export default function Recite() {
 
   const tracked = useMemo(() => {
     if (!readable.length || !heardText) return null;
-    return trackRecitation(readable.map(i => wordInfo[i].norm), heardText, finished);
-  }, [readable, wordInfo, heardText, finished]);
+    // Only the words still being said can change, so only they wait. A word from a final result shows at once.
+    return trackRecitation(readable.map(i => wordInfo[i].norm), heardText, finished || !liveText);
+  }, [readable, wordInfo, heardText, liveText, finished]);
 
   const byToken: Record<number, { state: WordState; heard?: string }> = {};
   let cursorToken = -1;
@@ -341,6 +345,7 @@ export default function Recite() {
           readingRef.current = next.reading;
           sessionRef.current = next.session;
           idleRestartsRef.current = 0;
+          setLiveText(next.live);
           setHeardText(next.heard);
         };
         r.onerror = (e: any) => {
@@ -351,6 +356,7 @@ export default function Recite() {
         };
         r.onend = () => {
           openRef.current = false;
+          setLiveText("");
           const session = sessionRef.current;
           if (session && session.id === id) {
             // What the session still held is read as it is, even when the page has stopped listening.
@@ -402,6 +408,7 @@ export default function Recite() {
       if (readingRef.current.cursor >= expectedRef.current.length) clearReading();
       setFinished(false);
       setHeardText(readingRef.current.text);
+      setLiveText("");
       setNotice("");
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
@@ -421,6 +428,7 @@ export default function Recite() {
     stopListening();
     clearReading();
     setHeardText("");
+    setLiveText("");
     setFinished(false);
     setNotice("");
   }
