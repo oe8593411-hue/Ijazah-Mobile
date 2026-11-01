@@ -1,13 +1,19 @@
 #!/usr/bin/env node
-// Word accuracy of one transcription engine on consented recitation clips.
+// Word accuracy and error detection of one transcription engine on consented recitation clips.
 //
 //   node scripts/recitation-eval/evaluate.mjs \
 //     --manifest recitation-data/manifest.json \
 //     --engine-cmd "python3 services/whisper/transcribe.py" \
 //     --label whisper-large-v3
 //
-// The engine command is split on spaces and run without a shell. It receives the
-// clip path as its last argument and prints JSON on stdout: {"words":[{"text":"..."}]}.
+// The engine command is split on spaces and run without a shell. It receives the clip
+// path as its last argument and prints JSON on stdout: {"words":[{"text":"..."}]}.
+//
+// Each clip is either a correct reading ("reading": "correct", the default) or a reading
+// with known mistakes ("reading": "with_mistakes" plus "planted_words": the 1-based numbers
+// of the verse words the reciter got wrong). Correct readings measure word accuracy. For
+// every clip the report also counts how many planted mistakes the engine caught, and how
+// many correct words it flagged by mistake.
 //
 // Every clip needs a consent record and consent for commercial use, training and
 // evaluation. If any clip is missing one, the run stops before any engine is called.
@@ -22,11 +28,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 const CORPUS_PATH = path.join(repoRoot, "src", "quran", "verified-corpus.json");
 const REQUIRED_CONSENT = ["commercial_use", "training", "evaluation"];
+const READINGS = ["correct", "with_mistakes"];
 const NOT_MEASURED = [
   "vowel and diacritic errors (normalization drops harakat)",
   "phoneme error rate",
   "tajweed precision and recall",
   "noise and microphone robustness (clips carry no condition tags yet)",
+];
+const CAVEATS = [
+  "detection uses this harness's word alignment with tolerant matching; the matching engine in app/recite.tsx is not reused yet",
+  "a planted mistake counts as caught when its word is substituted or skipped, or when an extra word follows it",
 ];
 
 // Same rules as normalizeArabic in app/recite.tsx, so the numbers describe what the app matches.
@@ -81,8 +92,9 @@ export function tolerantSame(a, b) {
   return editDistance(a, b) / Math.max(a.length, b.length) <= 0.2;
 }
 
-// Edit-distance alignment of two word lists. Counts matched words, substitutions,
-// deletions (expected words the reader skipped) and insertions (extra words).
+// Edit-distance alignment of two word lists. Returns the counts, the substitution pairs, and
+// for each reference word whether it was read correctly ("ok"), substituted ("sub") or
+// skipped ("del"). extraAfter[k] counts the extra words said right after reference word k.
 export function alignWords(ref, hyp, same = strictSame) {
   const n = ref.length;
   const m = hyp.length;
@@ -97,6 +109,8 @@ export function alignWords(ref, hyp, same = strictSame) {
   }
   const counts = { correct: 0, substitutions: 0, deletions: 0, insertions: 0 };
   const substitutionPairs = new Map();
+  const refStatus = new Array(n).fill("ok");
+  const extraAfter = new Array(n).fill(0);
   let i = n;
   let j = m;
   while (i > 0 || j > 0) {
@@ -106,6 +120,7 @@ export function alignWords(ref, hyp, same = strictSame) {
         counts.correct += 1;
       } else {
         counts.substitutions += 1;
+        refStatus[i - 1] = "sub";
         const pair = `${ref[i - 1]} -> ${hyp[j - 1]}`;
         substitutionPairs.set(pair, (substitutionPairs.get(pair) ?? 0) + 1);
       }
@@ -113,13 +128,32 @@ export function alignWords(ref, hyp, same = strictSame) {
       j -= 1;
     } else if (i > 0 && cost[i][j] === cost[i - 1][j] + 1) {
       counts.deletions += 1;
+      refStatus[i - 1] = "del";
       i -= 1;
     } else {
       counts.insertions += 1;
+      if (n > 0) extraAfter[Math.max(i - 1, 0)] += 1;
       j -= 1;
     }
   }
-  return { ...counts, substitutionPairs };
+  return { ...counts, substitutionPairs, refStatus, extraAfter };
+}
+
+// A planted mistake counts as caught when its word is substituted or skipped, or when an
+// extra word follows it. Every other reference word is clean, so flagging it is a false alarm.
+export function detect(refWords, plantedIndexes, aligned) {
+  const result = { plantedTotal: 0, plantedCaught: 0, cleanWords: 0, falseFlags: 0 };
+  for (let index = 0; index < refWords; index += 1) {
+    const flagged = aligned.refStatus[index] !== "ok" || aligned.extraAfter[index] > 0;
+    if (plantedIndexes.has(index)) {
+      result.plantedTotal += 1;
+      if (flagged) result.plantedCaught += 1;
+    } else {
+      result.cleanWords += 1;
+      if (flagged) result.falseFlags += 1;
+    }
+  }
+  return result;
 }
 
 // Returns a list of problems. An empty list means every clip can be scored.
@@ -138,9 +172,11 @@ export function checkManifest(clips, corpus, baseDir) {
     if (!Number.isInteger(clip?.surah) || clip.surah < 1 || clip.surah > 114) {
       problems.push(`${label}: "surah" must be 1 to 114`);
     }
+    const verse =
+      Number.isInteger(clip?.surah) && Number.isInteger(clip?.ayah) ? findAyah(corpus, clip.surah, clip.ayah) : null;
     if (!Number.isInteger(clip?.ayah) || clip.ayah < 1) {
       problems.push(`${label}: "ayah" must be a positive whole number`);
-    } else if (Number.isInteger(clip?.surah) && !findAyah(corpus, clip.surah, clip.ayah)) {
+    } else if (Number.isInteger(clip?.surah) && !verse) {
       problems.push(`${label}: ${clip.surah}:${clip.ayah} is not in the verified corpus`);
     }
     if (typeof clip?.reciter !== "string" || clip.reciter === "") {
@@ -151,6 +187,23 @@ export function checkManifest(clips, corpus, baseDir) {
     if (typeof consent.record !== "string" || consent.record === "") missing.push("record");
     if (missing.length > 0) {
       problems.push(`${label}: consent is missing ${missing.join(", ")}`);
+    }
+    const reading = clip?.reading ?? "correct";
+    const planted = clip?.planted_words;
+    if (!READINGS.includes(reading)) {
+      problems.push(`${label}: "reading" must be "correct" or "with_mistakes"`);
+    } else if (reading === "with_mistakes") {
+      if (!Array.isArray(planted) || planted.length === 0) {
+        problems.push(`${label}: "planted_words" must list the word numbers the reciter got wrong`);
+      } else if (verse) {
+        const words = toTokens(verse.text).length;
+        const outside = planted.filter((number) => !Number.isInteger(number) || number < 1 || number > words);
+        if (outside.length > 0) {
+          problems.push(`${label}: planted_words ${outside.join(", ")} are outside 1-${words}`);
+        }
+      }
+    } else if (Array.isArray(planted) ? planted.length > 0 : planted !== undefined) {
+      problems.push(`${label}: "planted_words" only applies to readings with mistakes`);
     }
   });
   return problems;
@@ -211,18 +264,31 @@ function summarizeCounts(rows, key) {
   };
 }
 
+function summarizeDetection(rows) {
+  const total = { plantedTotal: 0, plantedCaught: 0, cleanWords: 0, falseFlags: 0 };
+  for (const row of rows) {
+    for (const field of Object.keys(total)) total[field] += row.detection[field];
+  }
+  return {
+    ...total,
+    recallPct: percent(total.plantedCaught, total.plantedTotal),
+    falseFlagPct: percent(total.falseFlags, total.cleanWords),
+  };
+}
+
 function summarize(rows) {
   const latencies = rows.map((row) => row.latencyMs);
   return {
     strict: summarizeCounts(rows, "strict"),
     tolerant: summarizeCounts(rows, "tolerant"),
+    detection: summarizeDetection(rows),
     meanLatencyMs: latencies.length
       ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length)
       : null,
   };
 }
 
-const withoutPairs = ({ substitutionPairs, ...counts }) => counts;
+const withoutDetails = ({ substitutionPairs, refStatus, extraAfter, ...counts }) => counts;
 
 export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
   const manifestFile = path.resolve(manifestPath);
@@ -240,16 +306,21 @@ export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
     const reference = toTokens(findAyah(corpus, clip.surah, clip.ayah).text);
     const engine = await runEngine(engineCommand, path.resolve(baseDir, clip.file));
     const hypothesis = toTokens(engine.words.join(" "));
+    const planted = new Set((clip.planted_words ?? []).map((number) => number - 1));
+    const tolerant = alignWords(reference, hypothesis, tolerantSame);
     rows.push({
       file: clip.file,
       surah: clip.surah,
       ayah: clip.ayah,
       reciter: clip.reciter,
+      reading: clip.reading ?? "correct",
+      plantedWords: [...planted].map((index) => index + 1).sort((a, b) => a - b),
       refWords: reference.length,
       hypWords: hypothesis.length,
       latencyMs: Math.round(engine.latencyMs),
       strict: alignWords(reference, hypothesis, strictSame),
-      tolerant: alignWords(reference, hypothesis, tolerantSame),
+      tolerant,
+      detection: detect(reference.length, planted, tolerant),
     });
   }
 
@@ -278,13 +349,17 @@ export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
       surah: row.surah,
       ayah: row.ayah,
       reciter: row.reciter,
+      reading: row.reading,
+      plantedWords: row.plantedWords,
       refWords: row.refWords,
       hypWords: row.hypWords,
       latencyMs: row.latencyMs,
-      strict: withoutPairs(row.strict),
-      tolerant: withoutPairs(row.tolerant),
+      strict: withoutDetails(row.strict),
+      tolerant: withoutDetails(row.tolerant),
+      detection: row.detection,
     })),
     notMeasured: NOT_MEASURED,
+    caveats: CAVEATS,
   };
 }
 
@@ -327,10 +402,19 @@ async function main(argv) {
     path.join(repoRoot, "recitation-data", "reports", `${label}-${report.createdAt.replace(/[:.]/g, "-")}.json`);
   mkdirSync(path.dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`);
-  const { strict, tolerant, meanLatencyMs } = report.totals;
+  const { strict, tolerant, detection, meanLatencyMs } = report.totals;
   console.log(
     `${label}: strict word accuracy ${strict.accuracyPct}% (WER ${strict.werPct}%), ` +
       `tolerant accuracy ${tolerant.accuracyPct}%, clips ${report.clipCount}, mean latency ${meanLatencyMs} ms`,
+  );
+  if (detection.plantedTotal > 0) {
+    console.log(
+      `detection: caught ${detection.plantedCaught} of ${detection.plantedTotal} planted mistakes ` +
+        `(recall ${detection.recallPct}%)`,
+    );
+  }
+  console.log(
+    `false flags: ${detection.falseFlags} of ${detection.cleanWords} correct words (${detection.falseFlagPct}%)`,
   );
   console.log(`report: ${outPath}`);
   return 0;
