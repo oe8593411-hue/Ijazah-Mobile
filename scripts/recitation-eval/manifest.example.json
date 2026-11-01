@@ -1,0 +1,16 @@
+{
+  "clips": [
+    {
+      "file": "clips/fatiha-1-1-reciter-a.wav",
+      "surah": 1,
+      "ayah": 1,
+      "reciter": "reciter-a",
+      "consent": {
+        "record": "consent/reciter-a-signed.pdf",
+        "commercial_use": true,
+        "training": true,
+        "evaluation": true
+      }
+    }
+  ]
+}

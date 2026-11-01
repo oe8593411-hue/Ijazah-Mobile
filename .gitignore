@@ -13,3 +13,7 @@ coverage/
 *.mobileprovision
 .DS_Store
 npm-debug.log*
+
+# Recitation evaluation: clips, consent records and reports stay out of git
+recitation-data/
+__pycache__/

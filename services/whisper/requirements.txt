@@ -1,0 +1,2 @@
+# Pin exact versions once they have been tested on the evaluation machine.
+faster-whisper>=1.0
