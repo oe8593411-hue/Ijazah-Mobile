@@ -1,32 +1,38 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { alignWords, checkManifest, evaluate, normalizeArabic, tolerantSame } from "./evaluate.mjs";
+import { normalizeArabic } from "../../src/recitation/matching.ts";
+import { alignWords, appStates, checkManifest, evaluate, judge, verseWords } from "./evaluate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const harness = path.join(here, "evaluate.mjs");
 const corpus = JSON.parse(readFileSync(path.join(here, "..", "..", "src", "quran", "verified-corpus.json"), "utf8"));
 const consent = { record: "consent/reciter-a.pdf", commercial_use: true, training: true, evaluation: true };
+// Verse 1:1 as the screen reads it: four words, with the dagger alif read as a long a.
+const VERSE_1_1 = ["بسم", "الله", "الرحمان", "الرحيم"];
+// A fake engine that prints the words written next to the clip, so each test controls what is heard.
+const FAKE_ENGINE = 'import { readFileSync } from "node:fs";\nprocess.stdout.write(readFileSync(process.argv.at(-1) + ".json", "utf8"));\n';
 
 function workDir() {
   return mkdtempSync(path.join(os.tmpdir(), "recite-eval-"));
 }
 
 test("normalization drops harakat, reads dagger alif as a long a, unifies alef forms", () => {
-  // مَٰلِكِ -> مالك
   assert.equal(normalizeArabic("مَٰلِكِ"), "مالك");
-  // أَلْحَمْدُ لِلَّهِ -> الحمد لله
-  assert.equal(
-    normalizeArabic("أَلْحَمْدُ لِلَّهِ"),
-    "الحمد لله",
-  );
+  assert.equal(normalizeArabic("أَلْحَمْدُ لِلَّهِ"), "الحمد لله");
 });
 
-test("alignment separates matches, substitutions, skipped words and extra words", () => {
+test("verse words are read the way the screen reads them", () => {
+  const verse = corpus.ayahs.find((item) => item.surah === 1 && item.ayah === 1).text;
+  assert.deepEqual(verseWords(verse), VERSE_1_1);
+  assert.deepEqual(verseWords("بِسْمِ ٱللَّهِ ﴿1﴾"), ["بسم", "الله"]);
+});
+
+test("strict alignment separates matches, substitutions, skipped words and extra words", () => {
   const counts = (ref, hyp) => {
     const { correct, substitutions, deletions, insertions } = alignWords(ref, hyp);
     return { correct, substitutions, deletions, insertions };
@@ -38,16 +44,29 @@ test("alignment separates matches, substitutions, skipped words and extra words"
   assert.deepEqual(counts([], ["x"]), { correct: 0, substitutions: 0, deletions: 0, insertions: 1 });
 });
 
-test("alignment reports which reference words were skipped, substituted or followed by extra words", () => {
-  assert.deepEqual(alignWords(["a", "b", "c"], ["a", "c"]).refStatus, ["ok", "del", "ok"]);
-  assert.deepEqual(alignWords(["a", "b", "c"], ["a", "x", "c"]).refStatus, ["ok", "sub", "ok"]);
-  assert.deepEqual(alignWords(["a", "b", "c"], ["a", "b", "x", "c"]).extraAfter, [0, 1, 0]);
+test("the matcher marks one missed word unsure, two in a row skipped, and a clearly wrong word bad", () => {
+  assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحمان الرحيم"), ["ok", "ok", "ok", "ok"]);
+  assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحيم"), ["ok", "ok", "unsure", "ok"]);
+  assert.deepEqual(appStates(VERSE_1_1, "بسم الرحيم"), ["ok", "skipped", "skipped", "ok"]);
+  assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحمان كتاب"), ["ok", "ok", "ok", "bad"]);
 });
 
-test("tolerant matching accepts a one-letter slip only in longer words", () => {
-  assert.equal(tolerantSame("الرحمان", "الرحمن"), true);
-  assert.equal(tolerantSame("اله", "الله"), false);
-  assert.equal(tolerantSame("ا", "ب"), false);
+test("words after the last word the engine heard stay unread", () => {
+  assert.deepEqual(appStates(VERSE_1_1, "بسم"), ["ok", undefined, undefined, undefined]);
+});
+
+test("the counts keep planted mistakes apart from clean words", () => {
+  const r = judge(["ok", "unsure", "bad", "skipped", undefined], new Set([1, 2]));
+  assert.equal(r.ok, 1);
+  assert.equal(r.flagged, 2);
+  assert.equal(r.unsure, 1);
+  assert.equal(r.unread, 1);
+  assert.equal(r.plantedTotal, 2);
+  assert.equal(r.plantedFlagged, 1);
+  assert.equal(r.plantedUnsure, 1);
+  assert.equal(r.cleanWords, 3);
+  assert.equal(r.cleanFlagged, 1);
+  assert.equal(r.cleanUnread, 1);
 });
 
 test("a clip without commercial-use consent is refused", () => {
@@ -89,24 +108,16 @@ test("planted word numbers must exist in the verse and only apply to readings wi
   assert.match(problems[2], /only applies to readings with mistakes/);
 });
 
-test("end to end: accuracy in both matching modes, and planted mistakes against false alarms", async () => {
+test("end to end: the matcher's decisions and strict accuracy, with planted mistakes", async () => {
   const dir = workDir();
   const engine = path.join(dir, "engine.mjs");
-  writeFileSync(
-    engine,
-    'import { readFileSync } from "node:fs";\nprocess.stdout.write(readFileSync(process.argv.at(-1) + ".json", "utf8"));\n',
-  );
+  writeFileSync(engine, FAKE_ENGINE);
   const clips = [
-    {
-      // The reciter skipped word 2 on purpose, and the engine heard the skip.
-      file: "mistake.wav",
-      reading: "with_mistakes",
-      planted_words: [2],
-      words: ["بسم", "الرحمن", "الرحيم"],
-    },
+    // The reciter skipped word 2 on purpose, and the engine heard the skip. One skipped word is unsure.
+    { file: "mistake.wav", reading: "with_mistakes", planted_words: [2], words: ["بسم", "الرحمن", "الرحيم"] },
     // Correct reading. The engine writes the common spelling of the verse word.
     { file: "correct.wav", words: ["بسم", "الله", "الرحمن", "الرحيم"] },
-    // Correct reading. The engine writes a wrong last word, which is a false alarm.
+    // Correct reading. The engine writes a different last word, which the matcher leaves unsure.
     { file: "wrong.wav", words: ["بسم", "الله", "الرحمن", "الكريم"] },
   ];
   for (const clip of clips) {
@@ -131,24 +142,50 @@ test("end to end: accuracy in both matching modes, and planted mistakes against 
   const report = await evaluate({ manifestPath, engineCommand: [process.execPath, engine], label: "test", corpus });
 
   assert.equal(report.clipCount, 3);
-  assert.equal(report.totals.strict.refWords, 12);
-  assert.equal(report.totals.strict.correct, 7);
-  assert.equal(report.totals.tolerant.correct, 10);
-  assert.equal(report.totals.tolerant.accuracyPct, 83.3);
+  assert.equal(report.totals.wer.refWords, 12);
+  assert.equal(report.totals.wer.correct, 7);
+  assert.equal(report.totals.wer.accuracyPct, 58.3);
   assert.deepEqual(report.topSubstitutions, [
     { pair: "الرحمان -> الرحمن", count: 3 },
     { pair: "الرحيم -> الكريم", count: 1 },
   ]);
-  assert.equal(report.totals.detection.plantedTotal, 1);
-  assert.equal(report.totals.detection.plantedCaught, 1);
-  assert.equal(report.totals.detection.recallPct, 100);
-  assert.equal(report.totals.detection.cleanWords, 11);
-  assert.equal(report.totals.detection.falseFlags, 1);
-  assert.equal(report.totals.detection.falseFlagPct, 9.1);
+  assert.equal(report.totals.app.words, 12);
+  assert.equal(report.totals.app.okPct, 83.3);
+  assert.equal(report.totals.app.unsurePct, 16.7);
+  assert.equal(report.totals.app.flagged, 0);
+  assert.equal(report.totals.app.plantedTotal, 1);
+  assert.equal(report.totals.app.plantedUnsure, 1);
+  assert.equal(report.totals.app.recallPct, 0);
+  assert.equal(report.totals.app.cleanWords, 11);
+  assert.equal(report.totals.app.falseFlagPct, 0);
+  assert.equal(report.totals.app.cleanUnsurePct, 9.1);
   assert.deepEqual(report.clips[0].plantedWords, [2]);
-  assert.equal(report.perReciter["reciter-a"].strict.refWords, 12);
+  assert.deepEqual(report.clips[0].states, ["ok", "unsure", "ok", "ok"]);
+  assert.deepEqual(report.clips[2].states, ["ok", "ok", "ok", "unsure"]);
+  assert.equal(report.perReciter["reciter-a"].wer.refWords, 12);
+  assert.match(report.matcher.sha256, /^[0-9a-f]{64}$/);
   assert.ok(report.notMeasured.length >= 3);
   assert.ok(report.caveats.length >= 2);
+});
+
+test("the command line writes the report and prints the summary", () => {
+  const dir = workDir();
+  const engine = path.join(dir, "engine.mjs");
+  writeFileSync(engine, FAKE_ENGINE);
+  writeFileSync(path.join(dir, "a.wav"), "placeholder");
+  writeFileSync(path.join(dir, "a.wav.json"), JSON.stringify({ words: VERSE_1_1.map((text) => ({ text })) }));
+  const manifestPath = path.join(dir, "manifest.json");
+  writeFileSync(manifestPath, JSON.stringify({ clips: [{ file: "a.wav", surah: 1, ayah: 1, reciter: "reciter-a", consent }] }));
+  const out = path.join(dir, "report.json");
+  const run = spawnSync(
+    process.execPath,
+    [harness, "--manifest", manifestPath, "--engine-cmd", `${process.execPath} ${engine}`, "--label", "cli", "--out", out],
+    { encoding: "utf8" },
+  );
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /cli: word accuracy 100% \(WER 0%\)/);
+  assert.match(run.stdout, /correct words flagged: 0 of 4 \(0%\)/);
+  assert.equal(JSON.parse(readFileSync(out, "utf8")).totals.app.okPct, 100);
 });
 
 test("the command line stops with exit code 2 before any engine runs when consent is incomplete", () => {

@@ -1,15 +1,28 @@
 import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
-const [recite, api, riwayah] = await Promise.all([
+const [recite, matching, harness, api, riwayah] = await Promise.all([
   read("../app/recite.tsx"),
+  read("../src/recitation/matching.ts"),
+  read("./recitation-eval/evaluate.mjs"),
   read("../api/analyze-recitation.ts"),
   read("../src/quran/riwayah.ts"),
 ]);
 const errors = [];
 
-if (!/\[\^(\\u0621-\\u064A|ء-ي)\\s\]/.test(recite) || !recite.includes('.replace(/\\s+/g, " ")')) {
-  errors.push("Client Arabic normalization must preserve whitespace and collapse repeated spaces.");
+// Arabic normalization lives in the shared matcher, so the screen and the evaluation harness read words the same way.
+if (!/\[\^(\\u0621-\\u064A|ء-ي)\\s\]/.test(matching) || !matching.includes('.replace(/\\s+/g, " ")')) {
+  errors.push("Arabic normalization in src/recitation/matching.ts must preserve whitespace and collapse repeated spaces.");
+}
+if (/function\s+normalizeArabic|const\s+normalizeArabic/.test(recite + harness)) {
+  errors.push("Arabic normalization must not be copied: the screen and the harness import it from src/recitation/matching.ts.");
+}
+if (!/from\s+["']\.\.\/src\/recitation\/matching(\.ts)?["']/.test(recite)) {
+  errors.push("The screen must take its matching from src/recitation/matching.ts.");
+}
+// Reports measure the app's own decisions only if the harness uses the same matcher.
+if (!/from\s+["']\.\.\/\.\.\/src\/recitation\/matching\.ts["']/.test(harness)) {
+  errors.push("The evaluation harness must measure with src/recitation/matching.ts.");
 }
 // The client no longer calls the server analysis API; it must not present
 // tajweed verdicts, and it must not show riwayat other than the verified Hafs.

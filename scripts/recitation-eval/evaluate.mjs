@@ -1,101 +1,74 @@
 #!/usr/bin/env node
-// Word accuracy and error detection of one transcription engine on consented recitation clips.
+// Measures one transcription engine on consented recitation clips, using the app's own matcher.
 //
-//   node scripts/recitation-eval/evaluate.mjs \
+//   node --no-warnings scripts/recitation-eval/evaluate.mjs \
 //     --manifest recitation-data/manifest.json \
 //     --engine-cmd "python3 services/whisper/transcribe.py" \
 //     --label whisper-large-v3
 //
-// The engine command is split on spaces and run without a shell. It receives the clip
-// path as its last argument and prints JSON on stdout: {"words":[{"text":"..."}]}.
+// Needs Node 22.18 or newer: the matcher is TypeScript, and Node runs it directly.
+// The engine command is split on spaces and run without a shell. It gets the clip path as its last
+// argument and prints JSON on stdout: {"words":[{"text":"..."}]}.
 //
-// Each clip is either a correct reading ("reading": "correct", the default) or a reading
-// with known mistakes ("reading": "with_mistakes" plus "planted_words": the 1-based numbers
-// of the verse words the reciter got wrong). Correct readings measure word accuracy. For
-// every clip the report also counts how many planted mistakes the engine caught, and how
-// many correct words it flagged by mistake.
+// Each clip is one verse. "reading" is "correct" (the default) or "with_mistakes", and then
+// "planted_words" lists the 1-based word numbers the reciter got wrong. The matcher decides each verse
+// word from the engine's words, read as one final result:
+//   ok       green on the screen
+//   flagged  bad (red) or skipped (amber): the words the screen lists for review
+//   unsure   gray: the matcher abstains
+//   unread   the matcher did not reach the word
+// Strict word accuracy (exact match after the app's normalization) is reported next to these.
 //
-// Every clip needs a consent record and consent for commercial use, training and
-// evaluation. If any clip is missing one, the run stops before any engine is called.
-// Reports are written to recitation-data/reports/, which git ignores.
+// Every clip needs a consent record and consent for commercial use, training and evaluation.
+// If one clip lacks them, no engine is called. Reports go to recitation-data/reports/, which git ignores.
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { emptyTrack, endSpeech, normalizeArabic, startSpeech, takeSpeech } from "../../src/recitation/matching.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 const CORPUS_PATH = path.join(repoRoot, "src", "quran", "verified-corpus.json");
+const MATCHER_PATH = path.join(repoRoot, "src", "recitation", "matching.ts");
 const REQUIRED_CONSENT = ["commercial_use", "training", "evaluation"];
 const READINGS = ["correct", "with_mistakes"];
+const END_MARKER = /^﴿\d+﴾$/u;
 const NOT_MEASURED = [
-  "vowel and diacritic errors (normalization drops harakat)",
+  "vowel and diacritic errors (the matcher normalizes harakat away)",
   "phoneme error rate",
   "tajweed precision and recall",
   "noise and microphone robustness (clips carry no condition tags yet)",
 ];
 const CAVEATS = [
-  "detection uses this harness's word alignment with tolerant matching; the matching engine in app/recite.tsx is not reused yet",
-  "a planted mistake counts as caught when its word is substituted or skipped, or when an extra word follows it",
+  "each clip is one verse read as one final recognizer result; live sessions with several results and ayah changes are not measured here",
+  "a single missed word is unsure by design, so it is an abstention, not a flag",
+  "words after the last word the engine heard stay unread, so a missed last word is not marked",
 ];
 
-// Same rules as normalizeArabic in app/recite.tsx, so the numbers describe what the app matches.
-export function normalizeArabic(value) {
-  return value
-    .normalize("NFC")
-    .replace(/ٰ/g, "ا") // dagger alif is a long "a"
-    .replace(/[ً-ٰۖ-ۭ]/g, "")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ـ/g, "")
-    .replace(/[^ء-ي\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+// The verse words as the screen builds them: whitespace-separated tokens, end-of-ayah markers dropped,
+// and each token normalized with its spaces removed.
+export function verseWords(text) {
+  return text
+    .split(/\s+/u)
+    .filter((token) => token && !END_MARKER.test(token))
+    .map((token) => normalizeArabic(token).replace(/ /g, ""))
+    .filter(Boolean);
 }
 
-export function toTokens(text) {
-  const normalized = normalizeArabic(text);
-  return normalized === "" ? [] : normalized.split(" ");
+// The engine's words as the matcher reads a result: normalized, then split on spaces.
+export function heardWords(words) {
+  return normalizeArabic(words.join(" ")).split(" ").filter(Boolean);
 }
 
 export function findAyah(corpus, surah, ayah) {
   return corpus.ayahs.find((item) => item.surah === surah && item.ayah === ayah) ?? null;
 }
 
-function editDistance(a, b) {
-  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i += 1) {
-    const current = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      current[j] = Math.min(
-        previous[j] + 1,
-        current[j - 1] + 1,
-        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    previous = current;
-  }
-  return previous[b.length];
-}
-
-// Strict: the normalized words must be identical.
-export function strictSame(a, b) {
-  return a === b;
-}
-
-// Tolerant: close to the app's word matching, which accepts a small slip in a longer word
-// (for example الرحمان / الرحمن). Words under two letters never match loosely.
-export function tolerantSame(a, b) {
-  if (a === b) return true;
-  if (Math.min(a.length, b.length) < 2) return false;
-  return editDistance(a, b) / Math.max(a.length, b.length) <= 0.2;
-}
-
-// Edit-distance alignment of two word lists. Returns the counts, the substitution pairs, and
-// for each reference word whether it was read correctly ("ok"), substituted ("sub") or
-// skipped ("del"). extraAfter[k] counts the extra words said right after reference word k.
-export function alignWords(ref, hyp, same = strictSame) {
+// Strict alignment for the word error rate: a word is correct only when it matches exactly.
+export function alignWords(ref, hyp) {
   const n = ref.length;
   const m = hyp.length;
   const cost = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
@@ -103,24 +76,21 @@ export function alignWords(ref, hyp, same = strictSame) {
   for (let j = 0; j <= m; j += 1) cost[0][j] = j;
   for (let i = 1; i <= n; i += 1) {
     for (let j = 1; j <= m; j += 1) {
-      const diagonal = cost[i - 1][j - 1] + (same(ref[i - 1], hyp[j - 1]) ? 0 : 1);
+      const diagonal = cost[i - 1][j - 1] + (ref[i - 1] === hyp[j - 1] ? 0 : 1);
       cost[i][j] = Math.min(diagonal, cost[i - 1][j] + 1, cost[i][j - 1] + 1);
     }
   }
   const counts = { correct: 0, substitutions: 0, deletions: 0, insertions: 0 };
   const substitutionPairs = new Map();
-  const refStatus = new Array(n).fill("ok");
-  const extraAfter = new Array(n).fill(0);
   let i = n;
   let j = m;
   while (i > 0 || j > 0) {
-    const matches = i > 0 && j > 0 && same(ref[i - 1], hyp[j - 1]);
+    const matches = i > 0 && j > 0 && ref[i - 1] === hyp[j - 1];
     if (i > 0 && j > 0 && cost[i][j] === cost[i - 1][j - 1] + (matches ? 0 : 1)) {
       if (matches) {
         counts.correct += 1;
       } else {
         counts.substitutions += 1;
-        refStatus[i - 1] = "sub";
         const pair = `${ref[i - 1]} -> ${hyp[j - 1]}`;
         substitutionPairs.set(pair, (substitutionPairs.get(pair) ?? 0) + 1);
       }
@@ -128,35 +98,57 @@ export function alignWords(ref, hyp, same = strictSame) {
       j -= 1;
     } else if (i > 0 && cost[i][j] === cost[i - 1][j] + 1) {
       counts.deletions += 1;
-      refStatus[i - 1] = "del";
       i -= 1;
     } else {
       counts.insertions += 1;
-      if (n > 0) extraAfter[Math.max(i - 1, 0)] += 1;
       j -= 1;
     }
   }
-  return { ...counts, substitutionPairs, refStatus, extraAfter };
+  return { ...counts, substitutionPairs };
 }
 
-// A planted mistake counts as caught when its word is substituted or skipped, or when an
-// extra word follows it. Every other reference word is clean, so flagging it is a false alarm.
-export function detect(refWords, plantedIndexes, aligned) {
-  const result = { plantedTotal: 0, plantedCaught: 0, cleanWords: 0, falseFlags: 0 };
-  for (let index = 0; index < refWords; index += 1) {
-    const flagged = aligned.refStatus[index] !== "ok" || aligned.extraAfter[index] > 0;
+// The matcher's decision for each verse word, from one final result holding the engine's words.
+export function appStates(expected, heardText) {
+  const start = emptyTrack(expected.length);
+  const taken = takeSpeech(expected, start, startSpeech(start), [{ alts: [heardText], isFinal: true }]);
+  return endSpeech(expected, taken.track, taken.speech).states;
+}
+
+// The screen's groups: ok (green); flagged (bad in red or skipped in amber, both listed for review);
+// unsure (gray); unread (the matcher did not reach the word).
+export function outcomeOf(state) {
+  if (state === "ok") return "ok";
+  if (state === "bad" || state === "skipped") return "flagged";
+  if (state === "unsure") return "unsure";
+  return "unread";
+}
+
+// Counts the matcher's decisions for all words, and for the planted mistakes and the clean words apart.
+export function judge(states, plantedIndexes) {
+  const result = {
+    words: states.length, ok: 0, flagged: 0, unsure: 0, unread: 0,
+    plantedTotal: 0, plantedFlagged: 0, plantedUnsure: 0, plantedUnread: 0,
+    cleanWords: 0, cleanFlagged: 0, cleanUnsure: 0, cleanUnread: 0,
+  };
+  states.forEach((state, index) => {
+    const outcome = outcomeOf(state);
+    result[outcome] += 1;
     if (plantedIndexes.has(index)) {
       result.plantedTotal += 1;
-      if (flagged) result.plantedCaught += 1;
+      if (outcome === "flagged") result.plantedFlagged += 1;
+      else if (outcome === "unsure") result.plantedUnsure += 1;
+      else if (outcome === "unread") result.plantedUnread += 1;
     } else {
       result.cleanWords += 1;
-      if (flagged) result.falseFlags += 1;
+      if (outcome === "flagged") result.cleanFlagged += 1;
+      else if (outcome === "unsure") result.cleanUnsure += 1;
+      else if (outcome === "unread") result.cleanUnread += 1;
     }
-  }
+  });
   return result;
 }
 
-// Returns a list of problems. An empty list means every clip can be scored.
+// Returns the problems in the manifest. An empty list means every clip can be scored.
 export function checkManifest(clips, corpus, baseDir) {
   if (!Array.isArray(clips) || clips.length === 0) {
     return ['manifest needs a non-empty "clips" array'];
@@ -196,7 +188,7 @@ export function checkManifest(clips, corpus, baseDir) {
       if (!Array.isArray(planted) || planted.length === 0) {
         problems.push(`${label}: "planted_words" must list the word numbers the reciter got wrong`);
       } else if (verse) {
-        const words = toTokens(verse.text).length;
+        const words = verseWords(verse.text).length;
         const outside = planted.filter((number) => !Number.isInteger(number) || number < 1 || number > words);
         if (outside.length > 0) {
           problems.push(`${label}: planted_words ${outside.join(", ")} are outside 1-${words}`);
@@ -249,46 +241,50 @@ export function runEngine(command, clipPath) {
 
 const percent = (part, whole) => (whole === 0 ? null : Math.round((1000 * part) / whole) / 10);
 
-function summarizeCounts(rows, key) {
+function summarizeWer(rows) {
   const total = { correct: 0, substitutions: 0, deletions: 0, insertions: 0 };
   for (const row of rows) {
-    for (const field of Object.keys(total)) total[field] += row[key][field];
+    for (const field of Object.keys(total)) total[field] += row.wer[field];
   }
   const refWords = rows.reduce((sum, row) => sum + row.refWords, 0);
   const errors = total.substitutions + total.deletions + total.insertions;
-  return {
-    refWords,
-    ...total,
-    accuracyPct: percent(total.correct, refWords),
-    werPct: percent(errors, refWords),
-  };
+  return { refWords, ...total, accuracyPct: percent(total.correct, refWords), werPct: percent(errors, refWords) };
 }
 
-function summarizeDetection(rows) {
-  const total = { plantedTotal: 0, plantedCaught: 0, cleanWords: 0, falseFlags: 0 };
+function summarizeApp(rows) {
+  const total = {
+    words: 0, ok: 0, flagged: 0, unsure: 0, unread: 0,
+    plantedTotal: 0, plantedFlagged: 0, plantedUnsure: 0, plantedUnread: 0,
+    cleanWords: 0, cleanFlagged: 0, cleanUnsure: 0, cleanUnread: 0,
+  };
   for (const row of rows) {
-    for (const field of Object.keys(total)) total[field] += row.detection[field];
+    for (const field of Object.keys(total)) total[field] += row.app[field];
   }
   return {
     ...total,
-    recallPct: percent(total.plantedCaught, total.plantedTotal),
-    falseFlagPct: percent(total.falseFlags, total.cleanWords),
+    okPct: percent(total.ok, total.words),
+    flaggedPct: percent(total.flagged, total.words),
+    unsurePct: percent(total.unsure, total.words),
+    unreadPct: percent(total.unread, total.words),
+    recallPct: percent(total.plantedFlagged, total.plantedTotal),
+    plantedUnsurePct: percent(total.plantedUnsure, total.plantedTotal),
+    falseFlagPct: percent(total.cleanFlagged, total.cleanWords),
+    cleanUnsurePct: percent(total.cleanUnsure, total.cleanWords),
   };
 }
 
 function summarize(rows) {
   const latencies = rows.map((row) => row.latencyMs);
   return {
-    strict: summarizeCounts(rows, "strict"),
-    tolerant: summarizeCounts(rows, "tolerant"),
-    detection: summarizeDetection(rows),
+    wer: summarizeWer(rows),
+    app: summarizeApp(rows),
     meanLatencyMs: latencies.length
       ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length)
       : null,
   };
 }
 
-const withoutDetails = ({ substitutionPairs, refStatus, extraAfter, ...counts }) => counts;
+const withoutPairs = ({ substitutionPairs, ...counts }) => counts;
 
 export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
   const manifestFile = path.resolve(manifestPath);
@@ -303,11 +299,11 @@ export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
 
   const rows = [];
   for (const clip of manifest.clips) {
-    const reference = toTokens(findAyah(corpus, clip.surah, clip.ayah).text);
+    const expected = verseWords(findAyah(corpus, clip.surah, clip.ayah).text);
     const engine = await runEngine(engineCommand, path.resolve(baseDir, clip.file));
-    const hypothesis = toTokens(engine.words.join(" "));
+    const heard = heardWords(engine.words);
     const planted = new Set((clip.planted_words ?? []).map((number) => number - 1));
-    const tolerant = alignWords(reference, hypothesis, tolerantSame);
+    const states = appStates(expected, engine.words.join(" "));
     rows.push({
       file: clip.file,
       surah: clip.surah,
@@ -315,25 +311,30 @@ export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
       reciter: clip.reciter,
       reading: clip.reading ?? "correct",
       plantedWords: [...planted].map((index) => index + 1).sort((a, b) => a - b),
-      refWords: reference.length,
-      hypWords: hypothesis.length,
+      refWords: expected.length,
+      hypWords: heard.length,
       latencyMs: Math.round(engine.latencyMs),
-      strict: alignWords(reference, hypothesis, strictSame),
-      tolerant,
-      detection: detect(reference.length, planted, tolerant),
+      wer: alignWords(expected, heard),
+      app: judge(states, planted),
+      states: states.map((state) => state ?? "unread"),
     });
   }
 
   const reciters = [...new Set(rows.map((row) => row.reciter))];
   const pairs = new Map();
   for (const row of rows) {
-    for (const [pair, count] of row.strict.substitutionPairs) {
+    for (const [pair, count] of row.wer.substitutionPairs) {
       pairs.set(pair, (pairs.get(pair) ?? 0) + count);
     }
   }
   return {
     label,
     engine: engineCommand.join(" "),
+    matcher: {
+      file: "src/recitation/matching.ts",
+      sha256: createHash("sha256").update(readFileSync(MATCHER_PATH)).digest("hex"),
+    },
+    corpus: { version: corpus.version, sha256: corpus.sha256 },
     createdAt: new Date().toISOString(),
     clipCount: rows.length,
     totals: summarize(rows),
@@ -354,9 +355,9 @@ export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
       refWords: row.refWords,
       hypWords: row.hypWords,
       latencyMs: row.latencyMs,
-      strict: withoutDetails(row.strict),
-      tolerant: withoutDetails(row.tolerant),
-      detection: row.detection,
+      wer: withoutPairs(row.wer),
+      app: row.app,
+      states: row.states,
     })),
     notMeasured: NOT_MEASURED,
     caveats: CAVEATS,
@@ -387,7 +388,7 @@ async function main(argv) {
     console.error('usage: evaluate.mjs --manifest <file> --engine-cmd "<command>" [--label <name>] [--out <file>]');
     return 2;
   }
-  const label = args.label ?? "engine";
+  const label = (args.label ?? "engine").replace(/[^\w.-]+/g, "_");
   const corpus = JSON.parse(readFileSync(CORPUS_PATH, "utf8"));
   const engineCommand = args["engine-cmd"].split(/\s+/).filter(Boolean);
   let report;
@@ -402,20 +403,22 @@ async function main(argv) {
     path.join(repoRoot, "recitation-data", "reports", `${label}-${report.createdAt.replace(/[:.]/g, "-")}.json`);
   mkdirSync(path.dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`);
-  const { strict, tolerant, detection, meanLatencyMs } = report.totals;
+  const { wer, app, meanLatencyMs } = report.totals;
   console.log(
-    `${label}: strict word accuracy ${strict.accuracyPct}% (WER ${strict.werPct}%), ` +
-      `tolerant accuracy ${tolerant.accuracyPct}%, clips ${report.clipCount}, mean latency ${meanLatencyMs} ms`,
+    `${label}: word accuracy ${wer.accuracyPct}% (WER ${wer.werPct}%), clips ${report.clipCount}, ` +
+      `mean latency ${meanLatencyMs} ms`,
   );
-  if (detection.plantedTotal > 0) {
+  console.log(
+    `matcher decisions on ${app.words} words: ok ${app.okPct}%, flagged ${app.flaggedPct}%, ` +
+      `unsure ${app.unsurePct}%, unread ${app.unreadPct}%`,
+  );
+  if (app.plantedTotal > 0) {
     console.log(
-      `detection: caught ${detection.plantedCaught} of ${detection.plantedTotal} planted mistakes ` +
-        `(recall ${detection.recallPct}%)`,
+      `planted mistakes: ${app.plantedFlagged} of ${app.plantedTotal} flagged (recall ${app.recallPct}%), ` +
+        `${app.plantedUnsure} unsure, ${app.plantedUnread} unread`,
     );
   }
-  console.log(
-    `false flags: ${detection.falseFlags} of ${detection.cleanWords} correct words (${detection.falseFlagPct}%)`,
-  );
+  console.log(`correct words flagged: ${app.cleanFlagged} of ${app.cleanWords} (${app.falseFlagPct}%), unsure: ${app.cleanUnsure}`);
   console.log(`report: ${outPath}`);
   return 0;
 }
