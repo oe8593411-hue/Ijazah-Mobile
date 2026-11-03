@@ -18,6 +18,8 @@ const QURAN_FONT = Platform.select({
   default: "'Amiri Quran', 'Amiri', 'Scheherazade New', serif",
 });
 const COLUMN_MAX = 540;
+// The basmala is shown above each surah, as in the mushaf, except At-Tawbah, which has none.
+const BASMALA = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
 
 // ---------- Screen ----------
 
@@ -129,6 +131,10 @@ export default function Recite() {
     return () => { cancelled = true; };
   }, [wordInfo]);
 
+  // Al-Fatiha's first verse (the basmala with its number) is shown as the header, so the verses flow from the second one.
+  const headerEnd = surahNumber === 1 ? wordInfo.findIndex(w => w.marker) + 1 : 0;
+  const showBasmala = surahNumber !== 9;
+
   // Break the surah into lines that fill the column, like a mushaf page.
   const lines = useMemo(() => {
     const gap = 8; // 4px margin on each side of a word
@@ -136,6 +142,7 @@ export default function Recite() {
     let cur: number[] = [];
     let used = 0;
     wordInfo.forEach((w, i) => {
+      if (i < headerEnd) return;
       const width = wordWidths ? wordWidths[i] : w.marker ? 26 : Math.max(1, w.norm.length) * 15;
       const wd = width + gap;
       if (cur.length && used + wd > columnWidth) { out.push(cur); cur = []; used = 0; }
@@ -144,7 +151,7 @@ export default function Recite() {
     });
     if (cur.length) out.push(cur);
     return out;
-  }, [wordInfo, wordWidths, columnWidth]);
+  }, [wordInfo, wordWidths, columnWidth, headerEnd]);
 
   const tracked = useMemo(() => (view && readable.length ? view : null), [view, readable]);
 
@@ -163,6 +170,24 @@ export default function Recite() {
     .filter(i => byToken[i] && (byToken[i].state === "bad" || byToken[i].state === "skipped"))
     .slice(0, 8);
   const progress = readable.length && tracked ? Math.min(1, tracked.cursor / readable.length) : 0;
+
+  // One word of the verses (or of the header), colored by what the reader has said so far.
+  const renderWord = (i: number) => {
+    const info = wordInfo[i];
+    if (info.marker) return <AyahMark key={i} num={info.num} />;
+    const result = byToken[i];
+    const isCursor = i === cursorToken && recording && !hidden;
+    const style: any[] = [s.word];
+    if (hidden && !result) style.push(s.masked);
+    else if (result?.state === "ok") style.push({ color: C.ok });
+    else if (result?.state === "bad") style.push({ color: C.bad });
+    else if (result?.state === "unsure") style.push({ color: C.unsure });
+    else if (result?.state === "skipped") style.push({ color: C.skipped });
+    if (isCursor) style.push(s.cursor);
+    // With the verses hidden, show what the reader actually said for wrong words.
+    const shown = hidden && result?.state === "bad" && result.heard ? result.heard : info.text;
+    return <Text key={i} style={style}>{shown}</Text>;
+  };
 
   // ---------- Live word recognition (browser) ----------
 
@@ -326,24 +351,16 @@ export default function Recite() {
       <ScrollView style={s.body} contentContainerStyle={s.content}>
         {ready ? (
           <View style={s.column}>
+            {showBasmala && (surahNumber === 1 ? (
+              <View style={[s.line, s.header, { justifyContent: "center" }]}>
+                {wordInfo.slice(0, headerEnd).map((_, i) => renderWord(i))}
+              </View>
+            ) : (
+              <Text style={s.basmala}>{BASMALA}</Text>
+            ))}
             {lines.map((line, li) => (
               <View key={li} style={s.line}>
-                {line.map((i) => {
-                  const info = wordInfo[i];
-                  if (info.marker) return <Text key={i} style={s.ayahMark}>{` ${info.num} `}</Text>;
-                  const result = byToken[i];
-                  const isCursor = i === cursorToken && recording && !hidden;
-                  const style: any[] = [s.word];
-                  if (hidden && !result) style.push(s.masked);
-                  else if (result?.state === "ok") style.push({ color: C.ok });
-                  else if (result?.state === "bad") style.push({ color: C.bad });
-                  else if (result?.state === "unsure") style.push({ color: C.unsure });
-                  else if (result?.state === "skipped") style.push({ color: C.skipped });
-                  if (isCursor) style.push(s.cursor);
-                  // With the verses hidden, show what the reader actually said for wrong words.
-                  const shown = hidden && result?.state === "bad" && result.heard ? result.heard : info.text;
-                  return <Text key={i} style={style}>{shown}</Text>;
-                })}
+                {line.map(renderWord)}
               </View>
             ))}
           </View>
@@ -418,6 +435,17 @@ export default function Recite() {
   );
 }
 
+// The ayah number inside a gold ring, the way the mushaf marks the end of a verse.
+function AyahMark({ num }: { num: string }) {
+  return (
+    <View style={s.ayahMark}>
+      <View style={s.ayahRing}>
+        <Text style={s.ayahNum}>{num}</Text>
+      </View>
+    </View>
+  );
+}
+
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <View style={s.stat}>
@@ -447,7 +475,11 @@ const s = StyleSheet.create({
   column: { width: "100%", maxWidth: COLUMN_MAX },
   line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
   word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
-  ayahMark: { color: C.gold, backgroundColor: C.goldSoft, fontFamily: QURAN_FONT, fontSize: 14, lineHeight: 26, marginHorizontal: 4, borderRadius: 13, overflow: "hidden" },
+  ayahMark: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: C.gold, backgroundColor: C.goldSoft, alignItems: "center", justifyContent: "center", marginHorizontal: 4 },
+  ayahRing: { width: 18, height: 18, borderRadius: 9, borderWidth: 0.8, borderColor: C.gold, alignItems: "center", justifyContent: "center" },
+  ayahNum: { color: C.gold, fontSize: 10, fontWeight: "700", textAlign: "center" },
+  header: { width: "100%", marginBottom: 14 },
+  basmala: { width: "100%", color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, textAlign: "center", writingDirection: "rtl", marginBottom: 14 },
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
   loading: { textAlign: "center", color: C.muted, marginTop: 40 },
