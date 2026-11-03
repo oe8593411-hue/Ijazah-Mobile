@@ -18,6 +18,36 @@ const QURAN_FONT = Platform.select({
   default: "'Amiri Quran', 'Amiri', 'Scheherazade New', serif",
 });
 const COLUMN_MAX = 540;
+
+// Lines are filled like a mushaf: spare width goes into tatweels (kashida), which stretch letters instead of opening gaps.
+const TATWEEL = "ـ";
+const CONNECTS_LEFT = /[بتثجحخسشصضطظعغفقكلمنهيئ]/u;
+const HARAKA = /[ً-ٰٟۖ-ۭ]/u;
+const LETTER = /\p{L}/u;
+const ALEF = /[اأإآٱ]/u;
+
+// Places inside a word where a tatweel can sit: after a letter that joins the next one, past its harakat.
+function joinPoints(text: string): number[] {
+  const chars = Array.from(text);
+  const points: number[] = [];
+  chars.forEach((c, i) => {
+    if (!CONNECTS_LEFT.test(c)) return;
+    let j = i + 1;
+    while (j < chars.length && HARAKA.test(chars[j])) j++;
+    if (j >= chars.length || !LETTER.test(chars[j]) || chars[j] === "ء") return;
+    if (c === "ل" && ALEF.test(chars[j])) return; // lam-alef stays one ligature
+    points.push(j);
+  });
+  return points;
+}
+
+function stretchWord(text: string, count: number): string {
+  const points = joinPoints(text);
+  if (!points.length || count <= 0) return text;
+  const at = new Map<number, number>();
+  points.forEach((p, k) => at.set(p, Math.floor(count / points.length) + (k < count % points.length ? 1 : 0)));
+  return Array.from(text).map((c, i) => TATWEEL.repeat(at.get(i) ?? 0) + c).join("");
+}
 // The basmala is shown above each surah, as in the mushaf, except At-Tawbah, which has none.
 const BASMALA = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
 
@@ -113,9 +143,13 @@ export default function Recite() {
   }, [readable, wordInfo]);
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
+  // The width the column really has once laid out, so the lines fill exactly what is shown.
+  const [colWidth, setColWidth] = useState(0);
+  const fitWidth = colWidth || columnWidth;
 
   // Measure each word with the mushaf font (web canvas) so the lines really fill the column.
   const [wordWidths, setWordWidths] = useState<number[] | null>(null);
+  const [tatWidth, setTatWidth] = useState(0);
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined" || !wordInfo.length) return;
     let cancelled = false;
@@ -124,6 +158,7 @@ export default function Recite() {
       if (!ctx || cancelled) return;
       ctx.font = `30px 'Amiri Quran', 'Amiri', serif`;
       setWordWidths(wordInfo.map(w => (w.marker ? 26 : ctx.measureText(w.text).width)));
+      setTatWidth(ctx.measureText(TATWEEL).width);
     };
     const fonts = (document as any).fonts;
     if (fonts?.load) fonts.load(`30px 'Amiri Quran'`).then(measure, measure);
@@ -145,13 +180,35 @@ export default function Recite() {
       if (i < headerEnd) return;
       const width = wordWidths ? wordWidths[i] : w.marker ? 26 : Math.max(1, w.norm.length) * 15;
       const wd = width + gap;
-      if (cur.length && used + wd > columnWidth) { out.push(cur); cur = []; used = 0; }
+      if (cur.length && used + wd > fitWidth) { out.push(cur); cur = []; used = 0; }
       cur.push(i);
       used += wd;
     });
     if (cur.length) out.push(cur);
     return out;
-  }, [wordInfo, wordWidths, columnWidth, headerEnd]);
+  }, [wordInfo, wordWidths, fitWidth, headerEnd]);
+
+  // Spare width in each line becomes tatweels, shared by the words of that line.
+  const stretched = useMemo(() => {
+    const out = new Map<number, string>();
+    if (!wordWidths || !tatWidth) return out;
+    for (const line of lines) {
+      const used = line.reduce((sum, i) => sum + wordWidths[i] + 8, 0);
+      let spare = Math.floor((fitWidth - used) / tatWidth);
+      const words = line.filter(i => !wordInfo[i].marker && joinPoints(wordInfo[i].text).length > 0);
+      if (spare <= 0 || !words.length) continue;
+      const count = new Map<number, number>();
+      while (spare > 0) {
+        for (const i of words) {
+          if (spare <= 0) break;
+          count.set(i, (count.get(i) ?? 0) + 1);
+          spare--;
+        }
+      }
+      count.forEach((n, i) => out.set(i, stretchWord(wordInfo[i].text, n)));
+    }
+    return out;
+  }, [lines, wordWidths, tatWidth, fitWidth, wordInfo]);
 
   const tracked = useMemo(() => (view && readable.length ? view : null), [view, readable]);
 
@@ -185,7 +242,7 @@ export default function Recite() {
     else if (result?.state === "skipped") style.push({ color: C.skipped });
     if (isCursor) style.push(s.cursor);
     // With the verses hidden, show what the reader actually said for wrong words.
-    const shown = hidden && result?.state === "bad" && result.heard ? result.heard : info.text;
+    const shown = hidden && result?.state === "bad" && result.heard ? result.heard : (stretched.get(i) ?? info.text);
     return <Text key={i} style={style}>{shown}</Text>;
   };
 
@@ -350,7 +407,7 @@ export default function Recite() {
 
       <ScrollView style={s.body} contentContainerStyle={s.content}>
         {ready ? (
-          <View style={s.column}>
+          <View style={s.column} onLayout={e => setColWidth(e.nativeEvent.layout.width)}>
             {showBasmala && (surahNumber === 1 ? (
               <View style={[s.line, s.header, { justifyContent: "center" }]}>
                 {wordInfo.slice(0, headerEnd).map((_, i) => renderWord(i))}
@@ -473,7 +530,7 @@ const s = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 250, alignItems: "center" },
   column: { width: "100%", maxWidth: COLUMN_MAX },
-  line: { flexDirection: "row-reverse", justifyContent: "flex-start", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
+  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
   word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
   ayahMark: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: C.gold, backgroundColor: C.goldSoft, alignItems: "center", justifyContent: "center", marginHorizontal: 4 },
   ayahRing: { width: 18, height: 18, borderRadius: 9, borderWidth: 0.8, borderColor: C.gold, alignItems: "center", justifyContent: "center" },
