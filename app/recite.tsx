@@ -473,7 +473,7 @@ const s = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 28, paddingBottom: 250, alignItems: "center" },
   column: { width: "100%", maxWidth: COLUMN_MAX },
-  line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
+  line: { flexDirection: "row-reverse", justifyContent: "flex-start", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
   word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
   ayahMark: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: C.gold, backgroundColor: C.goldSoft, alignItems: "center", justifyContent: "center", marginHorizontal: 4 },
   ayahRing: { width: 18, height: 18, borderRadius: 9, borderWidth: 0.8, borderColor: C.gold, alignItems: "center", justifyContent: "center" },
