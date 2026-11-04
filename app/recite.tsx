@@ -166,8 +166,10 @@ export default function Recite() {
     return () => { cancelled = true; };
   }, [wordInfo]);
 
-  // Al-Fatiha's first verse (the basmala with its number) is shown as the header, so the verses flow from the second one.
-  const headerEnd = surahNumber === 1 ? wordInfo.findIndex(w => w.marker) + 1 : 0;
+  // Most surahs open with the basmala inside verse 1. It is shown once, as the header, and the verses flow after it.
+  const BASMALA_NORM = ["بسم", "الله", "الرحمان", "الرحيم"];
+  const hasBasmala = surahNumber !== 1 && surahNumber !== 9 && BASMALA_NORM.every((n, k) => wordInfo[k]?.norm === n);
+  const headerEnd = surahNumber === 1 ? wordInfo.findIndex(w => w.marker) + 1 : hasBasmala ? BASMALA_NORM.length : 0;
   const showBasmala = surahNumber !== 9;
 
   // Break the surah into lines that fill the column, like a mushaf page.
@@ -188,26 +190,31 @@ export default function Recite() {
     return out;
   }, [wordInfo, wordWidths, fitWidth, headerEnd]);
 
-  // Spare width in each line becomes tatweels, shared by the words of that line.
+  // Spare width in each line becomes tatweels. A line that would need more than 30% of its words' width is left
+  // centred at normal size instead (like the last line of a page), so no word is stretched out of shape.
   const stretched = useMemo(() => {
-    const out = new Map<number, string>();
-    if (!wordWidths || !tatWidth) return out;
-    for (const line of lines) {
+    const words = new Map<number, string>();
+    const centred = new Set<number>();
+    if (!wordWidths || !tatWidth) return { words, centred };
+    lines.forEach((line, li) => {
       const used = line.reduce((sum, i) => sum + wordWidths[i] + 8, 0);
-      let spare = Math.floor((fitWidth - used) / tatWidth);
-      const words = line.filter(i => !wordInfo[i].marker && joinPoints(wordInfo[i].text).length > 0);
-      if (spare <= 0 || !words.length) continue;
+      const spare = fitWidth - used;
+      if (spare <= 0) return;
+      const cands = line.filter(i => !wordInfo[i].marker && joinPoints(wordInfo[i].text).length > 0);
+      const capacity = cands.reduce((sum, i) => sum + wordWidths[i], 0) * 0.3;
+      if (spare > capacity) { centred.add(li); return; }
+      let left = Math.floor(spare / tatWidth);
       const count = new Map<number, number>();
-      while (spare > 0) {
-        for (const i of words) {
-          if (spare <= 0) break;
+      while (left > 0 && cands.length) {
+        for (const i of cands) {
+          if (left <= 0) break;
           count.set(i, (count.get(i) ?? 0) + 1);
-          spare--;
+          left--;
         }
       }
-      count.forEach((n, i) => out.set(i, stretchWord(wordInfo[i].text, n)));
-    }
-    return out;
+      count.forEach((n, i) => words.set(i, stretchWord(wordInfo[i].text, n)));
+    });
+    return { words, centred };
   }, [lines, wordWidths, tatWidth, fitWidth, wordInfo]);
 
   const tracked = useMemo(() => (view && readable.length ? view : null), [view, readable]);
@@ -242,7 +249,7 @@ export default function Recite() {
     else if (result?.state === "skipped") style.push({ color: C.skipped });
     if (isCursor) style.push(s.cursor);
     // With the verses hidden, show what the reader actually said for wrong words.
-    const shown = hidden && result?.state === "bad" && result.heard ? result.heard : (stretched.get(i) ?? info.text);
+    const shown = hidden && result?.state === "bad" && result.heard ? result.heard : (stretched.words.get(i) ?? info.text);
     return <Text key={i} style={style}>{shown}</Text>;
   };
 
@@ -408,7 +415,7 @@ export default function Recite() {
       <ScrollView style={s.body} contentContainerStyle={s.content}>
         {ready ? (
           <View style={s.column} onLayout={e => setColWidth(e.nativeEvent.layout.width)}>
-            {showBasmala && (surahNumber === 1 ? (
+            {showBasmala && (surahNumber === 1 || hasBasmala ? (
               <View style={[s.line, s.header, { justifyContent: "center" }]}>
                 {wordInfo.slice(0, headerEnd).map((_, i) => renderWord(i))}
               </View>
@@ -416,7 +423,7 @@ export default function Recite() {
               <Text style={s.basmala}>{BASMALA}</Text>
             ))}
             {lines.map((line, li) => (
-              <View key={li} style={s.line}>
+              <View key={li} style={[s.line, stretched.centred.has(li) ? { justifyContent: "center" } : null]}>
                 {line.map(renderWord)}
               </View>
             ))}
