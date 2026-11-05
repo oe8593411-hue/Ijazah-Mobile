@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { SURAHS } from "../src/quran/surahs";
+import MUSHAF_PAGES from "../src/quran/mushaf-pages.json";
 import { normalizeArabic, type WordState, readResults, type Track, emptyTrack, type Speech, startSpeech, takeSpeech, endSpeech } from "../src/recitation/matching";
 
 const C = {
@@ -172,23 +173,28 @@ export default function Recite() {
   const headerEnd = surahNumber === 1 ? wordInfo.findIndex(w => w.marker) + 1 : hasBasmala ? BASMALA_NORM.length : 0;
   const showBasmala = surahNumber !== 9;
 
-  // Break the surah into lines that fill the column, like a mushaf page.
-  const lines = useMemo(() => {
+  // Break the surah into lines that fill the column, like a mushaf page. A new Madinah page always starts a new line.
+  const { rows: lines, pageAt } = useMemo(() => {
     const gap = 8; // 4px margin on each side of a word
-    const out: number[][] = [];
+    const rows: number[][] = [];
+    const pageAt: Record<number, number> = {}; // line index -> the mushaf page that line starts
     let cur: number[] = [];
     let used = 0;
+    let curPage = 0;
     wordInfo.forEach((w, i) => {
       if (i < headerEnd) return;
+      const page = pageOfAyah(surahNumber, ayahOfToken[i]);
       const width = wordWidths ? wordWidths[i] : w.marker ? 26 : Math.max(1, w.norm.length) * 15;
       const wd = width + gap;
-      if (cur.length && used + wd > fitWidth) { out.push(cur); cur = []; used = 0; }
+      const newPage = page !== curPage;
+      if (cur.length && (newPage || used + wd > fitWidth)) { rows.push(cur); cur = []; used = 0; }
+      if (newPage) { pageAt[rows.length] = page; curPage = page; }
       cur.push(i);
       used += wd;
     });
-    if (cur.length) out.push(cur);
-    return out;
-  }, [wordInfo, wordWidths, fitWidth, headerEnd]);
+    if (cur.length) rows.push(cur);
+    return { rows, pageAt };
+  }, [wordInfo, wordWidths, fitWidth, headerEnd, ayahOfToken, surahNumber]);
 
   // Spare width in each line becomes tatweels. A line that would need more than 30% of its words' width is left
   // centred at normal size instead (like the last line of a page), so no word is stretched out of shape.
@@ -423,8 +429,11 @@ export default function Recite() {
               <Text style={s.basmala}>{BASMALA}</Text>
             ))}
             {lines.map((line, li) => (
-              <View key={li} style={[s.line, stretched.centred.has(li) ? { justifyContent: "center" } : null]}>
-                {line.map(renderWord)}
+              <View key={li}>
+                {pageAt[li] !== undefined && <PageMark num={pageAt[li]} />}
+                <View style={[s.line, stretched.centred.has(li) ? { justifyContent: "center" } : null]}>
+                  {line.map(renderWord)}
+                </View>
               </View>
             ))}
           </View>
@@ -500,6 +509,26 @@ export default function Recite() {
 }
 
 // The ayah number inside a gold ring, the way the mushaf marks the end of a verse.
+// The Madinah mushaf page of an ayah: the last page whose start is at or before it.
+function pageOfAyah(surah: number, ayah: number): number {
+  let page = 1;
+  for (let p = 0; p < MUSHAF_PAGES.pages.length; p++) {
+    const [ps, pa] = MUSHAF_PAGES.pages[p];
+    if (ps > surah || (ps === surah && pa > ayah)) break;
+    page = p + 1;
+  }
+  return page;
+}
+
+// Divider at the start of a mushaf page, with its number.
+function PageMark({ num }: { num: number }) {
+  return (
+    <View style={s.pageMark}>
+      <Text style={s.pageNum}>{`صفحة ${num}`}</Text>
+    </View>
+  );
+}
+
 function AyahMark({ num }: { num: string }) {
   return (
     <View style={s.ayahMark}>
@@ -540,6 +569,8 @@ const s = StyleSheet.create({
   line: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", marginBottom: 0 },
   word: { color: C.ink, fontFamily: QURAN_FONT, fontSize: 30, lineHeight: 46, marginHorizontal: 4, writingDirection: "rtl" },
   ayahMark: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: C.gold, backgroundColor: C.goldSoft, alignItems: "center", justifyContent: "center", marginHorizontal: 4 },
+  pageMark: { alignItems: "center", marginTop: 18, marginBottom: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line },
+  pageNum: { color: C.gold, fontSize: 12, fontWeight: "700" },
   ayahRing: { width: 18, height: 18, borderRadius: 9, borderWidth: 0.8, borderColor: C.gold, alignItems: "center", justifyContent: "center" },
   ayahNum: { color: C.gold, fontSize: 10, fontWeight: "700", textAlign: "center" },
   header: { width: "100%", marginBottom: 14 },
