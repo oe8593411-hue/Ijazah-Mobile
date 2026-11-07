@@ -468,7 +468,20 @@ export default function Recite() {
     }
    };
    socket.onerror=()=>{setNabrStatus("unavailable");finishStart(false);};
-   socket.onclose=()=>{if(!nabrSessionStartedRef.current){setNabrStatus(previous=>previous==="complete"?previous:"unavailable");finishStart(false);}};
+   socket.onclose=()=>{
+    // Ignore the close caused by an intentional stop/restart; surface unexpected
+    // disconnects even after the provider had successfully started the session.
+    if(nabrSocketRef.current!==socket)return;
+    const wasActive=nabrSessionStartedRef.current;
+    nabrSessionStartedRef.current=false;
+    if(wasActive){
+     setNabrStatus("unavailable");
+     setNotice("انقطع اتصال محرك AI4X؛ لم نكمل اعتماد نتائج صوتية جديدة.");
+    }else{
+     setNabrStatus(previous=>previous==="complete"?previous:"unavailable");
+     finishStart(false);
+    }
+   };
    await context.resume?.();
    const didStart=await started;
    if(!didStart){
@@ -589,7 +602,11 @@ export default function Recite() {
       setNabrFeedback(null);
       setNabrStatus("idle");
       const specialistStarted = await startAI4XRealtime();
-      if (!specialistStarted) startListening();
+      if (!specialistStarted && process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME !== "true") {
+        startListening();
+      } else if (!specialistStarted) {
+        setNotice("محرك AI4X غير متصل؛ لم نعتمد تصحيحًا من التعرّف العام على الصوت.");
+      }
     } catch {
       setNotice("تعذّر بدء التسميع. تأكد من إذن الميكروفون وحاول مرة أخرى.");
     }
