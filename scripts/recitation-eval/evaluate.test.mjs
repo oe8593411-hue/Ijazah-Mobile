@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { normalizeArabic } from "../../src/recitation/matching.ts";
+import { alignFrom, emptyTrack, normalizeArabic, readFinal, startSpeech, takeSpeech } from "../../src/recitation/matching.ts";
 import { alignWords, appStates, checkManifest, evaluate, judge, verseWords } from "./evaluate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +24,38 @@ function workDir() {
 test("normalization drops harakat, reads dagger alif as a long a, unifies alef forms", () => {
   assert.equal(normalizeArabic("مَٰلِكِ"), "مالك");
   assert.equal(normalizeArabic("أَلْحَمْدُ لِلَّهِ"), "الحمد لله");
+});
+
+
+test("a word is red only when at least two distinct recognition alternatives agree", () => {
+  const expected = ["بسم", "الله", "الرحمان", "الرحيم"];
+  const track = emptyTrack(expected.length);
+  const singleGuess = readFinal(expected, track, ["بسم الله الرحمان الكريم"]);
+  assert.equal(singleGuess.states[3], "unsure");
+
+  const duplicateGuess = readFinal(expected, track, [
+    "بسم الله الرحمان الكريم",
+    "بسم الله الرحمان الكريم",
+  ]);
+  assert.equal(duplicateGuess.states[3], "unsure");
+
+  const corroboratedGuess = readFinal(expected, track, [
+    "بسم الله الرحمان الكريم",
+    "بسم الله الرحمان العزيز",
+    "بسم الله الرحمان الرحيم",
+  ]);
+  assert.equal(corroboratedGuess.states[3], "bad");
+});
+
+test("interim speech highlights the current word without showing an unconfirmed red error", () => {
+  const expected = ["بسم", "الله", "الرحمان", "الرحيم"];
+  const track = emptyTrack(expected.length);
+  const speech = startSpeech(track);
+  const interim = takeSpeech(expected, track, speech, [{ alts: ["الكريم"], isFinal: false }]);
+  assert.equal(interim.view.states[0], "unsure");
+  assert.equal(interim.view.states[1], undefined);
+  assert.equal(interim.view.states[2], undefined);
+  assert.equal(interim.view.states[3], undefined);
 });
 
 test("verse words are read the way the screen reads them", () => {
