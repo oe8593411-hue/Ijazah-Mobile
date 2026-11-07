@@ -6,7 +6,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { SURAHS } from "../src/quran/surahs";
 import MUSHAF_PAGES from "../src/quran/mushaf-pages.json";
-import { normalizeArabic, type WordState, readResults, type Track, emptyTrack, type Speech, startSpeech, takeSpeech, endSpeech } from "../src/recitation/matching";
+import { normalizeArabic, type WordState, readResults, type Track, emptyTrack, type Speech, startSpeech, takeSpeech, endSpeech, hasReachedEnd } from "../src/recitation/matching";
 
 const C = {
   bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
@@ -480,7 +480,6 @@ export default function Recite() {
       setNabrFeedback(merged);
       applyNabrFeedback(merged);
       setNabrStatus("recording");
-      if (Number(message.exit_code) === 8) void finishRecitationAutomatically();
      }else if(message?.event==="QRC_ERROR"){
       nabrSessionStartedRef.current=false;
       setNabrStatus("unavailable");
@@ -551,7 +550,7 @@ export default function Recite() {
           const cursor = Math.max(n.view.cursor, peakRef.current);
           peakRef.current = cursor;
           setView(cursor === n.view.cursor ? n.view : { ...n.view, cursor });
-          if (n.track.cursor >= expectedRef.current.length) void finishRecitationAutomatically();
+          if (hasReachedEnd(n.track)) void finishRecitationAutomatically();
         };
         r.onerror = (e: any) => {
           if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
@@ -606,7 +605,7 @@ export default function Recite() {
     stopAI4XRealtime();
     try { await recorder.stop(); } catch {}
     setFinished(true);
-    const complete = trackRef.current.cursor >= expectedRef.current.length;
+    const complete = hasReachedEnd(trackRef.current);
     setCompletionPrompt(
       complete && surahNumber % 3 === 0
         ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
@@ -694,7 +693,7 @@ export default function Recite() {
   const restartDisabled = recording || (!finished && !(view && view.cursor > 0));
 
   let status = startAyah > 1 ? `ابدأ من الآية ${startAyah} • اضغط الميكروفون` : "اضغط الميكروفون وابدأ التسميع";
-  const done = readable.length > 0 && trackRef.current.cursor >= readable.length;
+  const done = readable.length > 0 && hasReachedEnd(trackRef.current);
   if (recording) status = `● ${timer} • جارٍ الاستماع… اضغط للإيقاف المؤقت`;
   else if (finished) status = done ? "انتهى التسميع" : "متوقّف مؤقتًا • اضغط الميكروفون للمتابعة";
 
