@@ -308,19 +308,27 @@ export default function Recite() {
   add(feedback?.correct_words||[],"ok");
   add(feedback?.skipped_words||[],"skipped");
   add(feedback?.letter_mistakes||[],"bad");
-  const next=emptyTrack(readable.length);
+  // Provider results may arrive in batches. Preserve words already confirmed in
+  // earlier pauses/sessions; only overlay the specialist's newly reported states.
+  const current=trackRef.current;
+  const next:Track={
+   ...current,
+   states:[...current.states],
+   heardAt:[...current.heardAt],
+   cursor:current.cursor
+  };
   const counters=new Map<number,number>();
-  let cursor=0;
+  let latestConfirmed=next.cursor;
   for(let i=0;i<readable.length;i++){
    const verse=ayahOfToken[readable[i]];
    const word=(counters.get(verse)||0)+1;
    counters.set(verse,word);
    const state=keyed.get([surahNumber,verse,word].join(":"));
-   if(state){next.states[i]=state;cursor=i+1;}
+   if(state){next.states[i]=state;latestConfirmed=Math.max(latestConfirmed,i+1);}
   }
-  next.cursor=cursor;
+  next.cursor=Math.max(next.cursor,latestConfirmed);
   trackRef.current=next;
-  peakRef.current=cursor;
+  peakRef.current=Math.max(peakRef.current,next.cursor);
   setView(next);
  }
 
@@ -422,6 +430,8 @@ export default function Recite() {
    socket.binaryType="arraybuffer";
    timeout=setTimeout(()=>{finishStart(false);setNabrStatus("unavailable");try{socket.close();}catch{}},15000);
    socket.onmessage=(event:any)=>{
+    // Ignore late packets from a socket that was stopped or superseded.
+    if(nabrSocketRef.current!==socket)return;
     try{
      const packet=event.data instanceof ArrayBuffer
       ? new Uint8Array(event.data)
@@ -467,7 +477,7 @@ export default function Recite() {
      setNabrStatus("unavailable");finishStart(false);
     }
    };
-   socket.onerror=()=>{setNabrStatus("unavailable");finishStart(false);};
+   socket.onerror=()=>{if(nabrSocketRef.current!==socket)return;setNabrStatus("unavailable");finishStart(false);};
    socket.onclose=()=>{
     // Ignore the close caused by an intentional stop/restart; surface unexpected
     // disconnects even after the provider had successfully started the session.
