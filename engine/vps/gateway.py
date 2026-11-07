@@ -110,6 +110,8 @@ async def ai4x(websocket: WebSocket):
                     error = task.exception()
                     if error:
                         raise error
+            with suppress(Exception):
+                await websocket.close(code=1000, reason="AI4X session ended")
     except WebSocketDisconnect:
         return
     except Exception:
