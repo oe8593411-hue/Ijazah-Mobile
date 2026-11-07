@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { alignFrom, emptyTrack, normalizeArabic, readFinal, startSpeech, takeSpeech } from "../../src/recitation/matching.ts";
+import { emptyTrack, normalizeArabic, readFinal, startSpeech, takeSpeech } from "../../src/recitation/matching.ts";
 import { alignWords, appStates, checkManifest, evaluate, judge, verseWords } from "./evaluate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -42,9 +42,16 @@ test("a word is red only when at least two distinct recognition alternatives agr
   const corroboratedGuess = readFinal(expected, track, [
     "بسم الله الرحمان الكريم",
     "بسم الله الرحمان العزيز",
-    "بسم الله الرحمان الرحيم",
+    "بسم الله الرحمان الكتاب",
   ]);
   assert.equal(corroboratedGuess.states[3], "bad");
+
+  const disagreement = readFinal(expected, track, [
+    "بسم الله الرحمان الكريم",
+    "بسم الله الرحمان العزيز",
+    "بسم الله الرحمان الرحيم",
+  ]);
+  assert.equal(disagreement.states[3], "ok");
 });
 
 test("interim speech highlights the current word without showing an unconfirmed red error", () => {
