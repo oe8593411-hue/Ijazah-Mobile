@@ -149,14 +149,21 @@ export function startSpeech(track: Track): Speech {
 
 // Reads one final result into the track, with the guess that fits it best from where the reading stands.
 export function readFinal(expected: string[], track: Track, alts: string[]): Track {
-  let best: { r: ReturnType<typeof alignFrom>; } | null = null;
+  const candidates: ReturnType<typeof alignFrom>[] = [];
   for (const alt of alts) {
     const words = normalizeArabic(alt).split(" ").filter(Boolean);
-    if (!words.length) continue;
-    const r = alignFrom(expected, track.cursor, words);
-    if (!best || r.cost < best.r.cost) best = { r };
+    if (words.length) candidates.push(alignFrom(expected, track.cursor, words));
   }
-  return best ? applyAlignment(track, track.cursor, best.r) : track;
+  if (!candidates.length) return track;
+  candidates.sort((a, b) => a.cost - b.cost);
+  const best = candidates[0];
+  const cells = best.cells.map((cell, index) => {
+    if (!cell || cell.state !== "bad") return cell;
+    const agreement = candidates.filter(candidate => candidate.cells[index]?.state === "bad").length;
+    // A single speech-recognition guess is not enough to accuse the reader of an error.
+    return agreement >= 2 ? cell : { ...cell, state: "unsure" as WordState };
+  });
+  return applyAlignment(track, track.cursor, { ...best, cells });
 }
 
 // The words still changing: each of the newest results keeps the guess that fits the session best.
@@ -197,7 +204,16 @@ export function viewOf(expected: string[], track: Track, speech: Speech): Track 
   if (last && !last.isFinal && words.length) {
     const newest = words[words.length - 1];
     const settled = r.cells.some(c => c && c.state === "ok" && c.heard !== undefined && c.heard.split(" ").pop() === newest);
-    if (!settled) r = alignFrom(expected, speech.from, words.slice(0, -1));
+    if (!settled) {
+      // Keep the newest partial word visible for faster feedback, but never mark
+      // an unfinished/interim mismatch red.
+      const preview = alignFrom(expected, speech.from, words);
+      const lastCell = preview.cells.length - 1;
+      if (lastCell >= 0 && preview.cells[lastCell]?.state === "bad") {
+        preview.cells[lastCell] = { ...preview.cells[lastCell]!, state: "unsure" };
+      }
+      r = preview;
+    }
   }
   return applyAlignment(track, speech.from, r);
 }
