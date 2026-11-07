@@ -122,6 +122,10 @@ export default function Recite() {
     setFinished(false);
     setView(null);
     clearReading();
+    stopAI4XRealtime();
+    nabrFeedbackRef.current = null;
+    setNabrFeedback(null);
+    setNabrStatus("idle");
   }, [surahNumber]);
 
   const tokens = useMemo(() => referenceText.split(/\s+/u).filter(Boolean), [referenceText]);
@@ -427,11 +431,16 @@ export default function Recite() {
      const message=decodeMessagePack(packet as Uint8Array) as any;
      if(message?.event==="QRC_CLIENT_CONNECTED"&&!nabrStartSentRef.current){
       nabrStartSentRef.current=true;
+      const cursor=Math.min(trackRef.current.cursor,Math.max(0,readable.length-1));
+      const tokenIndex=readable[cursor];
+      const currentVerse=tokenIndex===undefined?startAyah:ayahOfToken[tokenIndex];
+      let currentWord=1;
+      for(let i=0;i<cursor;i++)if(ayahOfToken[readable[i]]===currentVerse)currentWord++;
       socket.send(encodeMessagePack({
        method:"START_TILAWA_SESSION",
        chapter_index:surahNumber,
-       verse_index:Math.max(1,startAyah),
-       word_index:1,
+       verse_index:Math.max(1,currentVerse),
+       word_index:currentWord,
        hafz_level:1,
        tajweed_level:1
       }));
