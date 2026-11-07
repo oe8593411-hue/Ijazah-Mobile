@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { decode as decodeMessagePack, encode as encodeMessagePack } from "@msgpack/msgpack";
 import { router, useLocalSearchParams } from "expo-router";
@@ -76,7 +76,22 @@ export default function Recite() {
   const [finished, setFinished] = useState(false);
   const [completionPrompt, setCompletionPrompt] = useState("");
   const [notice, setNotice] = useState("");
+  const micPulse = useRef(new Animated.Value(0)).current;
   const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!recording) {
+      micPulse.stopAnimation();
+      micPulse.setValue(0);
+      return;
+    }
+    const pulse = Animated.loop(Animated.sequence([
+      Animated.timing(micPulse, { toValue: 1, duration: 1050, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+      Animated.timing(micPulse, { toValue: 0, duration: 0, useNativeDriver: true }),
+    ]));
+    pulse.start();
+    return () => pulse.stop();
+  }, [recording, micPulse]);
 
   useEffect(() => () => { stopListening(); stopAI4XRealtime(); }, []);
 
@@ -659,10 +674,13 @@ export default function Recite() {
       setNabrStatus("idle");
       // Start browser recognition immediately; AI4X can connect in parallel.
       startListening();
-      const specialistStarted = await startAI4XRealtime();
-      if (!specialistStarted && process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true") {
-        setNabrStatus("unavailable");
-      }
+      // Do not block the microphone button on the AI4X handshake.
+      // Recording and browser recognition are already live; connect the specialist in the background.
+      void startAI4XRealtime().then((specialistStarted) => {
+        if (!specialistStarted && process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true") {
+          setNabrStatus("unavailable");
+        }
+      });
     } catch {
       setNotice("تعذّر بدء التسميع. تأكد من إذن الميكروفون وحاول مرة أخرى.");
     }
@@ -784,9 +802,29 @@ export default function Recite() {
             </Pressable>
           </View>
 
-          <Pressable onPress={toggle} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.disabled]}>
-            {recording ? <View style={s.stopSquare} /> : <Text style={s.micIcon}>🎙️</Text>}
-          </Pressable>
+          <View style={s.micWrap}>
+            {recording && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  s.micPulse,
+                  {
+                    opacity: micPulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
+                    transform: [{ scale: micPulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.55] }) }],
+                  },
+                ]}
+              />
+            )}
+            <Pressable onPress={toggle} disabled={!ready} accessibilityRole="button" accessibilityLabel={recording ? "إيقاف التسميع" : "بدء التسميع"} style={[s.mic, recording && s.micOn, !ready && s.disabled]}>
+              {recording ? <View style={s.stopSquare} /> : (
+                <View style={s.micGlyph}>
+                  <View style={s.micHead} />
+                  <View style={s.micStem} />
+                  <View style={s.micBase} />
+                </View>
+              )}
+            </Pressable>
+          </View>
 
           <View style={[s.dockEnd, { justifyContent: "flex-end" }]}>
             <Pressable onPress={openSurahs} disabled={recording} style={[s.dockSide, recording && s.disabled]}>
@@ -878,9 +916,14 @@ const s = StyleSheet.create({
   dockEnd: { flex: 1, flexDirection: "row", alignItems: "center" },
   dockIcon: { fontSize: 20, color: C.ink },
   dockLabel: { color: C.muted, fontSize: 11, fontWeight: "600" },
-  mic: { width: 84, height: 84, borderRadius: 42, backgroundColor: C.gold, alignItems: "center", justifyContent: "center", shadowColor: C.gold, shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 7 },
-  micOn: { backgroundColor: C.danger, shadowColor: C.danger },
+  micWrap: { width: 104, height: 104, alignItems: "center", justifyContent: "center" },
+  micPulse: { position: "absolute", width: 84, height: 84, borderRadius: 42, borderWidth: 3, borderColor: "#39D879" },
+  mic: { width: 84, height: 84, borderRadius: 42, backgroundColor: "#16A34A", alignItems: "center", justifyContent: "center", shadowColor: "#16A34A", shadowOpacity: 0.38, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  micOn: { backgroundColor: "#15803D", shadowColor: "#22C55E" },
   disabled: { opacity: 0.4 },
-  micIcon: { fontSize: 34 },
-  stopSquare: { width: 26, height: 26, borderRadius: 6, backgroundColor: "#FFFFFF" },
+  micGlyph: { width: 30, height: 38, alignItems: "center", justifyContent: "flex-start" },
+  micHead: { width: 12, height: 21, borderRadius: 7, backgroundColor: "#FFFFFF" },
+  micStem: { position: "absolute", top: 18, width: 24, height: 15, borderWidth: 2.5, borderTopWidth: 0, borderColor: "#FFFFFF", borderBottomLeftRadius: 13, borderBottomRightRadius: 13 },
+  micBase: { position: "absolute", bottom: 0, width: 3, height: 8, borderRadius: 2, backgroundColor: "#FFFFFF" },
+  stopSquare: { width: 24, height: 24, borderRadius: 6, backgroundColor: "#FFFFFF" },
 });
