@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { decode as decodeMessagePack } from "@msgpack/msgpack";
 
 const WebSocket = require("ws") as any;
 const WebSocketServer = WebSocket.Server;
@@ -31,8 +32,53 @@ function isAllowedOrigin(origin: string | undefined) {
     const parsed = new URL(origin);
     if (process.env.NODE_ENV !== "production"
         && ["localhost", "127.0.0.1"].includes(parsed.hostname)) return true;
-    return parsed.protocol === "https:"
-      && parsed.hostname === "ijazah-mobile-preview-git-feature-mushaf-f-d2f978-profit-guard2.vercel.app";
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedClientPacket(data: any): boolean {
+  try {
+    const packet = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const message = decodeMessagePack(packet) as any;
+    if (!message || typeof message !== "object" || Array.isArray(message)) return false;
+
+    if (message.method === "RESET_TILAWA_SESSION") return true;
+
+    if (message.method === "START_TILAWA_SESSION") {
+      const integerInRange = (value: unknown, min: number, max: number) =>
+        Number.isInteger(value) && Number(value) >= min && Number(value) <= max;
+      return integerInRange(message.chapter_index, 1, 114)
+        && integerInRange(message.verse_index, 1, 286)
+        && integerInRange(message.word_index, 1, 100)
+        && integerInRange(message.hafz_level, 1, 5)
+        && integerInRange(message.tajweed_level, 1, 5);
+    }
+
+    if (message.method !== "CHECK_TILAWA_AUDIO") return false;
+    const audio = message.audio;
+    if (!(audio instanceof Uint8Array) || audio.byteLength < 46 || audio.byteLength > 6500) return false;
+    const wav = Buffer.from(audio.buffer, audio.byteOffset, audio.byteLength);
+    if (
+      wav.toString("ascii", 0, 4) !== "RIFF"
+      || wav.toString("ascii", 8, 12) !== "WAVE"
+      || wav.toString("ascii", 12, 16) !== "fmt "
+      || wav.toString("ascii", 36, 40) !== "data"
+    ) return false;
+    const dataBytes = wav.readUInt32LE(40);
+    return wav.readUInt32LE(4) === wav.byteLength - 8
+      && wav.readUInt32LE(16) === 16
+      && wav.readUInt16LE(20) === 1
+      && wav.readUInt16LE(22) === 1
+      && wav.readUInt32LE(24) === 16000
+      && wav.readUInt32LE(28) === 32000
+      && wav.readUInt16LE(32) === 2
+      && wav.readUInt16LE(34) === 16
+      && dataBytes > 0
+      && dataBytes <= 6400
+      && dataBytes % 2 === 0
+      && dataBytes === wav.byteLength - 44;
   } catch {
     return false;
   }
@@ -109,8 +155,10 @@ wss.on("connection", (client: any, req: any) => {
   }, MAX_SESSION_MS);
 
   client.on("message", (data: any, isBinary: boolean) => {
-    if (!isBinary) {
-      client.close(1008, "Binary MessagePack required");
+    if (!isBinary || !isAllowedClientPacket(data)) {
+      client.close(1008, "Invalid AI4X message");
+      try { upstream.close(); } catch {}
+      release();
       return;
     }
     const size = Buffer.isBuffer(data) ? data.length : Buffer.byteLength(data);
