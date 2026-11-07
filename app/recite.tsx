@@ -170,7 +170,17 @@ export default function Recite() {
   const readable = useMemo(() => expectedIdx.slice(startPos), [expectedIdx, startPos]);
 
   useEffect(() => {
-    expectedRef.current = readable.map(i => wordInfo[i].norm);
+    const expectedWords = readable.map(i => wordInfo[i].norm);
+    expectedRef.current = expectedWords;
+
+    // The initial surah-load effect can run before the verified corpus is ready.
+    // Never keep a zero-length/partial track for a fully loaded surah.
+    if (trackRef.current.states.length !== expectedWords.length) {
+      trackRef.current = emptyTrack(expectedWords.length);
+      peakRef.current = 0;
+      sessionRef.current = null;
+      setView(null);
+    }
   }, [readable, wordInfo]);
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
@@ -550,7 +560,7 @@ export default function Recite() {
           const cursor = Math.max(n.view.cursor, peakRef.current);
           peakRef.current = cursor;
           setView(cursor === n.view.cursor ? n.view : { ...n.view, cursor });
-          if (hasReachedEnd(n.track)) void finishRecitationAutomatically();
+          if (hasReachedEnd(n.track, expectedRef.current.length)) void finishRecitationAutomatically();
         };
         r.onerror = (e: any) => {
           if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
@@ -605,7 +615,7 @@ export default function Recite() {
     stopAI4XRealtime();
     try { await recorder.stop(); } catch {}
     setFinished(true);
-    const complete = hasReachedEnd(trackRef.current);
+    const complete = hasReachedEnd(trackRef.current, expectedRef.current.length);
     setCompletionPrompt(
       complete && surahNumber % 3 === 0
         ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
@@ -622,7 +632,7 @@ export default function Recite() {
         await recorder.stop();
         setFinished(true);
         autoStopRef.current = true;
-        const complete = hasReachedEnd(trackRef.current);
+        const complete = hasReachedEnd(trackRef.current, expectedRef.current.length);
         setCompletionPrompt(
           complete && surahNumber % 3 === 0
             ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
@@ -693,7 +703,7 @@ export default function Recite() {
   const restartDisabled = recording || (!finished && !(view && view.cursor > 0));
 
   let status = startAyah > 1 ? `ابدأ من الآية ${startAyah} • اضغط الميكروفون` : "اضغط الميكروفون وابدأ التسميع";
-  const done = readable.length > 0 && hasReachedEnd(trackRef.current);
+  const done = readable.length > 0 && hasReachedEnd(trackRef.current, readable.length);
   if (recording) status = `● ${timer} • جارٍ الاستماع… اضغط للإيقاف المؤقت`;
   else if (finished) status = done ? "انتهى التسميع" : "متوقّف مؤقتًا • اضغط الميكروفون للمتابعة";
 
