@@ -622,7 +622,7 @@ export default function Recite() {
         await recorder.stop();
         setFinished(true);
         autoStopRef.current = true;
-        const complete = trackRef.current.cursor >= expectedRef.current.length;
+        const complete = hasReachedEnd(trackRef.current);
         setCompletionPrompt(
           complete && surahNumber % 3 === 0
             ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
