@@ -77,6 +77,14 @@ export function emptyTrack(n: number): Track {
   return { text: "", cursor: 0, states: Array(n).fill(undefined), heardAt: Array(n).fill(undefined) };
 }
 
+// End a surah only after the final expected word has actually been heard.
+// A cursor at the end is not sufficient: alignment can reach it by skipping unread words.
+export function hasReachedEnd(track: Track): boolean {
+  if (track.cursor < track.states.length || track.states.length === 0) return false;
+  const finalState = track.states[track.states.length - 1];
+  return finalState !== undefined && finalState !== "skipped";
+}
+
 // Aligns the heard words with the verified words from `from` on. It may skip verified words (at a cost),
 // and it may ignore heard words. Returns the cells of the verified words it covers, and the new cursor.
 export function alignFrom(expected: string[], from: number, heard: string[]) {
