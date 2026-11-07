@@ -272,7 +272,7 @@ export default function Recite() {
     const result = byToken[i];
     const isCursor = i === cursorToken && recording && !hidden;
     const style: any[] = [s.word];
-    if (hidden && !result) style.push(s.masked);
+    if (hidden && (!result || result.state === "skipped")) style.push(s.masked);
     else if (result?.state === "ok") style.push({ color: C.ok });
     else if (result?.state === "bad") style.push({ color: C.bad });
     else if (result?.state === "unsure") style.push({ color: C.unsure });
