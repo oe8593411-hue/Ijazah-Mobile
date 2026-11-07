@@ -79,9 +79,11 @@ export function emptyTrack(n: number): Track {
 
 // End a surah only after the final expected word has actually been heard.
 // A cursor at the end is not sufficient: alignment can reach it by skipping unread words.
-export function hasReachedEnd(track: Track): boolean {
-  if (track.cursor < track.states.length || track.states.length === 0) return false;
-  const finalState = track.states[track.states.length - 1];
+export function hasReachedEnd(track: Track, expectedLength = track.states.length): boolean {
+  // A short or uninitialized track must never be mistaken for a completed surah.
+  if (expectedLength <= 0 || track.states.length !== expectedLength) return false;
+  if (track.cursor < expectedLength) return false;
+  const finalState = track.states[expectedLength - 1];
   return finalState !== undefined && finalState !== "skipped";
 }
 
