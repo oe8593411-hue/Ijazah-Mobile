@@ -622,9 +622,7 @@ export default function Recite() {
             ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
             : ""
         );
-        setNotice(process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true" && !nabrFeedbackRef.current
-          ? "لم تصل نتيجة صوتية موثوقة من AI4X؛ لم نعتمد تصحيحًا."
-          : "");
+        setNotice("");
         return;
       }
       const perm = await requestRecordingPermissionsAsync();
@@ -643,9 +641,9 @@ export default function Recite() {
       nabrFeedbackRef.current = null;
       setNabrFeedback(null);
       setNabrStatus("idle");
-      const specialistStarted = await startAI4XRealtime();
-      // Run browser recognition alongside AI4X for immediate word highlighting.
+      // Start browser recognition immediately; AI4X can connect in parallel.
       startListening();
+      const specialistStarted = await startAI4XRealtime();
       if (!specialistStarted && process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true") {
         setNabrStatus("unavailable");
       }
