@@ -7,12 +7,43 @@ const WebSocketServer = WebSocket.Server;
 export const config = { maxDuration: 240 };
 
 type IpWindow = { startedAt: number; attempts: number; active: number };
+type UpstreamConfig = { url: string; token: string; kind: "vps" | "nabr" };
 const ipWindows = new Map<string, IpWindow>();
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_ATTEMPTS_PER_IP_PER_HOUR = 6;
 const MAX_AUDIO_MESSAGES = 1200;
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const MAX_SESSION_MS = 240_000;
+
+function getUpstreamConfig(): UpstreamConfig | null {
+  const vpsUrl = process.env.IJAZAH_AI4X_VPS_WS_URL?.trim();
+  const vpsToken = process.env.IJAZAH_AI4X_VPS_TOKEN?.trim();
+
+  // A partially configured VPS must fail closed instead of silently using another provider.
+  if (vpsUrl || vpsToken) {
+    if (!vpsUrl || !vpsToken) return null;
+    try {
+      const parsed = new URL(vpsUrl);
+      if (parsed.protocol !== "wss:" && !(process.env.NODE_ENV !== "production" && parsed.protocol === "ws:")) return null;
+      if (parsed.username || parsed.password) return null;
+      return { url: parsed.toString(), token: vpsToken, kind: "vps" };
+    } catch {
+      return null;
+    }
+  }
+
+  const nabrToken = process.env.NABR_API_KEY?.trim();
+  if (!nabrToken) return null;
+  const nabrUrl = process.env.NABR_WS_URL?.trim() || "wss://api.qurani.ai";
+  try {
+    const parsed = new URL(nabrUrl);
+    if (parsed.protocol !== "wss:" && !(process.env.NODE_ENV !== "production" && parsed.protocol === "ws:")) return null;
+    if (parsed.username || parsed.password) return null;
+    return { url: parsed.toString(), token: nabrToken, kind: "nabr" };
+  } catch {
+    return null;
+  }
+}
 
 function clientIp(req: any) {
   const real = req.headers["x-real-ip"];
@@ -105,12 +136,10 @@ function getWindow(ip: string): IpWindow {
     state = { startedAt: now, attempts: 0, active: 0 };
     ipWindows.set(ip, state);
   } else if (now - state.startedAt >= WINDOW_MS) {
-    // Reset the hourly attempt counter without erasing live connections.
     state.startedAt = now;
     state.attempts = 0;
   }
 
-  // Keep the per-instance map bounded under a stream of distinct source IPs.
   if (ipWindows.size > 2000) {
     for (const [key, value] of ipWindows) {
       if (key !== ip && value.active === 0 && now - value.startedAt >= WINDOW_MS) {
@@ -127,20 +156,32 @@ function getWindow(ip: string): IpWindow {
   return state;
 }
 
-const server = createServer((_req, res) => {
+const server = createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/health") {
+    const upstream = getUpstreamConfig();
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(JSON.stringify({
+      service: "ijazah-ai4x-stream",
+      enabled: process.env.IJAZAH_AI4X_STREAM_ENABLED === "true",
+      upstream: upstream?.kind || "not_configured",
+      ready: process.env.IJAZAH_AI4X_STREAM_ENABLED === "true" && !!upstream
+    }));
+    return;
+  }
   res.statusCode = 426;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.end("WebSocket upgrade required");
 });
 
-// Origin checks reduce cross-site socket abuse but are not user authentication.
-// Keep IJAZAH_AI4X_STREAM_ENABLED unset until app sign-in and durable per-user quotas
-// are enforced; this in-memory IP limiter is only a secondary per-instance guard.
+// Origin checks are not user authentication. Keep this disabled until app sign-in
+// and durable per-user quotas are enforced; the in-memory IP limiter is secondary only.
 const wss = new WebSocketServer({
   server,
   maxPayload: 24 * 1024,
   verifyClient: (info: any, done: (accepted: boolean, code?: number, message?: string) => void) => {
-    if (process.env.IJAZAH_AI4X_STREAM_ENABLED !== "true" || !process.env.NABR_API_KEY) {
+    if (process.env.IJAZAH_AI4X_STREAM_ENABLED !== "true" || !getUpstreamConfig()) {
       done(false, 503, "AI4X realtime is not configured");
       return;
     }
@@ -164,6 +205,11 @@ wss.on("connection", (client: any, req: any) => {
     client.close(1013, "Session limit reached");
     return;
   }
+  const upstreamConfig = getUpstreamConfig();
+  if (!upstreamConfig) {
+    client.close(1011, "AI4X upstream is not configured");
+    return;
+  }
   state.attempts += 1;
   state.active += 1;
   let released = false;
@@ -176,11 +222,20 @@ wss.on("connection", (client: any, req: any) => {
     state.active = Math.max(0, state.active - 1);
   };
 
-  const target = new URL(process.env.NABR_WS_URL || "wss://api.qurani.ai");
-  target.searchParams.set("api_key", process.env.NABR_API_KEY || "");
-  target.searchParams.set("lang", "ar");
-  target.searchParams.set("audio_format", "wav");
+  const target = new URL(upstreamConfig.url);
+  const headers: Record<string, string> = {};
+  if (upstreamConfig.kind === "nabr") {
+    target.searchParams.set("api_key", upstreamConfig.token);
+    target.searchParams.set("lang", "ar");
+    target.searchParams.set("audio_format", "wav");
+  } else {
+    // The VPS accepts the same MessagePack QRC-compatible event contract.
+    // Its credential stays on this server-to-server hop and never reaches the app.
+    headers.Authorization = "Bearer " + upstreamConfig.token;
+    headers["X-Ijazah-AI4X-Protocol"] = "qrc-msgpack-v1";
+  }
   const upstream = new WebSocket(target.toString(), {
+    headers,
     handshakeTimeout: 10_000,
     maxPayload: 24 * 1024
   });
@@ -224,7 +279,7 @@ wss.on("connection", (client: any, req: any) => {
     if (client.readyState === WebSocket.OPEN) client.send(data, { binary: isBinary });
   });
   upstream.on("error", (error: any) => {
-    console.error("AI4X acoustic provider connection failed", error?.message || "unknown error");
+    console.error("AI4X acoustic upstream connection failed", error?.message || "unknown error");
     try { client.close(1011, "Audio engine unavailable"); } catch {}
     release();
   });
