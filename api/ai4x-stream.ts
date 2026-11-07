@@ -39,7 +39,7 @@ function isAllowedOrigin(origin: string | undefined) {
   }
 }
 
-function isAllowedClientPacket(data: any): boolean {
+function allowedClientPacketMethod(data: any): string | null {
   try {
     const packet = Buffer.isBuffer(data) ? data : Buffer.from(data);
     const message = decodeMessagePack(packet) as any;
@@ -49,20 +49,21 @@ function isAllowedClientPacket(data: any): boolean {
       Object.keys(message).every((key) => allowed.includes(key));
 
     if (message.method === "RESET_TILAWA_SESSION") {
-      return hasOnlyKeys(["method"]) && Object.keys(message).length === 1;
+      return hasOnlyKeys(["method"]) && Object.keys(message).length === 1 ? "RESET_TILAWA_SESSION" : null;
     }
 
     if (message.method === "START_TILAWA_SESSION") {
       const integerInRange = (value: unknown, min: number, max: number) =>
         typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
       const chapter = SURAHS.find((item) => item.number === message.chapter_index);
-      return hasOnlyKeys(["method", "chapter_index", "verse_index", "word_index", "hafz_level", "tajweed_level"])
+      const valid = hasOnlyKeys(["method", "chapter_index", "verse_index", "word_index", "hafz_level", "tajweed_level"])
         && Object.keys(message).length === 6
         && !!chapter
         && integerInRange(message.verse_index, 1, chapter.ayahCount)
         && integerInRange(message.word_index, 1, 100)
         && integerInRange(message.hafz_level, 1, 5)
         && integerInRange(message.tajweed_level, 1, 5);
+      return valid ? "START_TILAWA_SESSION" : null;
     }
 
     if (message.method !== "CHECK_TILAWA_AUDIO"
@@ -91,7 +92,7 @@ function isAllowedClientPacket(data: any): boolean {
       && dataBytes > 0
       && dataBytes <= 6400
       && dataBytes % 2 === 0
-      && dataBytes === wav.byteLength - 44;
+      && dataBytes === wav.byteLength - 44 ? "CHECK_TILAWA_AUDIO" : null;
   } catch {
     return false;
   }
@@ -166,6 +167,7 @@ wss.on("connection", (client: any, req: any) => {
   state.attempts += 1;
   state.active += 1;
   let released = false;
+  let startSent = false;
   let audioMessages = 0;
   let totalBytes = 0;
   const release = () => {
@@ -190,12 +192,16 @@ wss.on("connection", (client: any, req: any) => {
   }, MAX_SESSION_MS);
 
   client.on("message", (data: any, isBinary: boolean) => {
-    if (!isBinary || !isAllowedClientPacket(data)) {
-      client.close(1008, "Invalid AI4X message");
+    const method = isBinary ? allowedClientPacketMethod(data) : null;
+    if (!method || (method === "START_TILAWA_SESSION" && startSent)
+        || (method === "CHECK_TILAWA_AUDIO" && !startSent)) {
+      client.close(1008, "Invalid AI4X message sequence");
       try { upstream.close(); } catch {}
       release();
       return;
     }
+    if (method === "START_TILAWA_SESSION") startSent = true;
+    if (method === "RESET_TILAWA_SESSION") startSent = false;
     const size = Buffer.isBuffer(data) ? data.length : Buffer.byteLength(data);
     audioMessages += 1;
     totalBytes += size;
