@@ -150,9 +150,14 @@ export function startSpeech(track: Track): Speech {
 // Reads one final result into the track, with the guess that fits it best from where the reading stands.
 export function readFinal(expected: string[], track: Track, alts: string[]): Track {
   const candidates: ReturnType<typeof alignFrom>[] = [];
+  const seenAlternatives = new Set<string>();
   for (const alt of alts) {
     const words = normalizeArabic(alt).split(" ").filter(Boolean);
-    if (words.length) candidates.push(alignFrom(expected, track.cursor, words));
+    const key = words.join(" ");
+    if (words.length && !seenAlternatives.has(key)) {
+      seenAlternatives.add(key);
+      candidates.push(alignFrom(expected, track.cursor, words));
+    }
   }
   if (!candidates.length) return track;
   candidates.sort((a, b) => a.cost - b.cost);
