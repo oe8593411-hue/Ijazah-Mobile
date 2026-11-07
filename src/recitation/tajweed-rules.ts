@@ -59,7 +59,6 @@ export function findExpectedTajweedChecks(referenceText: string): ExpectedTajwee
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     const next = tokens[i + 1] || "";
-    const currentLetters = Array.from(token).filter(ch => /[\u0621-\u064A]/u.test(ch));
     const nextFirst = firstArabicLetter(next);
     const last = lastArabicLetter(token);
 
@@ -78,7 +77,9 @@ export function findExpectedTajweedChecks(referenceText: string): ExpectedTajwee
       if (nextFirst === "م") add("idgham", i, "ميم ساكنة قبل ميم — إدغام شفوي مرشح للمراجعة");
     }
 
-    if (currentLetters.some(ch => QALQALAH_LETTERS.has(ch)) && new RegExp("[قطبجد]" + SUKUN, "u").test(token)) {
+    // Require the qalqalah letter itself to carry sukun; an unrelated qalqalah
+    // letter elsewhere in the same word must not trigger a false candidate.
+    if (new RegExp("[قطبجد]" + SUKUN, "u").test(token)) {
       add("qalqalah", i, "حرف قلقلة عليه سكون ظاهر — موضع مرشح للمراجعة");
     }
 

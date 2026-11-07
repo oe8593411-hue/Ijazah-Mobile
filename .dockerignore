@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+.expo
+dist
+web-build
+coverage
+.env
+.env.*
+!.env.example
+*.log
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.venv
