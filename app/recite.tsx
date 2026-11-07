@@ -11,8 +11,8 @@ import { normalizeArabic, type WordState, readResults, type Track, emptyTrack, t
 const C = {
   bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
   ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)",
-  ok: "#5FD38A", bad: "#FF6B6B", skipped: "#F5B041", mask: "#34373E",
-  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F", unsure: "#8E98A6",
+  ok: "#5FD38A", bad: "#FF6B6B", mask: "#34373E",
+  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F", unsure: "#F5B041",
 };
 const QURAN_FONT = Platform.select({
   ios: "Geeza Pro",
@@ -52,6 +52,13 @@ function stretchWord(text: string, count: number): string {
 }
 // The basmala is shown above each surah, as in the mushaf, except At-Tawbah, which has none.
 const BASMALA = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+const COMPLETION_PROMPTS = [
+  "تحدّي صغير: تفتكر الأوجه الثلاثة الجائزة بين سورتين في رواية حفص؟",
+  "سؤال خفيف: ما الفرق بين قطع الجميع ووصل الجميع عند الانتقال بين سورتين؟",
+  "قبل السورة التالية: هل تتذكر متى نقرأ البسملة بين سورتين؟",
+  "معلومة للمراجعة: ما الأوجه الجائزة عند وصل آخر سورة بأول السورة التالية؟",
+  "تحب تختبر نفسك؟ اذكر أوجه البسملة بين سورتين من حفظك."
+];
 
 // ---------- Screen ----------
 
@@ -67,6 +74,7 @@ export default function Recite() {
   const [hidden, setHidden] = useState(false);
   const [view, setView] = useState<Track | null>(null); // what is shown: the words read so far
   const [finished, setFinished] = useState(false);
+  const [completionPrompt, setCompletionPrompt] = useState("");
   const [notice, setNotice] = useState("");
   const recognitionRef = useRef<any>(null);
 
@@ -97,6 +105,7 @@ export default function Recite() {
   const nabrPendingSamplesRef = useRef<number[]>([]);
   const nabrSessionStartedRef = useRef(false);
   const nabrStartSentRef = useRef(false);
+  const autoStopRef = useRef(false);
 
   // Web only: load the Amiri Quran font (SIL OFL) for the mushaf text.
   useEffect(() => {
@@ -120,6 +129,8 @@ export default function Recite() {
       }
     }).catch(() => setNotice("تعذّر تحميل المصحف داخل التطبيق."));
     setFinished(false);
+    setCompletionPrompt("");
+    autoStopRef.current = false;
     setView(null);
     clearReading();
     stopAI4XRealtime();
@@ -246,18 +257,12 @@ export default function Recite() {
 
   const byToken: Record<number, { state: WordState; heard?: string }> = {};
   let cursorToken = -1;
-  if (tracked && (process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME !== "true" || nabrFeedback)) {
+  if (tracked) {
     tracked.states.forEach((st, k) => {
       if (st) byToken[readable[k]] = { state: st, heard: tracked.heardAt[k] };
     });
     if (tracked.cursor < readable.length) cursorToken = readable[tracked.cursor];
   }
-  const counts = { ok: 0, unsure: 0, bad: 0, skipped: 0 };
-  Object.values(byToken).forEach(v => { counts[v.state]++; });
-  const notReached = readable.length - counts.ok - counts.unsure - counts.bad - counts.skipped;
-  const needReview = readable
-    .filter(i => byToken[i] && (byToken[i].state === "bad" || byToken[i].state === "skipped"))
-    .slice(0, 8);
   const progress = readable.length && tracked ? Math.min(1, tracked.cursor / readable.length) : 0;
 
   // One word of the verses (or of the header), colored by what the reader has said so far.
@@ -271,7 +276,6 @@ export default function Recite() {
     else if (result?.state === "ok") style.push({ color: C.ok });
     else if (result?.state === "bad") style.push({ color: C.bad });
     else if (result?.state === "unsure") style.push({ color: C.unsure });
-    else if (result?.state === "skipped") style.push({ color: C.skipped });
     if (isCursor) style.push(s.cursor);
     // With the verses hidden, show what the reader actually said for wrong words.
     const shown = hidden && result?.state === "bad" && result.heard ? result.heard : (stretched.words.get(i) ?? info.text);
@@ -306,7 +310,8 @@ export default function Recite() {
    }
   };
   add(feedback?.correct_words||[],"ok");
-  add(feedback?.skipped_words||[],"skipped");
+  // A provider-reported skip is not proof that the user made a mistake.
+  // Leave unconfirmed/unheard words in their normal mushaf color.
   add(feedback?.letter_mistakes||[],"bad");
   // Provider results may arrive in batches. Preserve words already confirmed in
   // earlier pauses/sessions; only overlay the specialist's newly reported states.
@@ -468,6 +473,7 @@ export default function Recite() {
       setNabrFeedback(merged);
       applyNabrFeedback(merged);
       setNabrStatus("recording");
+      if (Number(message.exit_code) === 8) void finishRecitationAutomatically();
      }else if(message?.event==="QRC_ERROR"){
       nabrSessionStartedRef.current=false;
       setNabrStatus("unavailable");
@@ -538,6 +544,7 @@ export default function Recite() {
           const cursor = Math.max(n.view.cursor, peakRef.current);
           peakRef.current = cursor;
           setView(cursor === n.view.cursor ? n.view : { ...n.view, cursor });
+          if (n.track.cursor >= expectedRef.current.length) void finishRecitationAutomatically();
         };
         r.onerror = (e: any) => {
           if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
@@ -585,6 +592,22 @@ export default function Recite() {
     recognitionRef.current = null;
   }
 
+  async function finishRecitationAutomatically() {
+    if (autoStopRef.current) return;
+    autoStopRef.current = true;
+    stopListening();
+    stopAI4XRealtime();
+    try { await recorder.stop(); } catch {}
+    setFinished(true);
+    const complete = trackRef.current.cursor >= expectedRef.current.length;
+    setCompletionPrompt(
+      complete && surahNumber % 3 === 0
+        ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
+        : ""
+    );
+    setNotice("");
+  }
+
   async function toggle() {
     try {
       if (recording) {
@@ -592,6 +615,13 @@ export default function Recite() {
         stopAI4XRealtime();
         await recorder.stop();
         setFinished(true);
+        autoStopRef.current = true;
+        const complete = trackRef.current.cursor >= expectedRef.current.length;
+        setCompletionPrompt(
+          complete && surahNumber % 3 === 0
+            ? COMPLETION_PROMPTS[(Math.floor(surahNumber / 3) - 1) % COMPLETION_PROMPTS.length]
+            : ""
+        );
         setNotice(process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true" && !nabrFeedbackRef.current
           ? "لم تصل نتيجة صوتية موثوقة من AI4X؛ لم نعتمد تصحيحًا."
           : "");
@@ -602,6 +632,8 @@ export default function Recite() {
       // A paused recitation picks up where it stopped; a finished one starts over.
       if (trackRef.current.cursor >= expectedRef.current.length) clearReading();
       setFinished(false);
+      setCompletionPrompt("");
+      autoStopRef.current = false;
       peakRef.current = trackRef.current.cursor;
       setView(trackRef.current);
       setNotice("");
@@ -612,10 +644,10 @@ export default function Recite() {
       setNabrFeedback(null);
       setNabrStatus("idle");
       const specialistStarted = await startAI4XRealtime();
-      if (!specialistStarted && process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME !== "true") {
-        startListening();
-      } else if (!specialistStarted) {
-        setNotice("محرك AI4X غير متصل؛ لم نعتمد تصحيحًا من التعرّف العام على الصوت.");
+      // Run browser recognition alongside AI4X for immediate word highlighting.
+      startListening();
+      if (!specialistStarted && process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true") {
+        setNabrStatus("unavailable");
       }
     } catch {
       setNotice("تعذّر بدء التسميع. تأكد من إذن الميكروفون وحاول مرة أخرى.");
@@ -637,6 +669,8 @@ export default function Recite() {
     nabrFeedbackRef.current = null;
     setNabrStatus("idle");
     setFinished(false);
+    setCompletionPrompt("");
+    autoStopRef.current = false;
     setNotice("");
   }
 
@@ -703,26 +737,9 @@ export default function Recite() {
           <Text style={s.loading}>جارٍ تحميل المصحف…</Text>
         )}
 
-        {finished && (
-          <View style={s.summary}>
-            <Text style={s.summaryTitle}>ملخص التسميع</Text>
-            <View style={s.statsRow}>
-              <Stat label="صحيحة" value={counts.ok} color={C.ok} />
-              <Stat label="خطأ محتمل" value={counts.bad} color={C.bad} />
-              <Stat label="غير متأكد" value={counts.unsure} color={C.unsure} />
-              <Stat label="متخطّاة" value={counts.skipped} color={C.skipped} />
-              <Stat label="لم تُقرأ" value={notReached} color={C.muted} />
-            </View>
-            {needReview.length > 0 && <Text style={s.reviewTitle}>كلمات تحتاج مراجعة</Text>}
-            {needReview.map((i) => {
-              const r = byToken[i];
-              const label = r.state === "skipped" ? "متخطّاة" : "خطأ محتمل";
-              const heardPart = r.state === "bad" && r.heard ? `  — سمعنا «${r.heard}»` : "";
-              return <Text key={i} style={s.reviewRow}>{label}: {wordInfo[i].text}{heardPart}</Text>;
-            })}
-            <Text style={s.disclaimer}>
-              الأحمر خطأ محتمل، والرمادي غير متأكد ولا يُحسب خطأ. هذا تعرّف تقريبي على الكلمات، وليس حكمًا على التجويد. راجع مع معلّمك للتأكد.
-            </Text>
+        {finished && done && (
+          <View style={s.completion}>
+            {!!completionPrompt && <Text style={s.completionPrompt}>{completionPrompt}</Text>}
             <View style={s.navRow}>
               {surahNumber > 1 && (
                 <Pressable onPress={() => goSurah(surahNumber - 1)} style={s.navButton}>
@@ -804,15 +821,6 @@ function AyahMark({ num }: { num: string }) {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <View style={s.stat}>
-      <Text style={[s.statValue, { color }]}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   topBar: { paddingTop: Platform.OS === "web" ? 8 : 52, paddingHorizontal: 12, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.bar },
@@ -843,15 +851,8 @@ const s = StyleSheet.create({
   masked: { color: "transparent", backgroundColor: C.mask, borderRadius: 6 },
   cursor: { backgroundColor: C.cursor, borderRadius: 6 },
   loading: { textAlign: "center", color: C.muted, marginTop: 40 },
-  summary: { width: "100%", maxWidth: COLUMN_MAX, backgroundColor: C.card, borderRadius: 20, padding: 18, marginTop: 24, borderWidth: 1, borderColor: C.line },
-  summaryTitle: { color: C.gold, fontSize: 16, fontWeight: "800", textAlign: "right" },
-  statsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  stat: { flex: 1, backgroundColor: C.bar, borderRadius: 14, paddingVertical: 10, alignItems: "center" },
-  statValue: { fontSize: 18, fontWeight: "800" },
-  statLabel: { color: C.muted, fontSize: 10, marginTop: 3 },
-  reviewTitle: { color: C.ink, fontWeight: "700", fontSize: 13, textAlign: "right", marginTop: 16 },
-  reviewRow: { color: C.skipped, fontSize: 13, lineHeight: 22, textAlign: "right", marginTop: 4 },
-  disclaimer: { color: C.muted, fontSize: 10, lineHeight: 17, textAlign: "right", marginTop: 14 },
+  completion: { width: "100%", maxWidth: COLUMN_MAX, marginTop: 24, paddingBottom: 12 },
+  completionPrompt: { color: C.gold, fontSize: 15, lineHeight: 25, fontWeight: "700", textAlign: "center", marginBottom: 14 },
   navRow: { flexDirection: "row", gap: 8, marginTop: 16 },
   navButton: { flex: 1, backgroundColor: C.bar, borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: C.gold },
   navText: { color: C.gold, fontWeight: "700", fontSize: 13 },
