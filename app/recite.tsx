@@ -284,7 +284,7 @@ export default function Recite() {
 
  function mergeNabrFeedback(previous:any,next:any){
   if(!next||next.event!=="TILAWA_RESULT"||![6,8].includes(Number(next.exit_code)))return previous;
-  const fields=["correct_words","skipped_words","tajweed_mistakes","letter_mistakes"];
+  const fields=["correct_words","skipped_words","substituted_words","tajweed_mistakes","letter_mistakes"];
   const merged:any={...(previous||{}),...next};
   for(const field of fields){
    const map=new Map<string,any>();
@@ -301,7 +301,7 @@ export default function Recite() {
 
  function applyNabrFeedback(feedback:any){
   const keyed=new Map<string,WordState>();
-  const add=(items:any[],state:WordState)=>{
+  const add=(items:any[],state:WordState,confirmedSubstitution=false)=>{
    for(const item of items||[]){
     if(!item||Number(item.chapter)!==surahNumber||!Number.isInteger(Number(item.verse)))continue;
     const word=Number(item.word);
@@ -310,7 +310,7 @@ export default function Recite() {
       (value: unknown) => typeof value === "number" && Number.isFinite(value)
     );
     const trustedState = state === "bad"
-      ? (typeof confidence === "number" && confidence >= 0.9 ? "bad" : "unsure")
+      ? (confirmedSubstitution || (typeof confidence === "number" && confidence >= 0.9) ? "bad" : "unsure")
       : state;
     keyed.set([surahNumber,Number(item.verse),word].join(":"),trustedState);
    }
@@ -318,6 +318,8 @@ export default function Recite() {
   add(feedback?.correct_words||[],"ok");
   // A provider-reported skip is not proof that the user made a mistake.
   // Leave unconfirmed/unheard words in their normal mushaf color.
+  add(feedback?.substituted_words||[],"bad",true);
+  // Phonetic flags stay yellow unless the provider supplies a high confidence score.
   add(feedback?.letter_mistakes||[],"bad");
   // Provider results may arrive in batches. Preserve words already confirmed in
   // earlier pauses/sessions; only overlay the specialist's newly reported states.
