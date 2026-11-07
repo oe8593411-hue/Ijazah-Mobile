@@ -306,7 +306,13 @@ export default function Recite() {
     if(!item||Number(item.chapter)!==surahNumber||!Number.isInteger(Number(item.verse)))continue;
     const word=Number(item.word);
     if(!Number.isInteger(word)||word<1)continue;
-    keyed.set([surahNumber,Number(item.verse),word].join(":"),state);
+    const confidence = [item.confidence, item.confidence_score].find(
+      (value: unknown) => typeof value === "number" && Number.isFinite(value)
+    );
+    const trustedState = state === "bad"
+      ? (typeof confidence === "number" && confidence >= 0.9 ? "bad" : "unsure")
+      : state;
+    keyed.set([surahNumber,Number(item.verse),word].join(":"),trustedState);
    }
   };
   add(feedback?.correct_words||[],"ok");
