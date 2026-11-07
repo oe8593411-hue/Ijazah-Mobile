@@ -87,9 +87,28 @@ function isAllowedClientPacket(data: any): boolean {
 function getWindow(ip: string): IpWindow {
   const now = Date.now();
   let state = ipWindows.get(ip);
-  if (!state || now - state.startedAt >= WINDOW_MS) {
+  if (!state) {
     state = { startedAt: now, attempts: 0, active: 0 };
     ipWindows.set(ip, state);
+  } else if (now - state.startedAt >= WINDOW_MS) {
+    // Reset the hourly attempt counter without erasing live connections.
+    state.startedAt = now;
+    state.attempts = 0;
+  }
+
+  // Keep the per-instance map bounded under a stream of distinct source IPs.
+  if (ipWindows.size > 2000) {
+    for (const [key, value] of ipWindows) {
+      if (key !== ip && value.active === 0 && now - value.startedAt >= WINDOW_MS) {
+        ipWindows.delete(key);
+      }
+    }
+    if (ipWindows.size > 2000) {
+      for (const [key, value] of ipWindows) {
+        if (ipWindows.size <= 2000) break;
+        if (key !== ip && value.active === 0) ipWindows.delete(key);
+      }
+    }
   }
   return state;
 }
