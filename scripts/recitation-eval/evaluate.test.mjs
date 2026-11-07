@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { emptyTrack, normalizeArabic, readFinal, startSpeech, takeSpeech } from "../../src/recitation/matching.ts";
+import { emptyTrack, hasReachedEnd, normalizeArabic, readFinal, startSpeech, takeSpeech } from "../../src/recitation/matching.ts";
 import { alignWords, appStates, checkManifest, evaluate, judge, verseWords } from "./evaluate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -92,6 +92,28 @@ test("the matcher marks one missed word unsure, two in a row skipped, and a clea
 
 test("words after the last word the engine heard stay unread", () => {
   assert.deepEqual(appStates(VERSE_1_1, "بسم"), ["ok", undefined, undefined, undefined]);
+});
+
+test("a surah completes only when the final expected word was actually heard", () => {
+  const complete = emptyTrack(4);
+  complete.cursor = 4;
+  complete.states = ["ok", "ok", "ok", "ok"];
+  assert.equal(hasReachedEnd(complete), true);
+
+  const finalWordUnsure = { ...complete, states: ["ok", "ok", "ok", "unsure"] };
+  assert.equal(hasReachedEnd(finalWordUnsure), true);
+
+  const finalWordWrongButHeard = { ...complete, states: ["ok", "ok", "ok", "bad"] };
+  assert.equal(hasReachedEnd(finalWordWrongButHeard), true);
+
+  const finalWordSkipped = { ...complete, states: ["ok", "ok", "ok", "skipped"] };
+  assert.equal(hasReachedEnd(finalWordSkipped), false);
+
+  const finalWordUnread = { ...complete, states: ["ok", "ok", "ok", undefined] };
+  assert.equal(hasReachedEnd(finalWordUnread), false);
+
+  const cursorShort = { ...complete, cursor: 3 };
+  assert.equal(hasReachedEnd(cursorShort), false);
 });
 
 test("the counts keep planted mistakes apart from clean words", () => {
