@@ -157,7 +157,8 @@ function getWindow(ip: string): IpWindow {
 }
 
 const server = createServer((req, res) => {
-  if (req.method === "GET" && req.url === "/health") {
+  const requestUrl = new URL(req.url || "/", "http://localhost");
+  if (req.method === "GET" && (requestUrl.pathname.endsWith("/health") || requestUrl.searchParams.get("health") === "1")) {
     const upstream = getUpstreamConfig();
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
