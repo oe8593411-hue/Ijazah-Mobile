@@ -442,7 +442,7 @@ export default function Recite(){
 <Modal visible={surahPickerVisible} animationType="slide" transparent onRequestClose={()=>setSurahPickerVisible(false)}><View style={s.modalShade}><View style={[s.pickerPanel,{backgroundColor:dark?"#0B1A2B":"#FFFFFF"}]}><Text style={[s.pickerTitle,{color:dark?"#F5F8FC":"#10253D"}]}>اختيار السورة</Text><ScrollView>{SURAHS.map(item=><Pressable key={item.number} onPress={()=>{setSurahPickerVisible(false);setActiveAyah(1);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(item.number),ayah:"1",scope:"ayah"}});}} style={[s.pickerItem,{borderBottomColor:dark?"#263D50":"#E6EDF3"}]}><Text style={[s.pickerItemText,{color:dark?"#F5F8FC":"#18334B"}]}>{item.number}. {item.nameAr}</Text><Text style={s.pickerCount}>{item.ayahCount} آية</Text></Pressable>)}</ScrollView><Pressable onPress={()=>setSurahPickerVisible(false)} style={s.closePicker}><Text style={s.closePickerText}>إلغاء</Text></Pressable></View></View></Modal><Modal visible={ayahPickerVisible} animationType="fade" transparent onRequestClose={()=>setAyahPickerVisible(false)}><View style={s.modalShade}><View style={[s.ayahPanel,{backgroundColor:dark?"#0B1A2B":"#FFFFFF"}]}><Text style={[s.pickerTitle,{color:dark?"#F5F8FC":"#10253D"}]}>اختيار آية البداية</Text><ScrollView contentContainerStyle={s.ayahGrid}>{Array.from({length:SURAHS.find(x=>x.number===selectedSurah)?.ayahCount||1},(_,i)=>i+1).map(n=><Pressable key={n} onPress={()=>{setActiveAyah(n);setAyahPickerVisible(false);setHeardText("");router.replace({pathname:"/recite",params:{surah:String(selectedSurah),ayah:String(n),scope:"ayah"}});}} style={[s.ayahChip,n===activeAyah&&s.ayahChipActive]}><Text style={[s.ayahChipText,n===activeAyah&&s.ayahChipTextActive]}>{n}</Text></Pressable>)}</ScrollView><Pressable onPress={()=>setAyahPickerVisible(false)} style={s.closePicker}><Text style={s.closePickerText}>إلغاء</Text></Pressable></View></View></Modal></View>;
 }
 function renderAlignedWords(expected:string,heard:string,allowPrefix=false,nabr:any=null,selectedSurah=1,startAyah=1){
- const expectedWords=expected.split(/\\s+/).filter(Boolean);
+ const expectedWords=expected.split(/\s+/).filter(Boolean);
  const hasAcousticEvidence=!!nabr&&[...(nabr.correct_words||[]),...(nabr.skipped_words||[]),...(nabr.tajweed_mistakes||[]),...(nabr.letter_mistakes||[])].length>0;
  // Browser speech-to-text is not acoustic Quran verification. Never color a word
  // green from a generic transcript or edit-distance match; only provider feedback
@@ -455,7 +455,7 @@ function renderAlignedWords(expected:string,heard:string,allowPrefix=false,nabr:
  for(const item of [...(nabr?.tajweed_mistakes||[]),...(nabr?.letter_mistakes||[])])if(item&&item.chapter===selectedSurah)wrong.add(key(item));
  let currentAyah=startAyah,wordIndex=0;
  return expectedWords.map((word,index)=>{
-  const marker=word.match(/^﴿(\\d+)﴾$/u);
+  const marker=word.match(/^﴿(\d+)﴾$/u);
   if(marker){currentAyah=Number(marker[1])+1;wordIndex=0;return <Text key={index} style={{color:"#B89B5A"}}>{word} </Text>;}
   const thisWord=wordIndex++;
   const wordKey=[selectedSurah,currentAyah,thisWord+1].join(":");
