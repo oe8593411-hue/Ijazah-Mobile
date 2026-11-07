@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { decode as decodeMessagePack, encode as encodeMessagePack } from "@msgpack/msgpack";
 import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { SURAHS } from "../src/quran/surahs";
@@ -69,6 +70,8 @@ export default function Recite() {
   const [notice, setNotice] = useState("");
   const recognitionRef = useRef<any>(null);
 
+  useEffect(() => () => { stopListening(); stopAI4XRealtime(); }, []);
+
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder);
   const recording = state.isRecording;
@@ -82,6 +85,18 @@ export default function Recite() {
   const openRef = useRef(false);                               // a session has started and not ended yet
   const listeningRef = useRef(false);
   const idleRestartsRef = useRef(0);
+  const [nabrStatus, setNabrStatus] = useState<"idle" | "connecting" | "recording" | "unavailable" | "complete">("idle");
+  const [nabrFeedback, setNabrFeedback] = useState<any>(null);
+  const nabrFeedbackRef = useRef<any>(null);
+  const nabrSocketRef = useRef<any>(null);
+  const nabrStreamRef = useRef<any>(null);
+  const nabrContextRef = useRef<any>(null);
+  const nabrProcessorRef = useRef<any>(null);
+  const nabrSourceRef = useRef<any>(null);
+  const nabrMuteRef = useRef<any>(null);
+  const nabrPendingSamplesRef = useRef<number[]>([]);
+  const nabrSessionStartedRef = useRef(false);
+  const nabrStartSentRef = useRef(false);
 
   // Web only: load the Amiri Quran font (SIL OFL) for the mushaf text.
   useEffect(() => {
@@ -227,7 +242,7 @@ export default function Recite() {
 
   const byToken: Record<number, { state: WordState; heard?: string }> = {};
   let cursorToken = -1;
-  if (tracked) {
+  if (tracked && (process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME !== "true" || nabrFeedback)) {
     tracked.states.forEach((st, k) => {
       if (st) byToken[readable[k]] = { state: st, heard: tracked.heardAt[k] };
     });
@@ -258,6 +273,206 @@ export default function Recite() {
     const shown = hidden && result?.state === "bad" && result.heard ? result.heard : (stretched.words.get(i) ?? info.text);
     return <Text key={i} style={style}>{shown}</Text>;
   };
+
+ function mergeNabrFeedback(previous:any,next:any){
+  if(!next||next.event!=="TILAWA_RESULT"||![6,8].includes(Number(next.exit_code)))return previous;
+  const fields=["correct_words","skipped_words","tajweed_mistakes","letter_mistakes"];
+  const merged:any={...(previous||{}),...next};
+  for(const field of fields){
+   const map=new Map<string,any>();
+   for(const item of [...(previous?.[field]||[]),...(next?.[field]||[])]){
+    if(!item||typeof item!=="object")continue;
+    const key=[item.chapter,item.verse,item.word,item.letter??"",item.errorCode??"",item.message??""].join(":");
+    map.set(key,item);
+   }
+   merged[field]=Array.from(map.values()).slice(-1200);
+  }
+  return merged;
+ }
+
+
+ function applyNabrFeedback(feedback:any){
+  const keyed=new Map<string,WordState>();
+  const add=(items:any[],state:WordState)=>{
+   for(const item of items||[]){
+    if(!item||Number(item.chapter)!==surahNumber||!Number.isInteger(Number(item.verse)))continue;
+    const word=Number(item.word);
+    if(!Number.isInteger(word)||word<1)continue;
+    keyed.set([surahNumber,Number(item.verse),word].join(":"),state);
+   }
+  };
+  add(feedback?.correct_words||[],"ok");
+  add(feedback?.skipped_words||[],"skipped");
+  add(feedback?.letter_mistakes||[],"bad");
+  const next=emptyTrack(readable.length);
+  const counters=new Map<number,number>();
+  let cursor=0;
+  for(let i=0;i<readable.length;i++){
+   const verse=ayahOfToken[readable[i]];
+   const word=(counters.get(verse)||0)+1;
+   counters.set(verse,word);
+   const state=keyed.get([surahNumber,verse,word].join(":"));
+   if(state){next.states[i]=state;cursor=i+1;}
+  }
+  next.cursor=cursor;
+  trackRef.current=next;
+  peakRef.current=cursor;
+  setView(next);
+ }
+
+ function pcmToWav(samples:Int16Array){
+  const buffer=new ArrayBuffer(44+samples.length*2);
+  const view=new DataView(buffer);
+  const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
+  write(0,"RIFF");view.setUint32(4,36+samples.length*2,true);write(8,"WAVE");write(12,"fmt ");
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+  write(36,"data");view.setUint32(40,samples.length*2,true);
+  new Int16Array(buffer,44,samples.length).set(samples);
+  return new Uint8Array(buffer);
+ }
+
+ function stopAI4XRealtime(){
+  const socket=nabrSocketRef.current;
+  const shouldReset=nabrStartSentRef.current;
+  nabrSessionStartedRef.current=false;
+  try{nabrProcessorRef.current?.disconnect?.();}catch{}
+  try{nabrSourceRef.current?.disconnect?.();}catch{}
+  try{nabrMuteRef.current?.disconnect?.();}catch{}
+  try{nabrStreamRef.current?.getTracks?.().forEach((track:any)=>track.stop());}catch{}
+  try{void nabrContextRef.current?.close?.();}catch{}
+  nabrProcessorRef.current=null;nabrSourceRef.current=null;nabrMuteRef.current=null;nabrContextRef.current=null;nabrStreamRef.current=null;
+  nabrPendingSamplesRef.current=[];
+  if(socket){
+   try{
+    if(socket.readyState===1&&shouldReset){
+     socket.send(encodeMessagePack({method:"RESET_TILAWA_SESSION"}));
+    }
+   }catch{}
+   try{setTimeout(()=>{try{socket.close();}catch{}},350);}catch{}
+  }
+  nabrStartSentRef.current=false;
+  nabrSocketRef.current=null;
+  setNabrStatus(previous=>previous==="unavailable"?"unavailable":nabrFeedbackRef.current?"complete":"idle");
+ }
+
+ async function startAI4XRealtime():Promise<boolean>{
+  if(process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME!=="true")return false;
+  const root=globalThis as any;
+  const mediaDevices=root.navigator?.mediaDevices;
+  const AudioContextClass=root.AudioContext||root.webkitAudioContext;
+  const WebSocketClass=root.WebSocket;
+  if(!mediaDevices?.getUserMedia||!AudioContextClass||!WebSocketClass){
+   setNabrStatus("unavailable");return false;
+  }
+  setNabrStatus("connecting");
+  let resolved=false;
+  let timeout:any=null;
+  let resolveStart:(value:boolean)=>void=()=>{};
+  const started=new Promise<boolean>(resolve=>{resolveStart=resolve;});
+  const finishStart=(value:boolean)=>{if(!resolved){resolved=true;if(timeout)clearTimeout(timeout);resolveStart(value);}};
+  try{
+   nabrFeedbackRef.current=null;
+   setNabrFeedback(null);
+   const stream=await mediaDevices.getUserMedia({
+    audio:{channelCount:1,sampleRate:16000,echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+   });
+   nabrStreamRef.current=stream;
+   const context=new AudioContextClass({sampleRate:16000});
+   nabrContextRef.current=context;
+   const source=context.createMediaStreamSource(stream);
+   const processor=context.createScriptProcessor(4096,1,1);
+   const mute=context.createGain();mute.gain.value=0;
+   nabrSourceRef.current=source;nabrProcessorRef.current=processor;nabrMuteRef.current=mute;
+   processor.onaudioprocess=(event:any)=>{
+    const socket=nabrSocketRef.current;
+    if(!nabrSessionStartedRef.current||!socket||socket.readyState!==1)return;
+    const input=event.inputBuffer.getChannelData(0);
+    const ratio=context.sampleRate/16000;
+    const outputLength=Math.floor(input.length/ratio);
+    const pending=nabrPendingSamplesRef.current;
+    for(let i=0;i<outputLength;i++){
+     const position=i*ratio;const left=Math.floor(position);const right=Math.min(input.length-1,left+1);
+     const fraction=position-left;
+     const sample=Math.max(-1,Math.min(1,input[left]*(1-fraction)+input[right]*fraction));
+     pending.push(Math.round(sample<0?sample*0x8000:sample*0x7fff));
+    }
+    while(pending.length>=3200){
+     const frame=Int16Array.from(pending.splice(0,3200));
+     try{
+      socket.send(encodeMessagePack({method:"CHECK_TILAWA_AUDIO",audio:pcmToWav(frame),client_sent_at_ms:Date.now()}));
+     }catch{
+      nabrSessionStartedRef.current=false;
+      setNabrStatus("unavailable");
+     }
+    }
+   };
+   source.connect(processor);processor.connect(mute);mute.connect(context.destination);
+
+   const configuredBase=(process.env.EXPO_PUBLIC_IJAZAH_API_URL||root.location?.origin||"").replace(/\/$/,"");
+   if(!configuredBase)throw new Error("NO_API_ORIGIN");
+   const socketUrl=new URL("/api/ai4x-stream",configuredBase);
+   socketUrl.protocol=socketUrl.protocol==="https:"?"wss:":"ws:";
+   const socket=new WebSocketClass(socketUrl.toString());
+   nabrSocketRef.current=socket;
+   socket.binaryType="arraybuffer";
+   timeout=setTimeout(()=>{finishStart(false);setNabrStatus("unavailable");try{socket.close();}catch{}},15000);
+   socket.onmessage=(event:any)=>{
+    try{
+     const packet=event.data instanceof ArrayBuffer
+      ? new Uint8Array(event.data)
+      : event.data instanceof Blob
+       ? new Uint8Array([])
+       : event.data;
+     const message=decodeMessagePack(packet as Uint8Array) as any;
+     if(message?.event==="QRC_CLIENT_CONNECTED"&&!nabrStartSentRef.current){
+      nabrStartSentRef.current=true;
+      socket.send(encodeMessagePack({
+       method:"START_TILAWA_SESSION",
+       chapter_index:surahNumber,
+       verse_index:Math.max(1,startAyah),
+       word_index:1,
+       hafz_level:1,
+       tajweed_level:1
+      }));
+     }else if(message?.event==="TILAWA_SESSION_STARTED"){
+      if(message.exit_code===6){
+       nabrSessionStartedRef.current=true;
+       setNabrStatus("recording");
+       finishStart(true);
+      }else{
+       setNabrStatus("unavailable");finishStart(false);
+      }
+     }else if(message?.event==="TILAWA_RESULT"){
+      const merged=mergeNabrFeedback(nabrFeedbackRef.current,message);
+      nabrFeedbackRef.current=merged;
+      setNabrFeedback(merged);
+      applyNabrFeedback(merged);
+      setNabrStatus("recording");
+     }else if(message?.event==="QRC_ERROR"){
+      nabrSessionStartedRef.current=false;
+      setNabrStatus("unavailable");
+      finishStart(false);
+     }
+    }catch{
+     setNabrStatus("unavailable");finishStart(false);
+    }
+   };
+   socket.onerror=()=>{setNabrStatus("unavailable");finishStart(false);};
+   socket.onclose=()=>{if(!nabrSessionStartedRef.current){setNabrStatus(previous=>previous==="complete"?previous:"unavailable");finishStart(false);}};
+   await context.resume?.();
+   const didStart=await started;
+   if(!didStart){
+    stopAI4XRealtime();
+    setNabrStatus("unavailable");
+    return false;
+   }
+   return true;
+  }catch{
+   stopAI4XRealtime();setNabrStatus("unavailable");return false;
+  }
+ }
+
 
   // ---------- Live word recognition (browser) ----------
 
@@ -342,9 +557,12 @@ export default function Recite() {
     try {
       if (recording) {
         stopListening();
+        stopAI4XRealtime();
         await recorder.stop();
         setFinished(true);
-        setNotice("");
+        setNotice(process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true" && !nabrFeedbackRef.current
+          ? "لم تصل نتيجة صوتية موثوقة من AI4X؛ لم نعتمد تصحيحًا."
+          : "");
         return;
       }
       const perm = await requestRecordingPermissionsAsync();
@@ -358,7 +576,11 @@ export default function Recite() {
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
-      startListening();
+      nabrFeedbackRef.current = null;
+      setNabrFeedback(null);
+      setNabrStatus("idle");
+      const specialistStarted = await startAI4XRealtime();
+      if (!specialistStarted) startListening();
     } catch {
       setNotice("تعذّر بدء التسميع. تأكد من إذن الميكروفون وحاول مرة أخرى.");
     }
@@ -372,8 +594,12 @@ export default function Recite() {
 
   function restart() {
     stopListening();
+    stopAI4XRealtime();
     clearReading();
     setView(null);
+    setNabrFeedback(null);
+    nabrFeedbackRef.current = null;
+    setNabrStatus("idle");
     setFinished(false);
     setNotice("");
   }
@@ -479,6 +705,9 @@ export default function Recite() {
 
       <View style={s.footer}>
         {!!notice && <Text style={s.notice}>{notice}</Text>}
+        {process.env.EXPO_PUBLIC_IJAZAH_AI4X_REALTIME === "true" && nabrStatus !== "idle" && (
+          <Text style={s.notice}>{nabrStatus === "connecting" ? "AI4X: جارٍ الاتصال بالمحرك الصوتي" : nabrStatus === "recording" ? "AI4X: تحليل صوتي مباشر" : nabrStatus === "complete" ? "AI4X: انتهى التحليل" : "AI4X: المحرك غير متاح"}</Text>
+        )}
         <Text style={s.status}>{status}</Text>
         <View style={s.dock}>
           <View style={s.dockEnd}>
