@@ -43,7 +43,7 @@ function allowedClientPacketMethod(data: any): string | null {
   try {
     const packet = Buffer.isBuffer(data) ? data : Buffer.from(data);
     const message = decodeMessagePack(packet) as any;
-    if (!message || typeof message !== "object" || Array.isArray(message)) return false;
+    if (!message || typeof message !== "object" || Array.isArray(message)) return null;
 
     const hasOnlyKeys = (allowed: string[]) =>
       Object.keys(message).every((key) => allowed.includes(key));
@@ -70,16 +70,16 @@ function allowedClientPacketMethod(data: any): string | null {
         || !hasOnlyKeys(["method", "audio", "client_sent_at_ms"])
         || !["method", "audio"].every((key) => Object.prototype.hasOwnProperty.call(message, key))
         || (message.client_sent_at_ms !== undefined
-          && (!Number.isSafeInteger(message.client_sent_at_ms) || message.client_sent_at_ms <= 0))) return false;
+          && (!Number.isSafeInteger(message.client_sent_at_ms) || message.client_sent_at_ms <= 0))) return null;
     const audio = message.audio;
-    if (!(audio instanceof Uint8Array) || audio.byteLength < 46 || audio.byteLength > 6500) return false;
+    if (!(audio instanceof Uint8Array) || audio.byteLength < 46 || audio.byteLength > 6500) return null;
     const wav = Buffer.from(audio.buffer, audio.byteOffset, audio.byteLength);
     if (
       wav.toString("ascii", 0, 4) !== "RIFF"
       || wav.toString("ascii", 8, 12) !== "WAVE"
       || wav.toString("ascii", 12, 16) !== "fmt "
       || wav.toString("ascii", 36, 40) !== "data"
-    ) return false;
+    ) return null;
     const dataBytes = wav.readUInt32LE(40);
     return wav.readUInt32LE(4) === wav.byteLength - 8
       && wav.readUInt32LE(16) === 16
@@ -94,7 +94,7 @@ function allowedClientPacketMethod(data: any): string | null {
       && dataBytes % 2 === 0
       && dataBytes === wav.byteLength - 44 ? "CHECK_TILAWA_AUDIO" : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
