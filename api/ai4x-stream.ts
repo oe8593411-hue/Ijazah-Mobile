@@ -48,7 +48,7 @@ function isAllowedClientPacket(data: any): boolean {
 
     if (message.method === "START_TILAWA_SESSION") {
       const integerInRange = (value: unknown, min: number, max: number) =>
-        Number.isInteger(value) && Number(value) >= min && Number(value) <= max;
+        typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
       return integerInRange(message.chapter_index, 1, 114)
         && integerInRange(message.verse_index, 1, 286)
         && integerInRange(message.word_index, 1, 100)
