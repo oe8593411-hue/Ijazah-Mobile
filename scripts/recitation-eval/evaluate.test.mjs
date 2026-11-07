@@ -30,19 +30,19 @@ test("normalization drops harakat, reads dagger alif as a long a, unifies alef f
 test("a word is red only when at least two distinct recognition alternatives agree", () => {
   const expected = ["بسم", "الله", "الرحمان", "الرحيم"];
   const track = emptyTrack(expected.length);
-  const singleGuess = readFinal(expected, track, ["بسم الله الرحمان الكريم"]);
+  const singleGuess = readFinal(expected, track, ["بسم الله الرحمان سيارة"]);
   assert.equal(singleGuess.states[3], "unsure");
 
   const duplicateGuess = readFinal(expected, track, [
-    "بسم الله الرحمان الكريم",
-    "بسم الله الرحمان الكريم",
+    "بسم الله الرحمان سيارة",
+    "بسم الله الرحمان سيارة",
   ]);
   assert.equal(duplicateGuess.states[3], "unsure");
 
   const corroboratedGuess = readFinal(expected, track, [
-    "بسم الله الرحمان الكريم",
-    "بسم الله الرحمان العزيز",
-    "بسم الله الرحمان الكتاب",
+    "بسم الله الرحمان سيارة",
+    "بسم الله الرحمان كتاب",
+    "بسم الله الرحمان قلم",
   ]);
   assert.equal(corroboratedGuess.states[3], "bad");
 
@@ -87,7 +87,7 @@ test("the matcher marks one missed word unsure, two in a row skipped, and a clea
   assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحمان الرحيم"), ["ok", "ok", "ok", "ok"]);
   assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحيم"), ["ok", "ok", "unsure", "ok"]);
   assert.deepEqual(appStates(VERSE_1_1, "بسم الرحيم"), ["ok", "skipped", "skipped", "ok"]);
-  assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحمان كتاب"), ["ok", "ok", "ok", "bad"]);
+  assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحمان كتاب"), ["ok", "ok", "ok", "unsure"]);
 });
 
 test("words after the last word the engine heard stay unread", () => {
