@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { decode as decodeMessagePack } from "@msgpack/msgpack";
+import { SURAHS } from "../src/quran/surahs";
 
 const WebSocket = require("ws") as any;
 const WebSocketServer = WebSocket.Server;
@@ -44,19 +45,31 @@ function isAllowedClientPacket(data: any): boolean {
     const message = decodeMessagePack(packet) as any;
     if (!message || typeof message !== "object" || Array.isArray(message)) return false;
 
-    if (message.method === "RESET_TILAWA_SESSION") return true;
+    const hasOnlyKeys = (allowed: string[]) =>
+      Object.keys(message).every((key) => allowed.includes(key));
+
+    if (message.method === "RESET_TILAWA_SESSION") {
+      return hasOnlyKeys(["method"]) && Object.keys(message).length === 1;
+    }
 
     if (message.method === "START_TILAWA_SESSION") {
       const integerInRange = (value: unknown, min: number, max: number) =>
         typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
-      return integerInRange(message.chapter_index, 1, 114)
-        && integerInRange(message.verse_index, 1, 286)
+      const chapter = SURAHS.find((item) => item.number === message.chapter_index);
+      return hasOnlyKeys(["method", "chapter_index", "verse_index", "word_index", "hafz_level", "tajweed_level"])
+        && Object.keys(message).length === 6
+        && !!chapter
+        && integerInRange(message.verse_index, 1, chapter.ayahCount)
         && integerInRange(message.word_index, 1, 100)
         && integerInRange(message.hafz_level, 1, 5)
         && integerInRange(message.tajweed_level, 1, 5);
     }
 
-    if (message.method !== "CHECK_TILAWA_AUDIO") return false;
+    if (message.method !== "CHECK_TILAWA_AUDIO"
+        || !hasOnlyKeys(["method", "audio", "client_sent_at_ms"])
+        || !["method", "audio"].every((key) => Object.prototype.hasOwnProperty.call(message, key))
+        || (message.client_sent_at_ms !== undefined
+          && (!Number.isSafeInteger(message.client_sent_at_ms) || message.client_sent_at_ms <= 0))) return false;
     const audio = message.audio;
     if (!(audio instanceof Uint8Array) || audio.byteLength < 46 || audio.byteLength > 6500) return false;
     const wav = Buffer.from(audio.buffer, audio.byteOffset, audio.byteLength);
