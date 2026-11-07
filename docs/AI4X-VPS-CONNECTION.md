@@ -33,7 +33,7 @@ IJAZAH_ALLOWED_ORIGINS=https://YOUR_APP_HOST
 
 When both `IJAZAH_AI4X_VPS_WS_URL` and `IJAZAH_AI4X_VPS_TOKEN` are present, the bridge uses the VPS and sends the token server-to-server as `Authorization: Bearer ...`. If neither is present, the legacy Nabr upstream can be selected with `NABR_API_KEY` and optional `NABR_WS_URL`. If only one VPS setting is supplied, the connection fails closed instead of falling back.
 
-The VPS must use TLS (`wss://`) in production. The bridge adds `X-Ijazah-AI4X-Protocol: qrc-msgpack-v1` so the service can reject incompatible clients.
+The VPS must use TLS (`wss://`) in production. The bridge adds `X-Ijazah-AI4X-Protocol: qrc-msgpack-v1` so the service can reject incompatible clients. A non-secret readiness probe is available at `GET /api/ai4x-stream?health=1`; it reports whether the stream is enabled and whether the VPS/provider settings are present, but it does not test model accuracy.
 
 ## App environment
 
