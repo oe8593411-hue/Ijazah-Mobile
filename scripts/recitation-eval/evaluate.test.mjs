@@ -95,6 +95,12 @@ test("words after the last word the engine heard stay unread", () => {
 });
 
 test("a surah completes only when the final expected word was actually heard", () => {
+  // A track initialized before the surah corpus loads must not finish after its first word.
+  const prematurelyShort = emptyTrack(0);
+  prematurelyShort.cursor = 1;
+  prematurelyShort.states = ["ok"];
+  assert.equal(hasReachedEnd(prematurelyShort, 40), false);
+
   const complete = emptyTrack(4);
   complete.cursor = 4;
   complete.states = ["ok", "ok", "ok", "ok"];
