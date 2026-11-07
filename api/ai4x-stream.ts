@@ -100,6 +100,9 @@ const server = createServer((_req, res) => {
   res.end("WebSocket upgrade required");
 });
 
+// Origin checks reduce cross-site socket abuse but are not user authentication.
+// Keep IJAZAH_AI4X_STREAM_ENABLED unset until app sign-in and durable per-user quotas
+// are enforced; this in-memory IP limiter is only a secondary per-instance guard.
 const wss = new WebSocketServer({
   server,
   maxPayload: 24 * 1024,
