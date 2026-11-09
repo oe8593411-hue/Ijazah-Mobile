@@ -79,6 +79,12 @@ export default function Recite() {
   const micPulse = useRef(new Animated.Value(0)).current;
   const recognitionRef = useRef<any>(null);
 
+  useEffect(() => () => { stopListening(); stopAI4XRealtime(); }, []);
+
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const state = useAudioRecorderState(recorder);
+  const recording = state.isRecording;
+
   useEffect(() => {
     if (!recording) {
       micPulse.stopAnimation();
@@ -93,11 +99,6 @@ export default function Recite() {
     return () => pulse.stop();
   }, [recording, micPulse]);
 
-  useEffect(() => () => { stopListening(); stopAI4XRealtime(); }, []);
-
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const state = useAudioRecorderState(recorder);
-  const recording = state.isRecording;
 
   // Live recognition state: the recognizer's event handlers read these without re-subscribing.
   const expectedRef = useRef<string[]>([]);
