@@ -24,9 +24,28 @@ export default function GlobalControls() {
           <Pressable accessibilityRole="button" accessibilityLabel="اختيار اللغة" onPress={() => setLanguagePickerVisible(true)} style={[s.button, { backgroundColor: dark ? "#163752" : "#F1F7FB", borderColor: border }]}>
             <Text style={[s.buttonText, { color: ink }]}>{chosen.native}⌄</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="تبديل الوضع الليلي" onPress={() => setDark(!dark)} style={[s.iconButton, { backgroundColor: dark ? "#163752" : "#F1F7FB", borderColor: border }]}>
-            <Text style={[s.buttonText, { color: ink }]}>{dark ? "☀" : "☾"}</Text>
-          </Pressable>
+          <View style={[s.themeSwitch, { backgroundColor: dark ? "#102B43" : "#EAF0F5", borderColor: border }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="الوضع الفاتح"
+              accessibilityState={{ selected: !dark }}
+              onPress={() => setDark(false)}
+              style={[s.themeOption, !dark && [s.themeOptionActive, { backgroundColor: "#FFFFFF" }]]}
+            >
+              <Text style={[s.themeIcon, { color: !dark ? "#B7791F" : "#9AAABD" }]}>☀</Text>
+              <Text style={[s.themeLabel, { color: !dark ? "#182536" : "#A9B9C9" }]}>فاتح</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="الوضع الداكن"
+              accessibilityState={{ selected: dark }}
+              onPress={() => setDark(true)}
+              style={[s.themeOption, dark && [s.themeOptionActive, { backgroundColor: "#244B68" }]]}
+            >
+              <Text style={[s.themeIcon, { color: dark ? "#F4D58D" : "#8495A6" }]}>☾</Text>
+              <Text style={[s.themeLabel, { color: dark ? "#FFFFFF" : "#64748B" }]}>داكن</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
       <Modal visible={languagePickerVisible} transparent animationType="fade" onRequestClose={() => setLanguagePickerVisible(false)}>
@@ -61,7 +80,11 @@ const s = StyleSheet.create({
   subtitle: { fontSize: 10, marginTop: 2 },
   actions: { flexDirection: "row", alignItems: "center", gap: 7 },
   button: { minHeight: 38, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", maxWidth: 145 },
-  iconButton: { width: 38, height: 38, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  themeSwitch: { flexDirection: "row", alignItems: "center", padding: 3, borderRadius: 15, borderWidth: 1, gap: 2 },
+  themeOption: { minWidth: 67, height: 34, paddingHorizontal: 8, borderRadius: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
+  themeOptionActive: { shadowColor: "#071A33", shadowOpacity: 0.12, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  themeIcon: { fontSize: 15, fontWeight: "900" },
+  themeLabel: { fontSize: 11, fontWeight: "900" },
   buttonText: { fontSize: 12, fontWeight: "800" },
   backdrop: { flex: 1, backgroundColor: "rgba(3,15,30,0.55)", justifyContent: "center", alignItems: "center", padding: 18 },
   modal: { width: "100%", maxWidth: 460, maxHeight: "84%", borderWidth: 1, borderRadius: 22, padding: 18 },
