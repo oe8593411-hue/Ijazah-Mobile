@@ -1,21 +1,31 @@
+import React from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
+import { usePreferences } from "../src/preferences";
 
-const C = {
+const DARK_COLORS = {
   bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
   ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)", dark: "#1B1C1F",
 };
+const LIGHT_COLORS = {
+  bg: "#F5F7FA", bar: "#FFFFFF", card: "#FFFFFF", line: "#DCE3EA",
+  ink: "#182536", muted: "#64748B", gold: "#A87920", goldSoft: "rgba(168,121,32,0.13)", dark: "#FFFFFF",
+};
+type SurahColors = typeof DARK_COLORS;
 
 // Surah picker: tap a surah to open the recitation screen on it (whole surah, from ayah 1).
 export default function Surahs() {
+  const { dark } = usePreferences();
+  const C = dark ? DARK_COLORS : LIGHT_COLORS;
+  const s = React.useMemo(() => createStyles(C), [dark]);
   const params = useLocalSearchParams<{ current?: string }>();
   const current = Number(params.current) || 0;
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
+      <StatusBar style={dark ? "light" : "dark"} />
       <View style={s.header}>
         <Pressable onPress={() => router.back()} style={s.backButton}><Text style={s.back}>›</Text></Pressable>
         <Text style={s.title}>اختر السورة</Text>
@@ -46,7 +56,8 @@ export default function Surahs() {
   );
 }
 
-const s = StyleSheet.create({
+function createStyles(C: SurahColors) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { paddingTop: 12, paddingHorizontal: 12, paddingBottom: 10, flexDirection: "row", alignItems: "center", backgroundColor: C.bar, borderBottomWidth: 1, borderBottomColor: C.line },
   backButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
@@ -64,4 +75,5 @@ const s = StyleSheet.create({
   name: { color: C.ink, fontSize: 18, fontWeight: "700", fontFamily: Platform.OS === "web" ? "'Amiri Quran', 'Amiri', serif" : undefined },
   nameActive: { color: C.gold },
   count: { color: C.muted, fontSize: 11, marginTop: 2 },
-});
+  });
+}
