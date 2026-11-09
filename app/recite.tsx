@@ -6,13 +6,21 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import { SURAHS } from "../src/quran/surahs";
 import MUSHAF_PAGES from "../src/quran/mushaf-pages.json";
 import { normalizeArabic, type WordState, readResults, type Track, emptyTrack, type Speech, startSpeech, takeSpeech, endSpeech } from "../src/recitation/matching";
+import { usePreferences } from "../src/preferences";
 
-const C = {
+const DARK_COLORS = {
   bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
   ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)",
   ok: "#5FD38A", bad: "#FF6B6B", skipped: "#F5B041", mask: "#34373E",
   cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F", unsure: "#8E98A6",
 };
+const LIGHT_COLORS = {
+  bg: "#F5F7FA", bar: "#FFFFFF", card: "#FFFFFF", line: "#DCE3EA",
+  ink: "#182536", muted: "#64748B", gold: "#A87920", goldSoft: "rgba(168,121,32,0.13)",
+  ok: "#16834A", bad: "#D93636", skipped: "#B7791F", mask: "#D8DEE7",
+  cursor: "rgba(168,121,32,0.20)", danger: "#D93636", dark: "#FFFFFF", unsure: "#718096",
+};
+type ReciteColors = typeof DARK_COLORS;
 const QURAN_FONT = Platform.select({
   ios: "Geeza Pro",
   android: "serif",
@@ -55,6 +63,9 @@ const BASMALA = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّ
 // ---------- Screen ----------
 
 export default function Recite() {
+  const { dark } = usePreferences();
+  const C = dark ? DARK_COLORS : LIGHT_COLORS;
+  const s = useMemo(() => createStyles(C), [dark]);
   const params = useLocalSearchParams<{ surah?: string; ayah?: string; scope?: string }>();
   const surahNumber = Math.max(1, Math.min(114, Number(params.surah) || 1));
   const startAyah = Math.max(1, Number(params.ayah) || 1);
@@ -244,7 +255,7 @@ export default function Recite() {
   // One word of the verses (or of the header), colored by what the reader has said so far.
   const renderWord = (i: number) => {
     const info = wordInfo[i];
-    if (info.marker) return <AyahMark key={i} num={info.num} />;
+    if (info.marker) return <AyahMark key={i} num={info.num} colors={C} styles={s} />;
     const result = byToken[i];
     const isCursor = i === cursorToken && recording && !hidden;
     const style: any[] = [s.word];
@@ -399,7 +410,7 @@ export default function Recite() {
 
   return (
     <View style={s.root}>
-      <StatusBar style="light" />
+      <StatusBar style={dark ? "light" : "dark"} />
 
       <View style={s.topBar}>
         <Pressable onPress={() => router.back()} style={s.backButton}><Text style={s.back}>›</Text></Pressable>
@@ -430,7 +441,7 @@ export default function Recite() {
             ))}
             {lines.map((line, li) => (
               <View key={li}>
-                {pageAt[li] !== undefined && <PageMark num={pageAt[li]} />}
+                {pageAt[li] !== undefined && <PageMark num={pageAt[li]} colors={C} styles={s} />}
                 <View style={[s.line, stretched.centred.has(li) ? { justifyContent: "center" } : null]}>
                   {line.map(renderWord)}
                 </View>
@@ -445,11 +456,11 @@ export default function Recite() {
           <View style={s.summary}>
             <Text style={s.summaryTitle}>ملخص التسميع</Text>
             <View style={s.statsRow}>
-              <Stat label="صحيحة" value={counts.ok} color={C.ok} />
-              <Stat label="خطأ محتمل" value={counts.bad} color={C.bad} />
-              <Stat label="غير متأكد" value={counts.unsure} color={C.unsure} />
-              <Stat label="متخطّاة" value={counts.skipped} color={C.skipped} />
-              <Stat label="لم تُقرأ" value={notReached} color={C.muted} />
+              <Stat label="صحيحة" value={counts.ok} color={C.ok} colors={C} styles={s} />
+              <Stat label="خطأ محتمل" value={counts.bad} color={C.bad} colors={C} styles={s} />
+              <Stat label="غير متأكد" value={counts.unsure} color={C.unsure} colors={C} styles={s} />
+              <Stat label="متخطّاة" value={counts.skipped} color={C.skipped} colors={C} styles={s} />
+              <Stat label="لم تُقرأ" value={notReached} color={C.muted} colors={C} styles={s} />
             </View>
             {needReview.length > 0 && <Text style={s.reviewTitle}>كلمات تحتاج مراجعة</Text>}
             {needReview.map((i) => {
@@ -521,34 +532,35 @@ function pageOfAyah(surah: number, ayah: number): number {
 }
 
 // Divider at the start of a mushaf page, with its number.
-function PageMark({ num }: { num: number }) {
+function PageMark({ num, colors, styles }: { num: number; colors: ReciteColors; styles: ReturnType<typeof createStyles> }) {
   return (
-    <View style={s.pageMark}>
-      <Text style={s.pageNum}>{`صفحة ${num}`}</Text>
+    <View style={styles.pageMark}>
+      <Text style={[styles.pageNum, { color: colors.gold }]}>{`صفحة ${num}`}</Text>
     </View>
   );
 }
 
-function AyahMark({ num }: { num: string }) {
+function AyahMark({ num, colors, styles }: { num: string; colors: ReciteColors; styles: ReturnType<typeof createStyles> }) {
   return (
-    <View style={s.ayahMark}>
-      <View style={s.ayahRing}>
-        <Text style={s.ayahNum}>{num}</Text>
+    <View style={[styles.ayahMark, { borderColor: colors.gold, backgroundColor: colors.goldSoft }]}>
+      <View style={[styles.ayahRing, { borderColor: colors.gold }]}>
+        <Text style={[styles.ayahNum, { color: colors.gold }]}>{num}</Text>
       </View>
     </View>
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+function Stat({ label, value, color, colors, styles }: { label: string; value: number; color: string; colors: ReciteColors; styles: ReturnType<typeof createStyles> }) {
   return (
-    <View style={s.stat}>
-      <Text style={[s.statValue, { color }]}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
+    <View style={[styles.stat, { backgroundColor: colors.bar }]}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: colors.muted }]}>{label}</Text>
     </View>
   );
 }
 
-const s = StyleSheet.create({
+function createStyles(C: ReciteColors) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   topBar: { paddingTop: Platform.OS === "web" ? 8 : 52, paddingHorizontal: 12, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.bar },
   backButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
@@ -603,4 +615,5 @@ const s = StyleSheet.create({
   disabled: { opacity: 0.4 },
   micIcon: { fontSize: 34 },
   stopSquare: { width: 26, height: 26, borderRadius: 6, backgroundColor: "#FFFFFF" },
-});
+  });
+}
