@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet } from "react-native";
+import { ThemePressable as Pressable } from "../components/ThemePrimitives";
 import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView, ThemeTextInput as TextInput } from "../components/ThemePrimitives";
 import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
