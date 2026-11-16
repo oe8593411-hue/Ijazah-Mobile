@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View, Pressable, Image, useWindowDimensions } from "react-native";
+import { StyleSheet, Pressable, Image, useWindowDimensions } from "react-native";
+import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView } from "../components/ThemePrimitives";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { usePreferences } from "../src/preferences";
