@@ -64,8 +64,9 @@ export function ThemeScrollView(props: ScrollViewProps) {
 }
 export function ThemeTextInput(props: TextInputProps) {
   const { dark } = usePreferences();
-  const placeholderTextColor = dark && typeof props.placeholderTextColor === "string"
-    ? Object.entries(DARK_TEXT).find(([source]) => source.toUpperCase() === props.placeholderTextColor?.toUpperCase())?.[1] || props.placeholderTextColor
-    : props.placeholderTextColor;
+  const originalPlaceholderColor = props.placeholderTextColor;
+  const placeholderTextColor = dark && typeof originalPlaceholderColor === "string"
+    ? Object.entries(DARK_TEXT).find(([source]) => source.toUpperCase() === originalPlaceholderColor.toUpperCase())?.[1] || originalPlaceholderColor
+    : originalPlaceholderColor;
   return <RNTextInput {...props} placeholderTextColor={placeholderTextColor} style={themed(props.style, dark)} />;
 }
