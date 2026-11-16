@@ -1,5 +1,6 @@
 import React from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet } from "react-native";
+import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView } from "../components/ThemePrimitives";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
