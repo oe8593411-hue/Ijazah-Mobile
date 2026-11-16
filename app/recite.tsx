@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Pressable, StyleSheet, useWindowDimensions } from "react-native";
+import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView } from "../components/ThemePrimitives";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
