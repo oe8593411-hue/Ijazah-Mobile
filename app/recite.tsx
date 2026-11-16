@@ -65,7 +65,7 @@ function normalizeArabicForCompare(value: string) {
   return value.normalize("NFC")
     .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
     .replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ـ/g, "")
-    .replace(/[^\u0621-\u064A\s]/g, " ").replace(/\s+/g, " ").trim();
+    .replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim();
 }
 
 
@@ -374,7 +374,8 @@ export default function Recite() {
       const audioResponse = await fetch(uri);
       if (!audioResponse.ok) throw new Error("تعذّرت قراءة ملف التسجيل.");
       const audioBlob = await audioResponse.blob();
-      const response = await fetch(baseUrl + "/api/analyze-recitation?surah=" + surahNumber + "&scope=" + (fullSurahMode ? "surah" : "ayah") + "&ayah=" + startAyah + "&riwaya=hafs", {
+      const endpoint = baseUrl + "/api/analyze-recitation?surah=" + surahNumber + "&scope="+(fullSurahMode?"surah":"ayah")+"&ayah=" + startAyah + "&riwaya=hafs";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": audioBlob.type || "audio/m4a" },
         body: audioBlob,
@@ -397,10 +398,10 @@ export default function Recite() {
         stopListening();
         await recorder.stop();
         setFinished(true);
-        if (fullSurahMode && mode !== "deep") {
+        if(fullSurahMode && mode!=="deep") {
           setAnalysis(null);
           setNotice("تم تسجيل السورة كاملة. اختر التحليل العميق لمقارنة التسجيل بآيات السورة وتحديد مواضع الاختلاف النصي.");
-        } else if (mode === "deep") {
+        } else if(mode==="deep") {
           setNotice("انتهى التسجيل. جارٍ تجهيز المقارنة النصية المبدئية إن كان خادم التحليل متاحًا.");
           const audioUri = recorder.uri;
           void analyzeRecording(audioUri ?? undefined);
@@ -492,7 +493,7 @@ export default function Recite() {
           <Text style={s.analysisText}>نسبة التطابق النصي التقريبية: {analysis.matchRate}%</Text>
           {(analysis.textAlignment?.errors || []).slice(0, 8).map((item: any, index: number) => (
             <Text key={"analysis-" + index} style={s.analysisText}>
-              {typeof item.ayah === "number" ? "الآية " + item.ayah + " • " : ""}{item.type === "possible_omission" ? "احتمال إسقاط" : item.type === "possible_addition" ? "احتمال زيادة" : "احتمال اختلاف"}{item.expected ? " • المتوقع: " + item.expected : ""}{item.heard ? " • المسموع: " + item.heard : ""}
+              {typeof item.ayah==="number" ? "الآية " + item.ayah + " • " : ""}{item.type === "possible_omission" ? "احتمال إسقاط" : item.type === "possible_addition" ? "احتمال زيادة" : "احتمال اختلاف"}{item.expected ? " • المتوقع: " + item.expected : ""}{item.heard ? " • المسموع: " + item.heard : ""}
             </Text>
           ))}
           <Text style={s.analysisText}>هذه مقارنة نصية مبدئية وليست حكمًا على التجويد أو صحة الأداء.</Text>
