@@ -36,10 +36,10 @@ function themed(style: any, dark: boolean, kind: "view" | "text") {
   const map = kind === "text" ? DARK_TEXT : DARK_SURFACES;
   const next: Record<string, any> = { ...flat };
   for (const key of ["color", "placeholderTextColor"]) {
-    if (typeof next[key] === "string" && DARK_TEXT[next[key].toUpperCase()]) next[key] = DARK_TEXT[next[key].toUpperCase()];
+    if (typeof next[key] === "string") { const hit = Object.entries(DARK_TEXT).find(([source]) => source.toUpperCase() === next[key].toUpperCase()); if (hit) next[key] = hit[1]; }
   }
   for (const key of ["backgroundColor", "borderColor", "borderTopColor", "borderBottomColor", "borderLeftColor", "borderRightColor"]) {
-    if (typeof next[key] === "string" && DARK_SURFACES[next[key].toUpperCase()]) next[key] = DARK_SURFACES[next[key].toUpperCase()];
+    if (typeof next[key] === "string") { const hit = Object.entries(DARK_SURFACES).find(([source]) => source.toUpperCase() === next[key].toUpperCase()); if (hit) next[key] = hit[1]; }
   }
   return next;
 }
