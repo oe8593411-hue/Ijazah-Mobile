@@ -61,6 +61,13 @@ function stretchWord(text: string, count: number): string {
 }
 // The basmala is shown above each surah, as in the mushaf, except At-Tawbah, which has none.
 const BASMALA = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+function normalizeArabicForCompare(value: string) {
+  return value.normalize("NFC")
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+    .replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ـ/g, "")
+    .replace(/[^\u0621-\u064A\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 
 // ---------- Screen ----------
 
@@ -71,6 +78,7 @@ export default function Recite() {
   const params = useLocalSearchParams<{ surah?: string; ayah?: string; scope?: string }>();
   const surahNumber = Math.max(1, Math.min(114, Number(params.surah) || 1));
   const startAyah = Math.max(1, Number(params.ayah) || 1);
+  const fullSurahMode = params.scope === "surah";
   const surahName = SURAHS.find(x => x.number === surahNumber)?.nameAr || "";
   const { width: screenWidth } = useWindowDimensions();
 
@@ -80,6 +88,9 @@ export default function Recite() {
   const [view, setView] = useState<Track | null>(null); // what is shown: the words read so far
   const [finished, setFinished] = useState(false);
   const [notice, setNotice] = useState("");
+  const [mode, setMode] = useState<"live" | "deep">("live");
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
   const recognitionRef = useRef<any>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -351,20 +362,59 @@ export default function Recite() {
     recognitionRef.current = null;
   }
 
-  async function toggle() {
+  async function analyzeRecording(uri: string | undefined) {
+    if (!uri) { setNotice("اكتمل التسجيل، لكن الجهاز لم يُرجع ملفًا قابلًا للتحليل."); return; }
+    if (!normalizeArabicForCompare(referenceText)) { setNotice("النص المرجعي غير جاهز؛ لم نرسل التسجيل للتحليل."); return; }
+    const baseUrl = (process.env.EXPO_PUBLIC_IJAZAH_API_URL || "").replace(/\/$/, "");
+    if (!baseUrl) { setNotice("خادم التحليل غير مضبوط في هذه المعاينة؛ احتفظنا بالتسجيل ولم نصدر نتيجة."); return; }
+    setAnalysisBusy(true);
+    setAnalysis(null);
+    setNotice("جارٍ إرسال التسجيل للتحليل النصي المبدئي…");
+    try {
+      const audioResponse = await fetch(uri);
+      if (!audioResponse.ok) throw new Error("تعذّرت قراءة ملف التسجيل.");
+      const audioBlob = await audioResponse.blob();
+      const response = await fetch(baseUrl + "/api/analyze-recitation?surah=" + surahNumber + "&scope=" + (fullSurahMode ? "surah" : "ayah") + "&ayah=" + startAyah + "&riwaya=hafs", {
+        method: "POST",
+        headers: { "Content-Type": audioBlob.type || "audio/m4a" },
+        body: audioBlob,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.message || "خدمة التحليل غير متاحة.");
+      setAnalysis(result);
+      setNotice("اكتملت المقارنة النصية المبدئية؛ هذه ليست درجة تجويد أو حكمًا على صحة الأداء.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "خطأ غير معروف";
+      setNotice("لم تكتمل المقارنة: " + detail + " لم نصدر نتيجة مخمّنة.");
+    } finally {
+      setAnalysisBusy(false);
+    }
+  }
+
+  async function toggleRecording() {
     try {
       if (recording) {
         stopListening();
         await recorder.stop();
         setFinished(true);
-        setNotice("");
+        if (fullSurahMode && mode !== "deep") {
+          setAnalysis(null);
+          setNotice("تم تسجيل السورة كاملة. اختر التحليل العميق لمقارنة التسجيل بآيات السورة وتحديد مواضع الاختلاف النصي.");
+        } else if (mode === "deep") {
+          setNotice("انتهى التسجيل. جارٍ تجهيز المقارنة النصية المبدئية إن كان خادم التحليل متاحًا.");
+          const audioUri = recorder.uri;
+          void analyzeRecording(audioUri ?? undefined);
+        } else {
+          setAnalysis(null);
+          setNotice("انتهى التسجيل. الوضع المباشر يعرض تعرّف المتصفح على الكلمات فقط؛ لا يصدر حكمًا على صحة التلاوة أو التجويد. اختر التحليل العميق للمقارنة النصية بعد التسجيل.");
+        }
         return;
       }
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) { setNotice("اسمح بالميكروفون عشان تبدأ التسميع."); return; }
-      // A paused recitation picks up where it stopped; a finished one starts over.
       if (trackRef.current.cursor >= expectedRef.current.length) clearReading();
       setFinished(false);
+      setAnalysis(null);
       peakRef.current = trackRef.current.cursor;
       setView(trackRef.current);
       setNotice("");
@@ -432,6 +482,21 @@ export default function Recite() {
       <View style={s.progressTrack}><View style={[s.progressFill, { width: `${progress * 100}%` }]} /></View>
 
       <ScrollView style={s.body} contentContainerStyle={s.content}>
+        <View style={s.modeSwitch}>
+          <Pressable onPress={() => setMode("live")} style={[s.modeOption, mode === "live" && s.modeOptionActive]}><Text style={[s.modeOptionText, mode === "live" && s.modeOptionTextActive]}>مباشر</Text></Pressable>
+          <Pressable onPress={() => setMode("deep")} style={[s.modeOption, mode === "deep" && s.modeOptionActive]}><Text style={[s.modeOptionText, mode === "deep" && s.modeOptionTextActive]}>تحليل عميق</Text></Pressable>
+        </View>
+        {analysisBusy && <View style={s.analysisCard}><Text style={s.analysisTitle}>جارٍ تحليل التسجيل</Text><Text style={s.analysisText}>المقارنة النصية لا تقيس التجويد، ولن نصدر نتيجة عند تعذّر التحقق.</Text></View>}
+        {analysis && <View style={s.analysisCard}>
+          <Text style={s.analysisTitle}>{analysis.reference?.scope === "surah" ? "نتيجة المقارنة النصية للسورة" : "نتيجة المقارنة النصية"}</Text>
+          <Text style={s.analysisText}>نسبة التطابق النصي التقريبية: {analysis.matchRate}%</Text>
+          {(analysis.textAlignment?.errors || []).slice(0, 8).map((item: any, index: number) => (
+            <Text key={"analysis-" + index} style={s.analysisText}>
+              {typeof item.ayah === "number" ? "الآية " + item.ayah + " • " : ""}{item.type === "possible_omission" ? "احتمال إسقاط" : item.type === "possible_addition" ? "احتمال زيادة" : "احتمال اختلاف"}{item.expected ? " • المتوقع: " + item.expected : ""}{item.heard ? " • المسموع: " + item.heard : ""}
+            </Text>
+          ))}
+          <Text style={s.analysisText}>هذه مقارنة نصية مبدئية وليست حكمًا على التجويد أو صحة الأداء.</Text>
+        </View>}
         {ready ? (
           <View style={s.column} onLayout={e => setColWidth(e.nativeEvent.layout.width)}>
             {showBasmala && (surahNumber === 1 || hasBasmala ? (
@@ -501,7 +566,7 @@ export default function Recite() {
             </Pressable>
           </View>
 
-          <Pressable onPress={toggle} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.disabled]}>
+          <Pressable onPress={toggleRecording} disabled={!ready} style={[s.mic, recording && s.micOn, !ready && s.disabled]}>
             {recording ? <View style={s.stopSquare} /> : <Text style={s.micIcon}>🎙️</Text>}
           </Pressable>
 
@@ -606,6 +671,14 @@ function createStyles(C: ReciteColors) {
   navText: { color: C.gold, fontWeight: "700", fontSize: 13 },
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: 10, paddingBottom: 28, paddingHorizontal: 18, backgroundColor: C.bar, borderTopWidth: 1, borderTopColor: C.line },
   notice: { textAlign: "center", color: C.gold, fontSize: 11, lineHeight: 17, marginBottom: 6 },
+  modeSwitch: { flexDirection: "row", alignSelf: "center", backgroundColor: C.card, borderRadius: 18, padding: 3, borderWidth: 1, borderColor: C.line, marginBottom: 16 },
+  modeOption: { minWidth: 92, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 14, alignItems: "center" },
+  modeOptionActive: { backgroundColor: C.gold },
+  modeOptionText: { color: C.muted, fontSize: 11, fontWeight: "700" },
+  modeOptionTextActive: { color: C.dark },
+  analysisCard: { width: "100%", maxWidth: COLUMN_MAX, backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.line, padding: 15, marginTop: 14 },
+  analysisTitle: { color: C.gold, fontSize: 14, fontWeight: "800", textAlign: "right", marginBottom: 8 },
+  analysisText: { color: C.ink, fontSize: 11, lineHeight: 18, textAlign: "right", marginTop: 4 },
   status: { textAlign: "center", fontWeight: "600", color: C.ink, fontSize: 13 },
   dock: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12, backgroundColor: C.card, borderRadius: 40, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: C.line },
   dockSide: { alignItems: "center", gap: 2, paddingHorizontal: 6 },
