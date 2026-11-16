@@ -1,5 +1,7 @@
 import React from "react";
 import {
+  Pressable as RNPressable,
+  PressableProps,
   ScrollView as RNScrollView,
   ScrollViewProps,
   StyleSheet,
@@ -14,7 +16,7 @@ import { usePreferences } from "../src/preferences";
 
 const DARK_SURFACES: Record<string, string> = {
   "#F4F8FC": "#0B1F32", "#F2F5F8": "#0B1F32", "#F0F6FA": "#102B43",
-  "#FFFFFF": "#102B43", "#fff": "#102B43",
+  "#FFFFFF": "#102B43", "#fff": "#102B43", "#35C7DE": "#147D91", "#168DA5": "#176A7D",
   "#E5F8FC": "#173B52", "#EAF7FC": "#173B52", "#E8F6FC": "#173B52",
   "#DDF7FA": "#1A4058", "#E6F7FB": "#173B52", "#D4F1F7": "#1A4058",
   "#D1F0F7": "#1A4058", "#F1F7FB": "#102B43", "#EEF4F8": "#173B52",
@@ -43,6 +45,11 @@ function themed(style: any, dark: boolean, kind: "view" | "text") {
   return next;
 }
 
+export function ThemePressable(props: PressableProps) {
+  const { dark } = usePreferences();
+  const style = typeof props.style === "function" ? (state: any) => themed(props.style?.(state), dark, "view") : themed(props.style, dark, "view");
+  return <RNPressable {...props} style={style} />;
+}
 export function ThemeView(props: ViewProps) {
   const { dark } = usePreferences();
   return <RNView {...props} style={themed(props.style, dark, "view")} />;
