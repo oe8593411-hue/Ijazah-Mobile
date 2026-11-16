@@ -47,12 +47,12 @@ function themed(style: any, dark: boolean) {
 
 export function ThemePressable(props: PressableProps) {
   const { dark } = usePreferences();
-  const style = typeof props.style === "function" ? (state: any) => themed(props.style?.(state), dark) : themed(props.style, dark);
+  const style = typeof props.style === "function" ? (state: any) => themed((props.style as (state: any) => any)(state), dark) : themed(props.style, dark);
   return <RNPressable {...props} style={style} />;
 }
 export function ThemeView(props: ViewProps) {
   const { dark } = usePreferences();
-  return <RNView {...props} style={themed(props.style, dark, "view")} />;
+  return <RNView {...props} style={themed(props.style, dark)} />;
 }
 export function ThemeText(props: TextProps) {
   const { dark } = usePreferences();
@@ -64,8 +64,8 @@ export function ThemeScrollView(props: ScrollViewProps) {
 }
 export function ThemeTextInput(props: TextInputProps) {
   const { dark } = usePreferences();
-  const placeholderTextColor = dark && props.placeholderTextColor
-    ? DARK_TEXT[props.placeholderTextColor.toUpperCase()] || props.placeholderTextColor
+  const placeholderTextColor = dark && typeof props.placeholderTextColor === "string"
+    ? Object.entries(DARK_TEXT).find(([source]) => source.toUpperCase() === props.placeholderTextColor?.toUpperCase())?.[1] || props.placeholderTextColor
     : props.placeholderTextColor;
-  return <RNTextInput {...props} placeholderTextColor={placeholderTextColor} style={themed(props.style, dark, "text")} />;
+  return <RNTextInput {...props} placeholderTextColor={placeholderTextColor} style={themed(props.style, dark)} />;
 }
