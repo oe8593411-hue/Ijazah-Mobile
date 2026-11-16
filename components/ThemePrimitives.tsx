@@ -14,7 +14,7 @@ import { usePreferences } from "../src/preferences";
 
 const DARK_SURFACES: Record<string, string> = {
   "#F4F8FC": "#0B1F32", "#F2F5F8": "#0B1F32", "#F0F6FA": "#102B43",
-  "#FFFFFF": "#102B43", "#FFFFFF": "#102B43", "#fff": "#102B43",
+  "#FFFFFF": "#102B43", "#fff": "#102B43",
   "#E5F8FC": "#173B52", "#EAF7FC": "#173B52", "#E8F6FC": "#173B52",
   "#DDF7FA": "#1A4058", "#E6F7FB": "#173B52", "#D4F1F7": "#1A4058",
   "#D1F0F7": "#1A4058", "#F1F7FB": "#102B43", "#EEF4F8": "#173B52",
@@ -33,7 +33,6 @@ const DARK_TEXT: Record<string, string> = {
 function themed(style: any, dark: boolean, kind: "view" | "text") {
   const flat = StyleSheet.flatten(style) || {};
   if (!dark) return flat;
-  const map = kind === "text" ? DARK_TEXT : DARK_SURFACES;
   const next: Record<string, any> = { ...flat };
   for (const key of ["color", "placeholderTextColor"]) {
     if (typeof next[key] === "string") { const hit = Object.entries(DARK_TEXT).find(([source]) => source.toUpperCase() === next[key].toUpperCase()); if (hit) next[key] = hit[1]; }
