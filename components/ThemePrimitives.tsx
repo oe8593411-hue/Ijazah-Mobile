@@ -21,7 +21,7 @@ const DARK_SURFACES: Record<string, string> = {
   "#DDF7FA": "#1A4058", "#E6F7FB": "#173B52", "#D4F1F7": "#1A4058",
   "#D1F0F7": "#1A4058", "#F1F7FB": "#102B43", "#EEF4F8": "#173B52",
   "#E0EAF2": "#29465D", "#E0E7ED": "#29465D", "#EDF2F7": "#29465D",
-  "#E8EEF4": "#29465D", "#F2F5F8": "#0B1F32", "#E8EDF2": "#29465D",
+  "#E8EEF4": "#29465D", "#E8EDF2": "#29465D",
   "#FFF8E6": "#3B3425", "#F4EBD7": "#3B3425",
 };
 const DARK_TEXT: Record<string, string> = {
@@ -32,7 +32,7 @@ const DARK_TEXT: Record<string, string> = {
   "#766341": "#D7C49C", "#806F4C": "#D7C49C", "#805D11": "#E9CB82",
   "#168DA5": "#66D1E2", "#137E95": "#66D1E2", "#1AA6BD": "#66D1E2",
 };
-function themed(style: any, dark: boolean, kind: "view" | "text") {
+function themed(style: any, dark: boolean) {
   const flat = StyleSheet.flatten(style) || {};
   if (!dark) return flat;
   const next: Record<string, any> = { ...flat };
@@ -47,7 +47,7 @@ function themed(style: any, dark: boolean, kind: "view" | "text") {
 
 export function ThemePressable(props: PressableProps) {
   const { dark } = usePreferences();
-  const style = typeof props.style === "function" ? (state: any) => themed(props.style?.(state), dark, "view") : themed(props.style, dark, "view");
+  const style = typeof props.style === "function" ? (state: any) => themed(props.style?.(state), dark) : themed(props.style, dark);
   return <RNPressable {...props} style={style} />;
 }
 export function ThemeView(props: ViewProps) {
@@ -56,7 +56,7 @@ export function ThemeView(props: ViewProps) {
 }
 export function ThemeText(props: TextProps) {
   const { dark } = usePreferences();
-  return <RNText {...props} style={themed(props.style, dark, "text")} />;
+  return <RNText {...props} style={themed(props.style, dark)} />;
 }
 export function ThemeScrollView(props: ScrollViewProps) {
   const { dark } = usePreferences();
