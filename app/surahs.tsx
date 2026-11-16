@@ -1,5 +1,6 @@
 import React from "react";
-import { Platform, Pressable, StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
+import { ThemePressable as Pressable } from "../components/ThemePrimitives";
 import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView } from "../components/ThemePrimitives";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
