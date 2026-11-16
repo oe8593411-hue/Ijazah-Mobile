@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { ThemePressable as Pressable } from "../components/ThemePrimitives";
 import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView } from "../components/ThemePrimitives";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
