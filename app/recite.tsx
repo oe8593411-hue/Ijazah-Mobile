@@ -11,10 +11,10 @@ import { normalizeArabic, type WordState, readResults, type Track, emptyTrack, t
 import { usePreferences } from "../src/preferences";
 
 const DARK_COLORS = {
-  bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
+  bg: "#000000", bar: "#000000", card: "#0D0D0D", line: "#222222",
   ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)",
   ok: "#5FD38A", bad: "#FF6B6B", skipped: "#F5B041", mask: "#34373E",
-  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#1B1C1F", unsure: "#8E98A6",
+  cursor: "rgba(224,169,59,0.28)", danger: "#E5534B", dark: "#0D0D0D", unsure: "#8E98A6",
 };
 const LIGHT_COLORS = {
   bg: "#F5F7FA", bar: "#FFFFFF", card: "#FFFFFF", line: "#DCE3EA",
