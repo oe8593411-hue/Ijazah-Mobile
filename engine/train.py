@@ -9,7 +9,7 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from tajweed_engine.audio import SAMPLE_RATE, log_mel
 from tajweed_engine.model import AcousticRuleClassifier
-from tajweed_engine.dataset import validate_label_provenance, validate_segment_timestamps
+from tajweed_engine.dataset import audio_content_sha256, validate_label_provenance, validate_segment_timestamps
 
 MAX_SEGMENT_SECONDS = 4.0
 MAX_SEGMENT_MILLISECONDS = int(MAX_SEGMENT_SECONDS * 1000)
@@ -36,7 +36,7 @@ def validate_classifier_split_isolation(groups: dict[str, list[dict]]) -> None:
         for name in split_names
     ]
     audio_files = [
-        {Path(row["audio_path"]).resolve() for row in groups[name]}
+        {audio_content_sha256(row["audio_path"]) for row in groups[name]}
         for name in split_names
     ]
 
