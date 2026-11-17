@@ -8,8 +8,9 @@ This is an Ijazah-owned acoustic-model scaffold for a narrow first research task
 - CNN model architecture and supervised training script.
 - Strict manifest checks and separate reciter groups for training, validation, and held-out test.
 - Fail-closed model loading: the API requires both independent teacher review and calibration metadata.
-- The API fails closed: client-supplied timestamps are never treated as trusted alignment evidence.
-- Strict validation rejects missing, reversed, non-finite, boolean, and out-of-audio timestamp boundaries; malformed candidate objects are rejected.
+- The API fails closed: client-supplied timestamps are never treated as trusted alignment evidence; only server-side CTC alignment supplies audio boundaries.
+- Candidate `wordIndex` values follow the app's 1-based Quran word numbering and are converted to 0-based indexes only inside the Python scorer.
+- Candidate timestamps are optional and ignored, so text-derived rule candidates can be sent without pretending the client knows their audio positions; malformed or out-of-reference word indexes are rejected.
 
 ## Local run
 Install requirements, set `IJAZAH_TAJWEED_ENGINE_TOKEN` to a long random secret, and point the corpus path at the versioned app JSON. From the repository root:
