@@ -2,7 +2,30 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from train_aligner import build_vocabulary, minimum_ctc_frames, transcript_for_row, validate_split_isolation
+import torch
+
+from train_aligner import (
+    build_vocabulary,
+    character_error_counts,
+    ctc_greedy_decode,
+    minimum_ctc_frames,
+    transcript_for_row,
+    validate_split_isolation,
+)
+
+
+class AlignerEvaluationMetricTests(unittest.TestCase):
+    def test_ctc_greedy_decode_collapses_repeats_but_respects_blank_separators(self):
+        token_path = [1, 1, 0, 1, 2, 2, 0, 2]
+        logits = torch.full((len(token_path), 3), -10.0)
+        for frame, token in enumerate(token_path):
+            logits[frame, token] = 10.0
+        self.assertEqual(ctc_greedy_decode(logits, {1: "ب", 2: "ا"}), "ببا")
+
+    def test_character_error_counts_uses_levenshtein_distance(self):
+        self.assertEqual(character_error_counts("كتا", "كتاب"), (1, 4))
+        self.assertEqual(character_error_counts("", "نور"), (3, 3))
+        self.assertEqual(character_error_counts("نور", "نور"), (0, 3))
 
 
 class AlignerTrainingDataTests(unittest.TestCase):
