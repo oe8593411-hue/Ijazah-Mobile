@@ -23,6 +23,14 @@ const DARK_SURFACES: Record<string, string> = {
   "#E0EAF2": "#29465D", "#E0E7ED": "#29465D", "#EDF2F7": "#29465D",
   "#E8EEF4": "#29465D", "#E8EDF2": "#29465D",
   "#FFF8E6": "#3B3425", "#F4EBD7": "#3B3425",
+  "#D5EDF5": "#173B52", "#B7E8F6": "#173B52", "#D1E5EE": "#173B52",
+  "#DCEEF6": "#173B52", "#C5E4F1": "#173B52", "#DCE3EA": "#29465D",
+  "#F5F7FA": "#102B43", "#F5F7FA": "#102B43", "#F0FBFD": "#102B43",
+  "#E5EFF4": "#173B52", "#E7F7FD": "#173B52", "#EAF1FC": "#173B52",
+  "#F8F0DE": "#3B3425", "#F4EFE3": "#3B3425", "#F5D27A": "#3B3425",
+  "#D8DEE7": "#29465D", "#D6E0E9": "#29465D", "#E0E7ED": "#29465D",
+  "#DDF9FC": "#173B52", "#C9E9F5": "#173B52", "#A8D8EF": "#173B52",
+  "#E5F8FC": "#173B52", "#DDF7FA": "#173B52", "#EAF7FC": "#173B52",
 };
 const DARK_TEXT: Record<string, string> = {
   "#071A33": "#F3FAFD", "#142A43": "#F3FAFD", "#0D2238": "#F3FAFD",
@@ -31,6 +39,14 @@ const DARK_TEXT: Record<string, string> = {
   "#788BA0": "#B4C5D4", "#8794A3": "#B4C5D4", "#6F8795": "#B4C5D4",
   "#766341": "#D7C49C", "#806F4C": "#D7C49C", "#805D11": "#E9CB82",
   "#168DA5": "#66D1E2", "#137E95": "#66D1E2", "#1AA6BD": "#66D1E2",
+  "#294760": "#B8D5E6", "#245C7B": "#8EDBEA", "#173451": "#B8D5E6",
+  "#102B49": "#B8D5E6", "#102746": "#B8D5E6", "#12304D": "#B8D5E6",
+  "#164B6A": "#8EDBEA", "#1A4B70": "#8EDBEA", "#1A4A65": "#8EDBEA",
+  "#246A8C": "#8EDBEA", "#267A9B": "#8EDBEA", "#2B6474": "#8EDBEA",
+  "#526C7D": "#B8C9D9", "#58788C": "#B8C9D9", "#6C9AAF": "#B8C9D9",
+  "#7A91A2": "#B8C9D9", "#70889B": "#B8C9D9", "#6D899A": "#B8C9D9",
+  "#A9C1D5": "#B8C9D9", "#AFCBDD": "#B8C9D9", "#9FB6CC": "#B8C9D9",
+  "#B5C7D8": "#B8C9D9", "#9AA0A6": "#B8C9D9", "#8E98A6": "#B8C9D9",
 };
 function themed(style: any, dark: boolean) {
   const flat = StyleSheet.flatten(style) || {};
