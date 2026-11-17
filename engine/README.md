@@ -7,9 +7,11 @@ This is an Ijazah-owned acoustic-model scaffold for a narrow first research task
 - Audio decoding, mono conversion, 16 kHz resampling, and file/duration/silence checks; FFmpeg fallback for mobile audio containers when `soundfile` cannot decode them, with a separate duration probe and bounded output.
 - CNN model architecture and supervised training script.
 - Strict manifest checks and separate reciter groups for training, validation, and held-out test.
+- Classifier segments are capped at four seconds and never silently truncated; both the classifier and CTC training pipelines reject reuse of the same resolved audio file across data splits.
 - Fail-closed model loading: the API requires both independent teacher review and calibration metadata.
-- The API fails closed: client-supplied timestamps are never treated as trusted alignment evidence.
-- Strict validation rejects missing, reversed, non-finite, boolean, and out-of-audio timestamp boundaries; malformed candidate objects are rejected.
+- The API fails closed: client-supplied timestamps are never treated as trusted alignment evidence; only server-side CTC alignment supplies audio boundaries.
+- Candidate `wordIndex` values follow the app's 1-based Quran word numbering and are converted to 0-based indexes only inside the Python scorer.
+- Candidate timestamps are optional and ignored, so text-derived rule candidates can be sent without pretending the client knows their audio positions; malformed or out-of-reference word indexes are rejected.
 
 ## Local run
 Install requirements, set `IJAZAH_TAJWEED_ENGINE_TOKEN` to a long random secret, and point the corpus path at the versioned app JSON. From the repository root:
@@ -92,7 +94,7 @@ Example with two teachers in agreement:
 {"audio_path":"segments/clip01.wav","start_ms":1200,"end_ms":2050,"label":0,"rule_id":"qalqalah","split":"train","teacher_reviewed":true,"recording_id":"session-001-clip-01","reciter_id":"reader-001","rights":{"license":"written_permission","reference":"permission-record-001","training_rights_confirmed":true,"consent_confirmed":true},"reviewers":[{"reviewer_id":"teacher-a","label":0,"reviewed_at":"2026-10-01"},{"reviewer_id":"teacher-b","label":0,"reviewed_at":"2026-10-02"}]}
 ```
 
-The trainer rejects missing licensing/permission evidence, missing reciter consent, fewer than two independent teachers, duplicate reviewer IDs, invalid dates, consensus mismatches, or disagreements without a third-teacher adjudication. Use actual records; the example above is a schema illustration, not a real annotated recording. The same reciter must not appear in more than one split, and each split must contain both labels. Do not train from unlicensed recordings or synthetic labels. Qualified tajweed teachers must define annotation criteria and review labels.
+The trainer rejects missing licensing/permission evidence, missing reciter consent, fewer than two independent teachers, duplicate reviewer IDs, invalid dates, consensus mismatches, or disagreements without a third-teacher adjudication. Use actual records; the example above is a schema illustration, not a real annotated recording. The classifier and CTC trainers keep reciters, recording IDs, and resolved audio files disjoint across splits; each classifier split must contain both labels. Classifier segments longer than four seconds are rejected during manifest validation instead of being cropped; split longer material into separately reviewed segments only when the teacher-reviewed labels genuinely apply to those segments. Do not train from unlicensed recordings or synthetic labels. Qualified tajweed teachers must define annotation criteria and review labels.
 
 ```bash
 python train.py --manifest data/manifest.jsonl --data-root data --validate-only

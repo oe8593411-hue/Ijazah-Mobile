@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import date
+import hashlib
 import math
+from pathlib import Path
 from typing import Any
 
 
@@ -17,6 +19,16 @@ def _valid_review_date(value: Any) -> bool:
         return True
     except ValueError:
         return False
+
+
+
+def audio_content_sha256(path: str | Path) -> str:
+    """Hash audio bytes in bounded chunks so renamed or hard-linked copies are identifiable."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def validate_label_provenance(row: dict[str, Any]) -> None:

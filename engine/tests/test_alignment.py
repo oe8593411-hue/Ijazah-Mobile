@@ -9,6 +9,7 @@ from tajweed_engine.alignment import (
     ctc_viterbi_align,
     validate_aligner_metadata,
 )
+from train_aligner import validate_split_isolation
 
 
 def make_log_probabilities(path, class_count):
@@ -105,6 +106,67 @@ class AlignerMetadataTests(unittest.TestCase):
         metadata["blank_id"] = 2
         with self.assertRaisesRegex(ValueError, "dense"):
             validate_aligner_metadata(metadata)
+
+
+class TrainingSplitIsolationTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.audio_paths = []
+        for name, payload in (
+            ("train.wav", b"train audio fixture"),
+            ("validation.wav", b"validation audio fixture"),
+            ("test.wav", b"test audio fixture"),
+        ):
+            path = self.root / name
+            path.write_bytes(payload)
+            self.audio_paths.append(str(path))
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def rows(self):
+        return [
+            {"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a", "audio_path": self.audio_paths[0]},
+            {"split": "validation", "reciter_id": "reader-b", "recording_id": "clip-b", "audio_path": self.audio_paths[1]},
+            {"split": "test", "reciter_id": "reader-c", "recording_id": "clip-c", "audio_path": self.audio_paths[2]},
+        ]
+
+    def test_independent_reciters_and_recordings_are_accepted(self):
+        splits = validate_split_isolation(self.rows())
+        self.assertEqual([len(splits[name]) for name in ("train", "validation", "test")], [1, 1, 1])
+
+    def test_same_reciter_cannot_leak_between_splits(self):
+        rows = self.rows()
+        rows[2]["reciter_id"] = "reader-a"
+        with self.assertRaisesRegex(ValueError, "reciters_must_be_disjoint_across_splits"):
+            validate_split_isolation(rows)
+
+    def test_same_recording_cannot_leak_between_splits(self):
+        rows = self.rows()
+        rows[1]["recording_id"] = "clip-a"
+        with self.assertRaisesRegex(ValueError, "recording_ids_must_be_unique"):
+            validate_split_isolation(rows)
+
+    def test_duplicate_recording_ids_are_rejected_even_within_one_split(self):
+        rows = self.rows()
+        rows.append({"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a"})
+        with self.assertRaisesRegex(ValueError, "recording_ids_must_be_unique"):
+            validate_split_isolation(rows)
+
+
+    def test_same_resolved_audio_file_cannot_leak_between_splits(self):
+        rows = self.rows()
+        rows[2]["audio_path"] = rows[0]["audio_path"]
+        with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
+            validate_split_isolation(rows)
+
+    def test_empty_split_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "need_nonempty_train_validation_test_splits"):
+            validate_split_isolation(self.rows()[:2])
 
 
 if __name__ == "__main__":

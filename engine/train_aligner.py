@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from tajweed_engine.alignment_model import QuranCTCAcousticModel
 from tajweed_engine.audio import MAX_SECONDS, SAMPLE_RATE, log_mel
-from tajweed_engine.dataset import validate_segment_timestamps, validate_transcript_provenance
+from tajweed_engine.dataset import audio_content_sha256, validate_segment_timestamps, validate_transcript_provenance
 from tajweed_engine.reference import get_corpus, normalize_reference
 
 
@@ -78,6 +78,24 @@ def validate_split_isolation(rows: list[dict[str, Any]]) -> dict[str, list[dict[
                   for name in ("train", "validation", "test")]
     if recordings[0] & recordings[1] or recordings[0] & recordings[2] or recordings[1] & recordings[2]:
         raise ValueError("recordings_must_be_disjoint_across_splits")
+    fingerprints = {
+        str(path): audio_content_sha256(path)
+        for path in {
+            Path(row["audio_path"]).resolve()
+            for name in ("train", "validation", "test")
+            for row in splits[name]
+        }
+    }
+    audio_files = [
+        {fingerprints[str(Path(row["audio_path"]).resolve())] for row in splits[name]}
+        for name in ("train", "validation", "test")
+    ]
+    if (
+        audio_files[0] & audio_files[1]
+        or audio_files[0] & audio_files[2]
+        or audio_files[1] & audio_files[2]
+    ):
+        raise ValueError("audio_files_must_be_disjoint_across_splits")
     return splits
 
 
@@ -193,6 +211,100 @@ def run_epoch(model, loader, optimizer, criterion, device, training: bool) -> fl
     return total_loss / total_items
 
 
+def ctc_greedy_decode(frame_logits: torch.Tensor, inverse_vocabulary: dict[int, str]) -> str:
+    """Decode CTC frames by collapsing repeats and removing blank token zero."""
+    if frame_logits.ndim != 2 or frame_logits.shape[0] < 1 or not torch.isfinite(frame_logits).all():
+        raise ValueError("invalid_ctc_frame_logits")
+    path = frame_logits.argmax(dim=-1).detach().cpu().tolist()
+    decoded: list[str] = []
+    previous = None
+    for token in path:
+        if token != 0 and token != previous:
+            character = inverse_vocabulary.get(token)
+            if not isinstance(character, str):
+                raise ValueError("ctc_prediction_outside_vocabulary")
+            decoded.append(character)
+        previous = token
+    return "".join(decoded)
+
+
+def character_error_counts(prediction: str, reference: str) -> tuple[int, int]:
+    """Return Levenshtein edits and reference characters for normalized CER."""
+    if not isinstance(prediction, str) or not isinstance(reference, str):
+        raise ValueError("invalid_character_metric_input")
+    previous = list(range(len(reference) + 1))
+    for row_index, predicted_character in enumerate(prediction, 1):
+        current = [row_index]
+        for column_index, reference_character in enumerate(reference, 1):
+            current.append(min(
+                current[-1] + 1,
+                previous[column_index] + 1,
+                previous[column_index - 1] + (predicted_character != reference_character),
+            ))
+        previous = current
+    return previous[-1], len(reference)
+
+
+def evaluate_aligner(model, loader, criterion, device, vocabulary: dict[str, int]) -> dict[str, float | int]:
+    """Measure CTC loss and greedy character accuracy on a held-out split."""
+    inverse_vocabulary = {index: character for character, index in vocabulary.items()}
+    total_loss = 0.0
+    total_items = 0
+    total_edits = 0
+    total_reference_characters = 0
+    exact_matches = 0
+    model.eval()
+    with torch.inference_mode():
+        for features, targets, input_lengths, target_lengths in loader:
+            features, targets = features.to(device), targets.to(device)
+            input_lengths, target_lengths = input_lengths.to(device), target_lengths.to(device)
+            logits = model(features)
+            batch_size = int(features.shape[0])
+            if (
+                logits.ndim != 3
+                or logits.shape[0] != batch_size
+                or logits.shape[2] != len(vocabulary) + 1
+                or input_lengths.ndim != 1
+                or target_lengths.ndim != 1
+                or input_lengths.numel() != batch_size
+                or target_lengths.numel() != batch_size
+                or bool(torch.any(input_lengths <= 0))
+                or bool(torch.any(input_lengths > logits.shape[1]))
+                or bool(torch.any(target_lengths <= 0))
+                or int(target_lengths.sum().item()) != int(targets.numel())
+            ):
+                raise ValueError("ctc_evaluation_batch_contract_invalid")
+            if bool(torch.any(targets <= 0)) or bool(torch.any(targets >= len(vocabulary) + 1)):
+                raise ValueError("ctc_evaluation_target_outside_vocabulary")
+            log_probs = torch.log_softmax(logits.float(), dim=-1).transpose(0, 1)
+            loss = criterion(log_probs, targets, input_lengths, target_lengths)
+            if not torch.isfinite(loss):
+                raise ValueError("ctc_evaluation_loss_non_finite")
+            total_loss += float(loss.item()) * batch_size
+            offset = 0
+            for index in range(batch_size):
+                target_length = int(target_lengths[index].item())
+                reference_ids = targets[offset:offset + target_length].detach().cpu().tolist()
+                offset += target_length
+                reference = "".join(inverse_vocabulary[token] for token in reference_ids)
+                prediction = ctc_greedy_decode(
+                    logits[index, :int(input_lengths[index].item())], inverse_vocabulary
+                )
+                edits, reference_length = character_error_counts(prediction, reference)
+                total_edits += edits
+                total_reference_characters += reference_length
+                exact_matches += int(prediction == reference)
+            total_items += batch_size
+    if total_items == 0:
+        raise ValueError("empty_evaluation_split")
+    return {
+        "ctc_loss": total_loss / total_items,
+        "character_error_rate": total_edits / max(1, total_reference_characters),
+        "exact_character_match_rate": exact_matches / total_items,
+        "examples": total_items,
+    }
+
+
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -256,24 +368,36 @@ def main() -> None:
     network = QuranCTCAcousticModel(num_classes=len(vocabulary) + 1).to(device)
     optimizer = torch.optim.AdamW(network.parameters(), lr=2e-4, weight_decay=1e-3)
     criterion = nn.CTCLoss(blank=0, zero_infinity=True)
-    best_validation, best_state = math.inf, None
+    best_validation, best_state, best_validation_metrics = math.inf, None, None
     for epoch in range(args.epochs):
         train_loss = run_epoch(network, loaders["train"], optimizer, criterion, device, True)
-        validation_loss = run_epoch(network, loaders["validation"], optimizer, criterion, device, False)
+        validation_metrics = evaluate_aligner(
+            network, loaders["validation"], criterion, device, vocabulary
+        )
+        validation_loss = float(validation_metrics["ctc_loss"])
         print(json.dumps({
             "epoch": epoch + 1,
             "train_ctc_loss": round(train_loss, 6),
-            "validation_ctc_loss": round(validation_loss, 6),
+            "validation": {
+                "ctc_loss": round(validation_loss, 6),
+                "character_error_rate": round(float(validation_metrics["character_error_rate"]), 6),
+                "exact_character_match_rate": round(float(validation_metrics["exact_character_match_rate"]), 6),
+                "examples": validation_metrics["examples"],
+            },
         }, sort_keys=True))
         if validation_loss < best_validation:
             best_validation = validation_loss
+            best_validation_metrics = validation_metrics
             best_state = {key: value.detach().cpu().clone()
                           for key, value in network.state_dict().items()}
     if best_state is None:
         raise SystemExit("no_valid_checkpoint_selected")
     network.load_state_dict(best_state)
     network.cpu().eval()
-    heldout_loss = run_epoch(network, loaders["test"], optimizer, criterion, torch.device("cpu"), False)
+    heldout_metrics = evaluate_aligner(
+        network, loaders["test"], criterion, torch.device("cpu"), vocabulary
+    )
+    heldout_loss = float(heldout_metrics["ctc_loss"])
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -297,8 +421,13 @@ def main() -> None:
         "model_sha256": digest.hexdigest(),
         "model_version": "ijazah-quran-ctc-v0.1",
         "best_validation_ctc_loss": best_validation,
+        "best_validation_character_error_rate": best_validation_metrics["character_error_rate"],
+        "best_validation_exact_character_match_rate": best_validation_metrics["exact_character_match_rate"],
         "heldout_test_ctc_loss": heldout_loss,
-        "note": "Research artifact only; release flags remain false pending independent review and calibration.",
+        "heldout_test_character_error_rate": heldout_metrics["character_error_rate"],
+        "heldout_test_exact_character_match_rate": heldout_metrics["exact_character_match_rate"],
+        "heldout_test_examples": heldout_metrics["examples"],
+        "note": "Research artifact only; release flags remain false pending independent review, calibration, and acceptable held-out character error.",
     }
     metadata_path.write_text(
         json.dumps(artifact_metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -309,6 +438,8 @@ def main() -> None:
         "metadata_path": str(metadata_path),
         "best_validation_ctc_loss": round(best_validation, 6),
         "heldout_test_ctc_loss": round(heldout_loss, 6),
+        "heldout_test_character_error_rate": round(float(heldout_metrics["character_error_rate"]), 6),
+        "heldout_test_exact_character_match_rate": round(float(heldout_metrics["exact_character_match_rate"]), 6),
         "release_gates_passed": False,
     }, sort_keys=True))
 

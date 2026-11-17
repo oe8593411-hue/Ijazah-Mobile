@@ -241,8 +241,8 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
       message: "استجابة محرك التجويد لم تجتز التحقق البنيوي."
     };
   }
-  // Preserve an explicit engine-disabled state; never relabel it as completed analysis.
-  if (result.status === "not_configured") {
+  // Preserve non-ready states; never relabel unavailable alignment/model weights as completed analysis.
+  if (result.status === "not_configured" || result.status === "alignment_ready_model_not_configured") {
     return {
       status: "not_configured",
       rulesEvaluated: [] as string[],
@@ -253,8 +253,19 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
         : "محرك التجويد غير مهيأ؛ لم نصدر أحكامًا."
     };
   }
+  if (result.status === "alignment_low_confidence") {
+    return {
+      status: "unavailable",
+      rulesEvaluated: [] as string[],
+      findings: [] as unknown[],
+      confidence: null,
+      message: typeof result.message === "string" && result.message.trim()
+        ? result.message
+        : "لم نتمكن من محاذاة الكلمات صوتيًا بثقة كافية؛ لم نصدر أحكامًا."
+    };
+  }
   if (
-    (result.status !== "preliminary_findings" && result.status !== "completed_no_confirmed_findings")
+    (result.status !== "ok" && result.status !== "preliminary_findings" && result.status !== "completed_no_confirmed_findings")
     || (result.status === "completed_no_confirmed_findings" && result.findings.length > 0)
   ) {
     return {

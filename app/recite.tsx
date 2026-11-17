@@ -443,16 +443,17 @@ export default function Recite(){
 }
 function renderAlignedWords(expected:string,heard:string,allowPrefix=false,nabr:any=null,selectedSurah=1,startAyah=1){
  const expectedWords=expected.split(/\s+/).filter(Boolean);
- const hasAcousticEvidence=!!nabr&&[...(nabr.correct_words||[]),...(nabr.skipped_words||[]),...(nabr.tajweed_mistakes||[]),...(nabr.letter_mistakes||[])].length>0;
- // Browser speech-to-text is not acoustic Quran verification. Never color a word
- // green from a generic transcript or edit-distance match; only provider feedback
- // tied to the active surah/ayah may color a word.
- if(!hasAcousticEvidence)return expectedWords.map((word,index)=><Text key={index}>{word} </Text>);
+ // Fail closed: a provider label or skipped-word event alone is not enough to
+ // color Quran text. Require explicit, strong, auditable acoustic evidence.
+ const hasStrongEvidence=(item:any)=>!!item
+  &&typeof item.confidence==="number"&&Number.isFinite(item.confidence)&&item.confidence>=0.9
+  &&typeof item.evidence==="string"&&item.evidence.trim().length>=8;
  const correct=new Set<string>(),wrong=new Set<string>();
  const key=(item:any)=>[item.chapter,item.verse,item.word].join(":");
- for(const item of nabr?.correct_words||[])if(item&&item.chapter===selectedSurah)correct.add(key(item));
- for(const item of nabr?.skipped_words||[])if(item&&item.chapter===selectedSurah)wrong.add(key(item));
- for(const item of [...(nabr?.tajweed_mistakes||[]),...(nabr?.letter_mistakes||[])])if(item&&item.chapter===selectedSurah)wrong.add(key(item));
+ // Browser speech-to-text and skipped-word guesses never color a word.
+ for(const item of nabr?.correct_words||[])if(hasStrongEvidence(item)&&item.chapter===selectedSurah)correct.add(key(item));
+ // Only high-confidence letter/tajweed findings with explicit evidence can be red.
+ for(const item of [...(nabr?.tajweed_mistakes||[]),...(nabr?.letter_mistakes||[])])if(hasStrongEvidence(item)&&item.chapter===selectedSurah)wrong.add(key(item));
  let currentAyah=startAyah,wordIndex=0;
  return expectedWords.map((word,index)=>{
   const marker=word.match(/^﴿(\d+)﴾$/u);
