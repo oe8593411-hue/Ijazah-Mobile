@@ -82,6 +82,11 @@ if (!api.includes('contentGate === "passed_consensus_no_mismatch"')
   || !api.includes('scope !== "ayah"')) {
   errors.push("Acoustic tajweed findings must require cross-engine consensus and remain disabled for multi-ayah analysis.");
 }
+if (!recite.includes('item.confidence>=0.9')
+  || !recite.includes('item.evidence.trim().length>=8')
+  || recite.includes('for(const item of nabr?.skipped_words||[])if(item&&item.chapter===selectedSurah)wrong.add(key(item));')) {
+  errors.push("Word colors must require strong explicit acoustic evidence; skipped-word events must never be rendered as confirmed pronunciation errors.");
+}
 if (!riwayah.includes('name === "حفص عن عاصم" ? "verified_hafs_only" as const : "not_verified" as const')) {
   errors.push("Only the verified Hafs reference may be enabled.");
 }
