@@ -110,7 +110,9 @@ class CandidateScoringContractTests(unittest.TestCase):
         }]
         with patch.object(api, "model", ConfidentModel()), patch.object(
             api, "metadata", {"decision_threshold": 0.8, "calibration_temperature": 1.0}
-        ), patch.object(api, "log_mel", return_value=api.torch.zeros((1, 1, 80, 10))):
+        ), patch.object(api, "log_mel", return_value=api.torch.zeros((1, 1, 80, 10))), patch.object(
+            api, "aligner_metadata", {"minimum_mean_character_confidence": 0.75}
+        ):
             findings = api.score_aligned_candidates(
                 audio, words, [{"ruleId": "qalqalah", "wordIndex": 0}]
             )
@@ -136,6 +138,8 @@ class CandidateScoringContractTests(unittest.TestCase):
         }]
         with patch.object(api, "model", MustNotRunModel()), patch.object(
             api, "metadata", {"decision_threshold": 0.8, "calibration_temperature": 1.0}
+        ), patch.object(
+            api, "aligner_metadata", {"minimum_mean_character_confidence": 0.75}
         ):
             findings = api.score_aligned_candidates(
                 audio, words, [{"ruleId": "qalqalah", "wordIndex": 0}]
