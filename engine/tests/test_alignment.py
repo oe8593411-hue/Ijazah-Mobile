@@ -109,11 +109,30 @@ class AlignerMetadataTests(unittest.TestCase):
 
 
 class TrainingSplitIsolationTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.audio_paths = []
+        for name, payload in (
+            ("train.wav", b"train audio fixture"),
+            ("validation.wav", b"validation audio fixture"),
+            ("test.wav", b"test audio fixture"),
+        ):
+            path = self.root / name
+            path.write_bytes(payload)
+            self.audio_paths.append(str(path))
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
     def rows(self):
         return [
-            {"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a", "audio_path": "/dataset/train.wav"},
-            {"split": "validation", "reciter_id": "reader-b", "recording_id": "clip-b", "audio_path": "/dataset/validation.wav"},
-            {"split": "test", "reciter_id": "reader-c", "recording_id": "clip-c", "audio_path": "/dataset/test.wav"},
+            {"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a", "audio_path": self.audio_paths[0]},
+            {"split": "validation", "reciter_id": "reader-b", "recording_id": "clip-b", "audio_path": self.audio_paths[1]},
+            {"split": "test", "reciter_id": "reader-c", "recording_id": "clip-c", "audio_path": self.audio_paths[2]},
         ]
 
     def test_independent_reciters_and_recordings_are_accepted(self):
