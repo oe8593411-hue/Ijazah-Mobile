@@ -163,7 +163,7 @@ export function ThemeText(props: TextProps) {
 }
 export function ThemeScrollView(props: ScrollViewProps) {
   const { dark } = usePreferences();
-  return <RNScrollView {...props} style={themed(props.style, dark)} />;
+  return <RNScrollView {...props} style={themed(props.style, dark)} contentContainerStyle={themed(props.contentContainerStyle, dark)} />
 }
 export function ThemeTextInput(props: TextInputProps) {
   const { dark } = usePreferences();
