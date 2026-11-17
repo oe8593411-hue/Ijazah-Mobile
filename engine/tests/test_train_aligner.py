@@ -3,15 +3,27 @@ import unittest
 from pathlib import Path
 
 import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 from train_aligner import (
     build_vocabulary,
     character_error_counts,
     ctc_greedy_decode,
+    evaluate_aligner,
     minimum_ctc_frames,
     transcript_for_row,
     validate_split_isolation,
 )
+
+
+class FixedLogitAligner(nn.Module):
+    def __init__(self, logits):
+        super().__init__()
+        self.register_buffer("logits", logits)
+
+    def forward(self, features):
+        return self.logits.expand(features.shape[0], -1, -1)
 
 
 class AlignerEvaluationMetricTests(unittest.TestCase):
@@ -26,6 +38,40 @@ class AlignerEvaluationMetricTests(unittest.TestCase):
         self.assertEqual(character_error_counts("كتا", "كتاب"), (1, 4))
         self.assertEqual(character_error_counts("", "نور"), (3, 3))
         self.assertEqual(character_error_counts("نور", "نور"), (0, 3))
+
+    def test_evaluator_reports_character_metrics_for_a_valid_batch(self):
+        logits = torch.tensor([
+            [[-8.0, 8.0], [-8.0, 8.0], [8.0, -8.0]],
+        ])
+        model = FixedLogitAligner(logits)
+        loader = DataLoader(TensorDataset(
+            torch.zeros((1, 1)),
+            torch.tensor([1]),
+            torch.tensor([3]),
+            torch.tensor([1]),
+        ), batch_size=1)
+        metrics = evaluate_aligner(
+            model, loader, nn.CTCLoss(blank=0, zero_infinity=True),
+            torch.device("cpu"), {"ب": 1},
+        )
+        self.assertEqual(metrics["examples"], 1)
+        self.assertEqual(metrics["character_error_rate"], 0.0)
+        self.assertEqual(metrics["exact_character_match_rate"], 1.0)
+
+    def test_evaluator_rejects_frame_lengths_beyond_model_output(self):
+        logits = torch.tensor([[[0.0, 1.0], [0.0, 1.0], [1.0, 0.0]]])
+        loader = DataLoader(TensorDataset(
+            torch.zeros((1, 1)),
+            torch.tensor([1]),
+            torch.tensor([4]),
+            torch.tensor([1]),
+        ), batch_size=1)
+        with self.assertRaisesRegex(ValueError, "ctc_evaluation_batch_contract_invalid"):
+            evaluate_aligner(
+                FixedLogitAligner(logits), loader,
+                nn.CTCLoss(blank=0, zero_infinity=True),
+                torch.device("cpu"), {"ب": 1},
+            )
 
 
 class AlignerTrainingDataTests(unittest.TestCase):
