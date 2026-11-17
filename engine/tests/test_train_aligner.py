@@ -24,13 +24,22 @@ class AlignerTrainingDataTests(unittest.TestCase):
 
     def test_split_isolation_requires_distinct_reciters_and_recordings(self):
         rows = [
-            {"split": "train", "recording_id": "r1", "reciter_id": "a"},
-            {"split": "validation", "recording_id": "r2", "reciter_id": "b"},
-            {"split": "test", "recording_id": "r3", "reciter_id": "c"},
+            {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": "audio/train.wav"},
+            {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": "audio/validation.wav"},
+            {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": "audio/test.wav"},
         ]
         self.assertEqual(set(validate_split_isolation(rows)), {"train", "validation", "test"})
         rows[2]["reciter_id"] = "a"
         with self.assertRaisesRegex(ValueError, "reciters_must_be_disjoint"):
+            validate_split_isolation(rows)
+
+    def test_same_audio_file_cannot_be_relabelled_into_another_split(self):
+        rows = [
+            {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": "audio/shared.wav"},
+            {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": "audio/./shared.wav"},
+            {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": "audio/test.wav"},
+        ]
+        with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
             validate_split_isolation(rows)
 
 
