@@ -78,8 +78,16 @@ def validate_split_isolation(rows: list[dict[str, Any]]) -> dict[str, list[dict[
                   for name in ("train", "validation", "test")]
     if recordings[0] & recordings[1] or recordings[0] & recordings[2] or recordings[1] & recordings[2]:
         raise ValueError("recordings_must_be_disjoint_across_splits")
+    fingerprints = {
+        str(path): audio_content_sha256(path)
+        for path in {
+            Path(row["audio_path"]).resolve()
+            for name in ("train", "validation", "test")
+            for row in splits[name]
+        }
+    }
     audio_files = [
-        {audio_content_sha256(row["audio_path"]) for row in splits[name]}
+        {fingerprints[str(Path(row["audio_path"]).resolve())] for row in splits[name]}
         for name in ("train", "validation", "test")
     ]
     if (
