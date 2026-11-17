@@ -6,6 +6,22 @@ from train_aligner import build_vocabulary, minimum_ctc_frames, transcript_for_r
 
 
 class AlignerTrainingDataTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.audio_dir = self.root / "audio"
+        self.audio_dir.mkdir()
+        for name, payload in (
+            ("train.wav", b"train fixture audio"),
+            ("validation.wav", b"validation fixture audio"),
+            ("test.wav", b"test fixture audio"),
+            ("shared.wav", b"shared fixture audio"),
+        ):
+            (self.audio_dir / name).write_bytes(payload)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
     def test_vocabulary_is_dense_and_uses_zero_for_ctc_blank(self):
         vocabulary = build_vocabulary({(1, 1): "بِسْمِ اللَّهِ", (1, 2): "الحمد لله"})
         self.assertEqual(sorted(vocabulary.values()), list(range(1, len(vocabulary) + 1)))
@@ -26,9 +42,9 @@ class AlignerTrainingDataTests(unittest.TestCase):
 
     def test_split_isolation_requires_distinct_reciters_and_recordings(self):
         rows = [
-            {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": "audio/train.wav"},
-            {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": "audio/validation.wav"},
-            {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": "audio/test.wav"},
+            {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": str(self.audio_dir / "train.wav")},
+            {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": str(self.audio_dir / "validation.wav")},
+            {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": str(self.audio_dir / "test.wav")},
         ]
         self.assertEqual(set(validate_split_isolation(rows)), {"train", "validation", "test"})
         rows[2]["reciter_id"] = "a"
@@ -37,8 +53,8 @@ class AlignerTrainingDataTests(unittest.TestCase):
 
     def test_same_audio_file_cannot_be_relabelled_into_another_split(self):
         rows = [
-            {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": "audio/shared.wav"},
-            {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": "audio/./shared.wav"},
+            {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": str(self.audio_dir / "shared.wav")},
+            {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": str(self.audio_dir / "." / "shared.wav")},
             {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": "audio/test.wav"},
         ]
         with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
