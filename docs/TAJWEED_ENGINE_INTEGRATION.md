@@ -18,7 +18,7 @@ The Vercel endpoint `api/analyze-recitation.ts` can call the private engine usin
 
 It sends the audio as multipart data alongside the selected Hafs reference and expected rule candidates. The engine validates the reference against the pinned Quran corpus and rejects malformed audio, unbounded timestamps, invalid word indices, and unauthenticated requests.
 
-The current Python API **always returns `status: "not_configured"` and no findings** because trusted server-side audio-to-word alignment has not yet been implemented. The Vercel adapter must preserve that status; it must not turn an unconfigured response into a success or imply that no tajweed mistakes were found.
+Without reviewed model-weight files, the Python API returns a non-ready state and no findings. The local CTC alignment and qalqalah-scoring paths are implemented, but they remain unavailable until the aligner and classifier checkpoints pass their independent review, calibration, hash, and confidence gates. When configured, the Python API returns `status: "ok"`; the Vercel adapter maps that response to preliminary findings or no confirmed findings only after validating the rule candidate, 1-based word index, acoustic evidence, and confidence. Low-confidence alignment remains unavailable rather than being reported as a clean recitation.
 
 The separate transcription flow in `api/analyze-recitation.ts` may use speech-to-text providers for textual comparison, but text recognition is not acoustic tajweed detection. Text-only evidence, client-supplied timestamps, and an untrained classifier must never be presented as confirmed tajweed findings.
 
@@ -36,7 +36,7 @@ Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` only in the engine host's server-side en
 
 1. Collect recordings with appropriate permissions and training rights; retain no raw audio longer than the stated privacy policy permits.
 2. Obtain teacher-reviewed segment boundaries and labels for the narrow qalqalah task. Keep the same reciter wholly within one of train, validation, or held-out test.
-3. Implement server-side phoneme/word alignment. Client-provided candidate timestamps are untrusted and cannot become evidence.
+3. Train and independently validate the local CTC aligner on licensed, reciter-disjoint recordings. Client-provided candidate timestamps are untrusted and cannot become evidence; only server-generated alignment may supply word timings.
 4. Evaluate on speaker-disjoint held-out recordings across voices, devices, noise conditions, and clean/annotated-error examples.
 5. Require independent tajweed teacher review and calibrated confidence thresholds before producing a release checkpoint.
 6. Keep all unsupported or ambiguous cases fail-closed. Only return findings tied to trusted-reference locations and measured acoustic evidence.
@@ -44,4 +44,4 @@ Configure `IJAZAH_TAJWEED_ENGINE_TOKEN` only in the engine host's server-side en
 
 ## Status
 
-The verified reference is packaged and validated, the API is hardened, and the existing CI runs the Python tests and syntax checks. The acoustic model is not trained, and trusted server-side audio alignment is still missing. No production tajweed accuracy is claimed. Until those components are implemented and independently validated, the app must describe acoustic tajweed analysis as not configured and must not issue model-generated tajweed rulings.
+The verified reference is packaged and validated, and the existing CI runs the Python tests and syntax checks. The CTC forced-alignment and qalqalah scoring code are implemented, but reviewed/calibrated model weights and a licensed, teacher-reviewed training corpus are not included. No production tajweed accuracy is claimed. Until the model artifacts pass independent held-out evaluation and the operational privacy/authentication gates are complete, the app must describe acoustic tajweed analysis as not configured and must not issue model-generated tajweed rulings.
