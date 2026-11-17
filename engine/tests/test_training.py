@@ -35,22 +35,38 @@ class TrainingBatchShapeTests(unittest.TestCase):
 
 
 class ClassifierManifestGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.audio_paths = {}
+        for name, payload in (
+            ("train.wav", b"train fixture audio"),
+            ("validation.wav", b"validation fixture audio"),
+            ("test.wav", b"test fixture audio"),
+        ):
+            path = self.root / name
+            path.write_bytes(payload)
+            self.audio_paths[name] = str(path)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
     def split_groups(self):
         return {
             "train": [{
                 "reciter_id": "reader-a",
                 "recording_id": "recording-a",
-                "audio_path": "/dataset/train.wav",
+                "audio_path": self.audio_paths["train.wav"],
             }],
             "validation": [{
                 "reciter_id": "reader-b",
                 "recording_id": "recording-b",
-                "audio_path": "/dataset/validation.wav",
+                "audio_path": self.audio_paths["validation.wav"],
             }],
             "test": [{
                 "reciter_id": "reader-c",
                 "recording_id": "recording-c",
-                "audio_path": "/dataset/test.wav",
+                "audio_path": self.audio_paths["test.wav"],
             }],
         }
 
