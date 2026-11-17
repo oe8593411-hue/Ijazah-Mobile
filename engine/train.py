@@ -11,6 +11,49 @@ from tajweed_engine.audio import SAMPLE_RATE, log_mel
 from tajweed_engine.model import AcousticRuleClassifier
 from tajweed_engine.dataset import validate_label_provenance, validate_segment_timestamps
 
+MAX_SEGMENT_SECONDS = 4.0
+MAX_SEGMENT_MILLISECONDS = int(MAX_SEGMENT_SECONDS * 1000)
+
+
+def validate_classifier_segment_duration(start_ms: float, end_ms: float) -> None:
+    """Reject labelled segments that the fixed-window classifier cannot preserve."""
+    if end_ms - start_ms > MAX_SEGMENT_MILLISECONDS:
+        raise ValueError("segment_exceeds_classifier_window_limit")
+
+
+def validate_classifier_split_isolation(groups: dict[str, list[dict]]) -> None:
+    """Keep reciters, recordings, and the same resolved audio file in one split only."""
+    split_names = ("train", "validation", "test")
+    if any(not groups.get(name) for name in split_names):
+        raise ValueError("need_nonempty_train_validation_test_splits")
+
+    reciters = [
+        {row["reciter_id"].strip() for row in groups[name]}
+        for name in split_names
+    ]
+    recordings = [
+        {row["recording_id"].strip() for row in groups[name]}
+        for name in split_names
+    ]
+    audio_files = [
+        {Path(row["audio_path"]).resolve() for row in groups[name]}
+        for name in split_names
+    ]
+
+    for values, error in (
+        (reciters, "reciters_must_be_disjoint_across_splits"),
+        (recordings, "recordings_must_be_disjoint_across_splits"),
+        (audio_files, "audio_files_must_be_disjoint_across_splits"),
+    ):
+        if (
+            values[0] & values[1]
+            or values[0] & values[2]
+            or values[1] & values[2]
+        ):
+            raise ValueError(error)
+
+
+
 class Segments(Dataset):
     def __init__(self, rows, root):
         self.rows, self.root = rows, root
@@ -26,9 +69,10 @@ class Segments(Dataset):
         start = int(r["start_ms"] * SAMPLE_RATE / 1000)
         end = int(r["end_ms"] * SAMPLE_RATE / 1000)
         segment = a[start:end]
-        # Use a fixed four-second window so default DataLoader batching works.
-        max_samples = SAMPLE_RATE * 4
-        segment = segment[:max_samples]
+        # Keep the complete reviewed segment; never silently crop a labelled example.
+        max_samples = int(SAMPLE_RATE * MAX_SEGMENT_SECONDS)
+        if len(segment) > max_samples:
+            raise ValueError("segment_exceeds_classifier_window_limit")
         if len(segment) < max_samples:
             segment = np.pad(segment, (0, max_samples - len(segment)))
         return log_mel(segment).squeeze(0), torch.tensor(int(r["label"]), dtype=torch.long)
@@ -229,18 +273,15 @@ def main():
             raise SystemExit(f"Unreadable audio file: {r['audio_path']}") from exc
         try:
             validate_segment_timestamps(r["start_ms"], r["end_ms"], info.duration * 1000)
+            validate_classifier_segment_duration(r["start_ms"], r["end_ms"])
         except ValueError as exc:
-            raise SystemExit(f"Invalid segment timestamps at manifest line {line_number}: {exc}") from exc
+            raise SystemExit(f"Invalid segment at manifest line {line_number}: {exc}") from exc
         r["audio_path"]=str(path)
     groups={s:[r for r in rows if r["split"]==s] for s in ("train","validation","test")}
-    if any(not groups[s] for s in groups):
-        raise SystemExit("Need separate train, validation, and held-out test examples.")
-    reciters=[{r["reciter_id"] for r in groups[s]} for s in ("train","validation","test")]
-    if reciters[0]&reciters[1] or reciters[0]&reciters[2] or reciters[1]&reciters[2]:
-        raise SystemExit("Data leakage: reciters must be disjoint across train/validation/test.")
-    recordings=[{r["recording_id"] for r in groups[s]} for s in ("train","validation","test")]
-    if recordings[0]&recordings[1] or recordings[0]&recordings[2] or recordings[1]&recordings[2]:
-        raise SystemExit("Data leakage: recording IDs must be disjoint across train/validation/test.")
+    try:
+        validate_classifier_split_isolation(groups)
+    except ValueError as exc:
+        raise SystemExit(f"Data leakage: {exc}") from exc
     if any({r["label"] for r in groups[s]}!={0,1} for s in groups):
         raise SystemExit("Both classes must exist in every split.")
     if a.validate_only:
