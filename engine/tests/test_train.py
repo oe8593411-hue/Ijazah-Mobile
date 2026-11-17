@@ -1,6 +1,12 @@
+import tempfile
 import unittest
+from pathlib import Path
 
-from train import metrics_from_probabilities, select_decision_threshold
+from train import (
+    metrics_from_probabilities,
+    select_decision_threshold,
+    validate_classifier_split_isolation,
+)
 
 
 class ClassifierThresholdSelectionTests(unittest.TestCase):
@@ -44,6 +50,25 @@ class ClassifierThresholdSelectionTests(unittest.TestCase):
             metrics_from_probabilities([], [], 0.5)
         with self.assertRaisesRegex(ValueError, "invalid_decision_threshold"):
             metrics_from_probabilities([1], [0.8], 0)
+
+
+    def test_identical_audio_bytes_under_different_names_cannot_cross_splits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.wav"
+            renamed_copy = root / "renamed-copy.wav"
+            third = root / "third.wav"
+            first.write_bytes(b"same reviewed audio bytes")
+            renamed_copy.write_bytes(b"same reviewed audio bytes")
+            third.write_bytes(b"different test audio")
+            groups = {
+                "train": [{"reciter_id": "reader-a", "recording_id": "recording-a", "audio_path": str(first)}],
+                "validation": [{"reciter_id": "reader-b", "recording_id": "recording-b", "audio_path": str(renamed_copy)}],
+                "test": [{"reciter_id": "reader-c", "recording_id": "recording-c", "audio_path": str(third)}],
+            }
+            with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
+                validate_classifier_split_isolation(groups)
+
 
 
 if __name__ == "__main__":
