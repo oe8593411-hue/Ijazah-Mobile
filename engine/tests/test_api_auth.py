@@ -117,6 +117,30 @@ class CandidateScoringContractTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0]["wordIndex"], 1)
         self.assertEqual(findings[0]["word"], "قَدْ")
+        self.assertIn("local_qalqalah_classifier_v1", findings[0]["evidence"])
+        self.assertIn("ctc_word_alignment_confidence=0.9900", findings[0]["evidence"])
+
+    def test_low_confidence_word_alignment_is_not_scored(self):
+        import numpy as np
+
+        class MustNotRunModel:
+            def __call__(self, features):
+                raise AssertionError("classifier must not run for a weakly aligned word")
+
+        audio = np.ones(16_000, dtype=np.float32)
+        words = [{
+            "word": "قَدْ",
+            "startMs": 100,
+            "endMs": 500,
+            "alignmentConfidence": 0.2,
+        }]
+        with patch.object(api, "model", MustNotRunModel()), patch.object(
+            api, "metadata", {"decision_threshold": 0.8, "calibration_temperature": 1.0}
+        ):
+            findings = api.score_aligned_candidates(
+                audio, words, [{"ruleId": "qalqalah", "wordIndex": 0}]
+            )
+        self.assertEqual(findings, [])
 
 
 class ModelReleaseGateTests(unittest.TestCase):
