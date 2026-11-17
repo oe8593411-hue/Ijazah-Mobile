@@ -9,6 +9,7 @@ from tajweed_engine.alignment import (
     ctc_viterbi_align,
     validate_aligner_metadata,
 )
+from train_aligner import validate_split_isolation
 
 
 def make_log_probabilities(path, class_count):
@@ -105,6 +106,41 @@ class AlignerMetadataTests(unittest.TestCase):
         metadata["blank_id"] = 2
         with self.assertRaisesRegex(ValueError, "dense"):
             validate_aligner_metadata(metadata)
+
+
+class TrainingSplitIsolationTests(unittest.TestCase):
+    def rows(self):
+        return [
+            {"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a"},
+            {"split": "validation", "reciter_id": "reader-b", "recording_id": "clip-b"},
+            {"split": "test", "reciter_id": "reader-c", "recording_id": "clip-c"},
+        ]
+
+    def test_independent_reciters_and_recordings_are_accepted(self):
+        splits = validate_split_isolation(self.rows())
+        self.assertEqual([len(splits[name]) for name in ("train", "validation", "test")], [1, 1, 1])
+
+    def test_same_reciter_cannot_leak_between_splits(self):
+        rows = self.rows()
+        rows[2]["reciter_id"] = "reader-a"
+        with self.assertRaisesRegex(ValueError, "reciters_must_be_disjoint_across_splits"):
+            validate_split_isolation(rows)
+
+    def test_same_recording_cannot_leak_between_splits(self):
+        rows = self.rows()
+        rows[1]["recording_id"] = "clip-a"
+        with self.assertRaisesRegex(ValueError, "recording_ids_must_be_unique"):
+            validate_split_isolation(rows)
+
+    def test_duplicate_recording_ids_are_rejected_even_within_one_split(self):
+        rows = self.rows()
+        rows.append({"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a"})
+        with self.assertRaisesRegex(ValueError, "recording_ids_must_be_unique"):
+            validate_split_isolation(rows)
+
+    def test_empty_split_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "need_nonempty_train_validation_test_splits"):
+            validate_split_isolation(self.rows()[:2])
 
 
 if __name__ == "__main__":
