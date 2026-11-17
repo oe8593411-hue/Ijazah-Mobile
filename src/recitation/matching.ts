@@ -68,7 +68,7 @@ export function wordCost(expected: string, heard: string) {
   const ratio = distance / Math.max(expected.length, heard.length);
   // A non-zero distance may be a single confusable letter (ظ/ض, ذ/ز...).
   // Keep it "unsure", not "correct": similarity is not proof of exact recitation.
-  return ratio <= 0.2 ? 0.5 : ratio <= 0.4 ? 0.5 : 0.7;
+  return ratio <= 0.4 ? 0.5 : 0.7;
 }
 export function costState(cost: number): WordState {
   return cost <= 0.1 ? "ok" : cost <= 0.5 ? "unsure" : "bad";
