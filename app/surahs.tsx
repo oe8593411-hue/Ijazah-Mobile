@@ -8,8 +8,8 @@ import { SURAHS } from "../src/quran/surahs";
 import { usePreferences } from "../src/preferences";
 
 const DARK_COLORS = {
-  bg: "#1F2023", bar: "#17181B", card: "#26292F", line: "#2E3136",
-  ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)", dark: "#1B1C1F",
+  bg: "#000000", bar: "#000000", card: "#0D0D0D", line: "#222222",
+  ink: "#F4EFE3", muted: "#9AA0A6", gold: "#E0A93B", goldSoft: "rgba(224,169,59,0.16)", dark: "#0D0D0D",
 };
 const LIGHT_COLORS = {
   bg: "#F5F7FA", bar: "#FFFFFF", card: "#FFFFFF", line: "#DCE3EA",
