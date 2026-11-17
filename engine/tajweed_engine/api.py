@@ -113,9 +113,13 @@ def authorize(value: str | None):
 
 
 def validate_rule_checks(
-    checks: Any, duration_ms: float, reference_word_count: int | None = None
+    checks: Any, reference_word_count: int | None = None
 ) -> list[dict[str, Any]]:
-    """Validate the client's candidate shape; its timestamps are never trusted."""
+    """Validate 1-based Quran word indexes and normalize them for internal 0-based alignment.
+
+    Client timestamps are intentionally ignored: only the trusted server-side CTC
+    aligner may establish audio boundaries.
+    """
     if not isinstance(checks, list) or len(checks) > 500:
         raise HTTPException(status_code=400, detail="invalid_rule_checks")
     validated: list[dict[str, Any]] = []
@@ -124,24 +128,18 @@ def validate_rule_checks(
             raise HTTPException(status_code=400, detail="invalid_rule_check")
         if item.get("ruleId") != "qalqalah":
             continue
-        start, end, word_index = item.get("startMs"), item.get("endMs"), item.get("wordIndex")
+        word_index = item.get("wordIndex")
         if (
-            isinstance(start, bool) or isinstance(end, bool) or isinstance(word_index, bool)
-            or not isinstance(start, (int, float)) or not isinstance(end, (int, float))
-            or not isinstance(word_index, int) or word_index < 0 or word_index > 10_000
+            isinstance(word_index, bool)
+            or not isinstance(word_index, int)
+            or word_index < 1
+            or word_index > 10_000
         ):
-            raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps")
-        try:
-            start_ms, end_ms = float(start), float(end)
-        except (OverflowError, ValueError, TypeError) as exc:
-            raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps") from exc
-        if (
-            not math.isfinite(start_ms) or not math.isfinite(end_ms)
-            or start_ms < 0 or end_ms <= start_ms or end_ms > duration_ms
-            or (reference_word_count is not None and word_index >= reference_word_count)
-        ):
-            raise HTTPException(status_code=400, detail="invalid_rule_check_timestamps")
-        validated.append({"ruleId": "qalqalah", "wordIndex": word_index})
+            raise HTTPException(status_code=400, detail="invalid_rule_check_word_index")
+        zero_based_index = word_index - 1
+        if reference_word_count is not None and zero_based_index >= reference_word_count:
+            raise HTTPException(status_code=400, detail="invalid_rule_check_word_index")
+        validated.append({"ruleId": "qalqalah", "wordIndex": zero_based_index})
     return validated
 
 
@@ -233,7 +231,8 @@ def score_aligned_candidates(
         if confidence >= threshold:
             findings.append({
                 "ruleId": rule_id,
-                "wordIndex": word_index,
+                # The app contract is 1-based; keep the internal index private.
+                "wordIndex": word_index + 1,
                 "word": word["word"],
                 "startMs": word["startMs"],
                 "endMs": word["endMs"],
@@ -305,7 +304,7 @@ async def analyze(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     candidates = validate_rule_checks(
-        checks, quality["duration_seconds"] * 1000, len(normalize_reference(referenceText).split())
+        checks, len(normalize_reference(referenceText).split())
     )
 
     if aligner is None:
