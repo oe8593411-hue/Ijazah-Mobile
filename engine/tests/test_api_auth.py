@@ -41,52 +41,83 @@ class HealthReadinessTests(unittest.TestCase):
 
 
 class RuleCheckValidationTests(unittest.TestCase):
-    def test_valid_timestamped_candidate_accepted(self):
-        candidate = {"ruleId": "qalqalah", "startMs": 100, "endMs": 450, "wordIndex": 3}
-        self.assertEqual(api.validate_rule_checks([candidate], 1000), [{"ruleId": "qalqalah", "wordIndex": 3}])
+    def test_text_candidate_without_timestamps_is_accepted_and_normalized(self):
+        candidate = {"ruleId": "qalqalah", "wordIndex": 1, "token": "الْحَمْدُ"}
+        self.assertEqual(
+            api.validate_rule_checks([candidate], reference_word_count=4),
+            [{"ruleId": "qalqalah", "wordIndex": 0}],
+        )
 
-    def test_nan_and_infinite_timestamps_rejected(self):
-        for start, end in [(float("nan"), 500), (100, float("inf")), (100, float("-inf"))]:
-            with self.subTest(start=start, end=end):
+    def test_last_one_based_word_index_maps_to_last_internal_index(self):
+        candidate = {"ruleId": "qalqalah", "wordIndex": 4}
+        self.assertEqual(
+            api.validate_rule_checks([candidate], reference_word_count=4),
+            [{"ruleId": "qalqalah", "wordIndex": 3}],
+        )
+
+    def test_client_timestamps_are_ignored_and_never_become_alignment_evidence(self):
+        candidate = {
+            "ruleId": "qalqalah",
+            "wordIndex": 2,
+            "startMs": float("nan"),
+            "endMs": -500,
+        }
+        self.assertEqual(
+            api.validate_rule_checks([candidate], reference_word_count=4),
+            [{"ruleId": "qalqalah", "wordIndex": 1}],
+        )
+
+    def test_zero_negative_boolean_and_out_of_range_indexes_are_rejected(self):
+        for word_index in (0, -1, True, 1.0, "1", 5):
+            with self.subTest(word_index=word_index):
                 with self.assertRaises(HTTPException) as ctx:
-                    api.validate_rule_checks([{"ruleId": "qalqalah", "startMs": start,
-                                               "endMs": end, "wordIndex": 0}], 1000)
+                    api.validate_rule_checks(
+                        [{"ruleId": "qalqalah", "wordIndex": word_index}],
+                        reference_word_count=4,
+                    )
                 self.assertEqual(ctx.exception.status_code, 400)
 
-    def test_boolean_timestamp_and_word_index_rejected(self):
-        for field, value in [("startMs", True), ("endMs", False), ("wordIndex", True)]:
-            item = {"ruleId": "qalqalah", "startMs": 10, "endMs": 20, "wordIndex": 0}
-            item[field] = value
-            with self.subTest(field=field):
-                with self.assertRaises(HTTPException):
-                    api.validate_rule_checks([item], 1000)
-
-    def test_extremely_large_integer_timestamps_return_client_error(self):
-        with self.assertRaises(HTTPException) as ctx:
-            api.validate_rule_checks([{
-                "ruleId": "qalqalah", "startMs": 10 ** 1000,
-                "endMs": 10 ** 1000 + 1, "wordIndex": 0,
-            }], 1000)
-        self.assertEqual(ctx.exception.status_code, 400)
-
-    def test_word_index_must_fit_reference_ayah(self):
-        candidate = {"ruleId": "qalqalah", "startMs": 10, "endMs": 20, "wordIndex": 2}
-        with self.assertRaises(HTTPException) as ctx:
-            api.validate_rule_checks([candidate], 1000, reference_word_count=2)
-        self.assertEqual(ctx.exception.status_code, 400)
-
-    def test_out_of_bounds_or_reversed_timestamps_rejected(self):
-        for start, end in [(-1, 20), (20, 20), (30, 20), (10, 1001)]:
-            with self.subTest(start=start, end=end):
-                with self.assertRaises(HTTPException):
-                    api.validate_rule_checks([{"ruleId": "qalqalah", "startMs": start,
-                                               "endMs": end, "wordIndex": 0}], 1000)
+    def test_unknown_rule_is_not_sent_to_the_qalqalah_model(self):
+        self.assertEqual(
+            api.validate_rule_checks(
+                [{"ruleId": "ghunnah", "wordIndex": 1}],
+                reference_word_count=4,
+            ),
+            [],
+        )
 
     def test_malformed_items_and_oversized_lists_rejected(self):
         with self.assertRaises(HTTPException):
-            api.validate_rule_checks(["not-an-object"], 1000)
+            api.validate_rule_checks(["not-an-object"], reference_word_count=4)
         with self.assertRaises(HTTPException):
-            api.validate_rule_checks([{}] * 501, 1000)
+            api.validate_rule_checks([{}] * 501, reference_word_count=4)
+
+
+class CandidateScoringContractTests(unittest.TestCase):
+    def test_scored_finding_returns_one_based_word_index_for_app_adapter(self):
+        import numpy as np
+
+        class ConfidentModel:
+            def __call__(self, features):
+                return api.torch.tensor([[0.0, 10.0]])
+
+        audio = np.ones(16_000, dtype=np.float32)
+        words = [{
+            "word": "قَدْ",
+            "startMs": 100,
+            "endMs": 500,
+            "alignmentConfidence": 0.99,
+        }]
+        with patch.object(api, "model", ConfidentModel()), patch.object(
+            api, "metadata", {"decision_threshold": 0.8, "calibration_temperature": 1.0}
+        ), patch.object(api, "log_mel", return_value=api.torch.zeros((1, 1, 80, 10))):
+            findings = api.score_aligned_candidates(
+                audio, words, [{"ruleId": "qalqalah", "wordIndex": 0}]
+            )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["wordIndex"], 1)
+        self.assertEqual(findings[0]["word"], "قَدْ")
+
 
 class ModelReleaseGateTests(unittest.TestCase):
     def setUp(self):
@@ -396,8 +427,7 @@ class AnalyzeFailClosedTests(unittest.IsolatedAsyncioTestCase):
                     file=FakeUpload(), surah=1, ayah=1, riwaya="hafs",
                     referenceText="بسم الله الرحمن الرحيم",
                     expectedRuleChecks=json.dumps([{
-                        "ruleId": "qalqalah", "startMs": 100, "endMs": 500,
-                        "wordIndex": 0,
+                        "ruleId": "qalqalah", "wordIndex": 1,
                     }]),
                     authorization="Bearer test",
                 )
