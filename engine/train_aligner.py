@@ -259,11 +259,27 @@ def evaluate_aligner(model, loader, criterion, device, vocabulary: dict[str, int
             features, targets = features.to(device), targets.to(device)
             input_lengths, target_lengths = input_lengths.to(device), target_lengths.to(device)
             logits = model(features)
+            batch_size = int(features.shape[0])
+            if (
+                logits.ndim != 3
+                or logits.shape[0] != batch_size
+                or logits.shape[2] != len(vocabulary) + 1
+                or input_lengths.ndim != 1
+                or target_lengths.ndim != 1
+                or input_lengths.numel() != batch_size
+                or target_lengths.numel() != batch_size
+                or bool(torch.any(input_lengths <= 0))
+                or bool(torch.any(input_lengths > logits.shape[1]))
+                or bool(torch.any(target_lengths <= 0))
+                or int(target_lengths.sum().item()) != int(targets.numel())
+            ):
+                raise ValueError("ctc_evaluation_batch_contract_invalid")
+            if bool(torch.any(targets <= 0)) or bool(torch.any(targets >= len(vocabulary) + 1)):
+                raise ValueError("ctc_evaluation_target_outside_vocabulary")
             log_probs = torch.log_softmax(logits.float(), dim=-1).transpose(0, 1)
             loss = criterion(log_probs, targets, input_lengths, target_lengths)
             if not torch.isfinite(loss):
                 raise ValueError("ctc_evaluation_loss_non_finite")
-            batch_size = int(features.shape[0])
             total_loss += float(loss.item()) * batch_size
             offset = 0
             for index in range(batch_size):
