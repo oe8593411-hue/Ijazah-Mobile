@@ -111,9 +111,9 @@ class AlignerMetadataTests(unittest.TestCase):
 class TrainingSplitIsolationTests(unittest.TestCase):
     def rows(self):
         return [
-            {"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a"},
-            {"split": "validation", "reciter_id": "reader-b", "recording_id": "clip-b"},
-            {"split": "test", "reciter_id": "reader-c", "recording_id": "clip-c"},
+            {"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a", "audio_path": "/dataset/train.wav"},
+            {"split": "validation", "reciter_id": "reader-b", "recording_id": "clip-b", "audio_path": "/dataset/validation.wav"},
+            {"split": "test", "reciter_id": "reader-c", "recording_id": "clip-c", "audio_path": "/dataset/test.wav"},
         ]
 
     def test_independent_reciters_and_recordings_are_accepted(self):
@@ -136,6 +136,13 @@ class TrainingSplitIsolationTests(unittest.TestCase):
         rows = self.rows()
         rows.append({"split": "train", "reciter_id": "reader-a", "recording_id": "clip-a"})
         with self.assertRaisesRegex(ValueError, "recording_ids_must_be_unique"):
+            validate_split_isolation(rows)
+
+
+    def test_same_resolved_audio_file_cannot_leak_between_splits(self):
+        rows = self.rows()
+        rows[2]["audio_path"] = rows[0]["audio_path"]
+        with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
             validate_split_isolation(rows)
 
     def test_empty_split_is_rejected(self):
