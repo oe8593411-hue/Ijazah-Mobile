@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Modal, StyleSheet } from "react-native";
+import { ThemePressable as Pressable, ThemeScrollView as ScrollView, ThemeText as Text, ThemeView as View } from "./ThemePrimitives";
 import { APP_LANGUAGES, usePreferences } from "../src/preferences";
 
 export default function GlobalControls() {
