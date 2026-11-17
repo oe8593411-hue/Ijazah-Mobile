@@ -61,9 +61,14 @@ export const JOIN_COST = 0.3;  // two heard words for one verified word, or one 
 // It must cost less than a skipped word plus an extra word, or a wrong word would be read as a skip.
 export function wordCost(expected: string, heard: string) {
   if (expected === heard) return 0;
-  if (Math.min(expected.length, heard.length) < 2) return 0.7;
-  const ratio = weightedDistance(expected, heard) / Math.max(expected.length, heard.length);
-  return ratio <= 0.2 ? 0.1 : ratio <= 0.4 ? 0.5 : 0.7;
+  // Very short Arabic words (و، ف، ب، ل...) are especially easy for ASR to
+  // confuse. Never turn a one-character disagreement into a definite error.
+  if (Math.min(expected.length, heard.length) < 2) return 0.5;
+  const distance = weightedDistance(expected, heard);
+  const ratio = distance / Math.max(expected.length, heard.length);
+  // A non-zero distance may be a single confusable letter (ظ/ض, ذ/ز...).
+  // Keep it "unsure", not "correct": similarity is not proof of exact recitation.
+  return ratio <= 0.2 ? 0.5 : ratio <= 0.4 ? 0.5 : 0.7;
 }
 export function costState(cost: number): WordState {
   return cost <= 0.1 ? "ok" : cost <= 0.5 ? "unsure" : "bad";
