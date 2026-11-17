@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from tajweed_engine.alignment_model import QuranCTCAcousticModel
 from tajweed_engine.audio import MAX_SECONDS, SAMPLE_RATE, log_mel
-from tajweed_engine.dataset import validate_segment_timestamps, validate_transcript_provenance
+from tajweed_engine.dataset import audio_content_sha256, validate_segment_timestamps, validate_transcript_provenance
 from tajweed_engine.reference import get_corpus, normalize_reference
 
 
@@ -79,7 +79,7 @@ def validate_split_isolation(rows: list[dict[str, Any]]) -> dict[str, list[dict[
     if recordings[0] & recordings[1] or recordings[0] & recordings[2] or recordings[1] & recordings[2]:
         raise ValueError("recordings_must_be_disjoint_across_splits")
     audio_files = [
-        {Path(row["audio_path"]).resolve() for row in splits[name]}
+        {audio_content_sha256(row["audio_path"]) for row in splits[name]}
         for name in ("train", "validation", "test")
     ]
     if (
