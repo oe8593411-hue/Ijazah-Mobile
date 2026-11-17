@@ -78,6 +78,16 @@ def validate_split_isolation(rows: list[dict[str, Any]]) -> dict[str, list[dict[
                   for name in ("train", "validation", "test")]
     if recordings[0] & recordings[1] or recordings[0] & recordings[2] or recordings[1] & recordings[2]:
         raise ValueError("recordings_must_be_disjoint_across_splits")
+    audio_files = [
+        {Path(row["audio_path"]).resolve() for row in splits[name]}
+        for name in ("train", "validation", "test")
+    ]
+    if (
+        audio_files[0] & audio_files[1]
+        or audio_files[0] & audio_files[2]
+        or audio_files[1] & audio_files[2]
+    ):
+        raise ValueError("audio_files_must_be_disjoint_across_splits")
     return splits
 
 
