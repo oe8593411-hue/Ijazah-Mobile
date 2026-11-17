@@ -55,7 +55,7 @@ class AlignerTrainingDataTests(unittest.TestCase):
         rows = [
             {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": str(self.audio_dir / "shared.wav")},
             {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": str(self.audio_dir / "." / "shared.wav")},
-            {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": "audio/test.wav"},
+            {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": str(self.audio_dir / "test.wav")},
         ]
         with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
             validate_split_isolation(rows)
