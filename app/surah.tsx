@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet } from "react-native";
+import { ThemePressable as Pressable } from "../components/ThemePrimitives";
+import { ThemeView as View, ThemeText as Text, ThemeScrollView as ScrollView } from "../components/ThemePrimitives";
 import { router, useLocalSearchParams } from "expo-router";
 import { SURAHS } from "../src/quran/surahs";
 
