@@ -214,9 +214,15 @@ export function takeSpeech(expected: string[], track: Track, speech: Speech, res
   return { track: t, speech: next, view: viewOf(expected, t, next) };
 }
 
-// The session has ended: whatever it still holds is read as it is.
+// The session has ended: commit only results the recognizer explicitly marked final.
+// Interim hypotheses are unstable and can change or disappear after a pause; treating them as
+// final here can paint a correct word as wrong just because Chrome stopped listening mid-word.
 export function endSpeech(expected: string[], track: Track, speech: Speech): Track {
   let t = track;
-  for (let k = speech.done; k < speech.results.length; k++) t = readFinal(expected, t, speech.results[k].alts);
+  for (let k = speech.done; k < speech.results.length; k++) {
+    const result = speech.results[k];
+    if (!result.isFinal) continue;
+    t = readFinal(expected, t, result.alts);
+  }
   return t;
 }
