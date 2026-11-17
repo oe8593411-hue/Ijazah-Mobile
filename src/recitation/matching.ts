@@ -32,18 +32,27 @@ export function weightedDistance(a: string, b: string) {
 }
 // ---------- Results of the recognizer ----------
 
-export type Heard = { alts: string[]; isFinal: boolean };
+export type Heard = { alts: string[]; confidences: (number | undefined)[]; isFinal: boolean };
 
 // The recognizer's result list as plain data.
 export function readResults(list: any): Heard[] {
   const out: Heard[] = [];
   for (let i = 0; i < list.length; i++) {
     const alts: string[] = [];
+    const confidences: (number | undefined)[] = [];
     for (let j = 0; j < list[i].length; j++) {
-      const t = list[i][j]?.transcript;
-      if (t) alts.push(t);
+      const alternative = list[i][j];
+      const t = alternative?.transcript;
+      if (t) {
+        alts.push(t);
+        const confidence = alternative?.confidence;
+        // Some browsers omit confidence or report an invalid value. Never invent one.
+        confidences.push(typeof confidence === "number" && Number.isFinite(confidence) && confidence >= 0 && confidence <= 1
+          ? confidence
+          : undefined);
+      }
     }
-    out.push({ alts, isFinal: !!list[i].isFinal });
+    out.push({ alts, confidences, isFinal: !!list[i].isFinal });
   }
   return out;
 }
@@ -153,13 +162,19 @@ export function startSpeech(track: Track): Speech {
 }
 
 // Reads one final result into the track, with the guess that fits it best from where the reading stands.
-export function readFinal(expected: string[], track: Track, alts: string[]): Track {
-  let best: { r: ReturnType<typeof alignFrom>; } | null = null;
-  for (const alt of alts) {
-    const words = normalizeArabic(alt).split(" ").filter(Boolean);
+export function readFinal(expected: string[], track: Track, alts: string[], confidences: (number | undefined)[] = []): Track {
+  let best: { r: ReturnType<typeof alignFrom>; confidence: number; } | null = null;
+  for (let i = 0; i < alts.length; i++) {
+    const words = normalizeArabic(alts[i]).split(" ").filter(Boolean);
     if (!words.length) continue;
     const r = alignFrom(expected, track.cursor, words);
-    if (!best || r.cost < best.r.cost) best = { r };
+    const rawConfidence = confidences[i];
+    const confidence = typeof rawConfidence === "number" && Number.isFinite(rawConfidence) ? rawConfidence : -1;
+    // Text alignment remains the primary signal. ASR confidence only breaks exact cost ties;
+    // a confident but textually worse alternative must never override a better Quran match.
+    if (!best || r.cost < best.r.cost || (r.cost === best.r.cost && confidence > best.confidence)) {
+      best = { r, confidence };
+    }
   }
   return best ? applyAlignment(track, track.cursor, best.r) : track;
 }
@@ -169,6 +184,10 @@ export function pendingWords(expected: string[], speech: Speech) {
   const pending = speech.results.slice(speech.done);
   const choice = pending.map(() => 0);
   const wordsOf = (k: number, c: number) => normalizeArabic(pending[k].alts[c] ?? "").split(" ").filter(Boolean);
+  const confidenceOf = (k: number, c: number) => {
+    const value = pending[k].confidences?.[c];
+    return typeof value === "number" && Number.isFinite(value) ? value : -1;
+  };
   const joint = () => pending.flatMap((_, k) => wordsOf(k, choice[k]));
   let best = alignFrom(expected, speech.from, joint()).cost;
   for (let k = Math.max(0, pending.length - 3); k < pending.length; k++) {
@@ -176,7 +195,9 @@ export function pendingWords(expected: string[], speech: Speech) {
       const keep = choice[k];
       choice[k] = c;
       const cost = alignFrom(expected, speech.from, joint()).cost;
-      if (cost < best) best = cost; else choice[k] = keep;
+      const improvesText = cost < best;
+      const tiesTextAndImprovesConfidence = cost === best && confidenceOf(k, c) > confidenceOf(k, keep);
+      if (improvesText || tiesTextAndImprovesConfidence) best = cost; else choice[k] = keep;
     }
   }
   return joint();
@@ -212,7 +233,7 @@ export function takeSpeech(expected: string[], track: Track, speech: Speech, res
   let t = track;
   let done = speech.done;
   while (done < results.length && results[done].isFinal) {
-    t = readFinal(expected, t, results[done].alts);
+    t = readFinal(expected, t, results[done].alts, results[done].confidences);
     done++;
   }
   const next: Speech = { from: t.cursor, done, results };
@@ -227,7 +248,7 @@ export function endSpeech(expected: string[], track: Track, speech: Speech): Tra
   for (let k = speech.done; k < speech.results.length; k++) {
     const result = speech.results[k];
     if (!result.isFinal) continue;
-    t = readFinal(expected, t, result.alts);
+    t = readFinal(expected, t, result.alts, result.confidences);
   }
   return t;
 }
