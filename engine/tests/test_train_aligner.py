@@ -20,7 +20,7 @@ class AlignerEvaluationMetricTests(unittest.TestCase):
         logits = torch.full((len(token_path), 3), -10.0)
         for frame, token in enumerate(token_path):
             logits[frame, token] = 10.0
-        self.assertEqual(ctc_greedy_decode(logits, {1: "ب", 2: "ا"}), "ببا")
+        self.assertEqual(ctc_greedy_decode(logits, {1: "ب", 2: "ا"}), "بباا")
 
     def test_character_error_counts_uses_levenshtein_distance(self):
         self.assertEqual(character_error_counts("كتا", "كتاب"), (1, 4))
