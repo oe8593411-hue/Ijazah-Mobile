@@ -35,8 +35,16 @@ def validate_classifier_split_isolation(groups: dict[str, list[dict]]) -> None:
         {row["recording_id"].strip() for row in groups[name]}
         for name in split_names
     ]
+    fingerprints = {
+        str(path): audio_content_sha256(path)
+        for path in {
+            Path(row["audio_path"]).resolve()
+            for name in split_names
+            for row in groups[name]
+        }
+    }
     audio_files = [
-        {audio_content_sha256(row["audio_path"]) for row in groups[name]}
+        {fingerprints[str(Path(row["audio_path"]).resolve())] for row in groups[name]}
         for name in split_names
     ]
 
