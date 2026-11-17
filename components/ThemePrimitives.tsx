@@ -79,12 +79,6 @@ const DARK_SURFACES: Record<string, string> = {
   "#26292F": "#0D0D0D",
   "#2E3136": "#222222",
   "#1B1C1F": "#0D0D0D",
-  "#F5F7FA": "#000000",
-  "#F5D27A": "#181818",
-  "#E8EDF2": "#222222",
-  "#F0F6FA": "#0D0D0D",
-  "#EAF7FC": "#0D0D0D",
-  "#F2F5F8": "#0D0D0D"
 };
 const DARK_TEXT: Record<string, string> = {
   "#071A33": "#F3FAFD",
@@ -131,7 +125,6 @@ const DARK_TEXT: Record<string, string> = {
   "#AFCBDD": "#B8C9D9",
   "#9FB6CC": "#B8C9D9",
   "#B5C7D8": "#B8C9D9",
-  "#9AA0A6": "#B8C9D9",
   "#8E98A6": "#B8C9D9"
 
 };
