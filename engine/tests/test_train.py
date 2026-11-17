@@ -10,6 +10,29 @@ from train import (
 
 
 class ClassifierThresholdSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.audio_paths = {}
+        for name, payload in (
+            ("train.wav", b"train fixture audio"),
+            ("validation.wav", b"validation fixture audio"),
+            ("test.wav", b"test fixture audio"),
+        ):
+            path = self.root / name
+            path.write_bytes(payload)
+            self.audio_paths[name] = str(path)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def split_groups(self):
+        return {
+            "train": [{"reciter_id": "reader-a", "recording_id": "recording-a", "audio_path": self.audio_paths["train.wav"]}],
+            "validation": [{"reciter_id": "reader-b", "recording_id": "recording-b", "audio_path": self.audio_paths["validation.wav"]}],
+            "test": [{"reciter_id": "reader-c", "recording_id": "recording-c", "audio_path": self.audio_paths["test.wav"]}],
+        }
+
     def test_threshold_comes_from_validation_probabilities_and_meets_precision_target(self):
         result = select_decision_threshold(
             labels=[0, 1, 0, 1],
@@ -53,21 +76,30 @@ class ClassifierThresholdSelectionTests(unittest.TestCase):
 
 
     def test_identical_audio_bytes_under_different_names_cannot_cross_splits(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            first = root / "first.wav"
-            renamed_copy = root / "renamed-copy.wav"
-            third = root / "third.wav"
-            first.write_bytes(b"same reviewed audio bytes")
-            renamed_copy.write_bytes(b"same reviewed audio bytes")
-            third.write_bytes(b"different test audio")
-            groups = {
-                "train": [{"reciter_id": "reader-a", "recording_id": "recording-a", "audio_path": str(first)}],
-                "validation": [{"reciter_id": "reader-b", "recording_id": "recording-b", "audio_path": str(renamed_copy)}],
-                "test": [{"reciter_id": "reader-c", "recording_id": "recording-c", "audio_path": str(third)}],
-            }
-            with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
-                validate_classifier_split_isolation(groups)
+        first = self.root / "first.wav"
+        renamed_copy = self.root / "renamed-copy.wav"
+        third = self.root / "third.wav"
+        first.write_bytes(b"same reviewed audio bytes")
+        renamed_copy.write_bytes(b"same reviewed audio bytes")
+        third.write_bytes(b"different test audio")
+        groups = {
+            "train": [{"reciter_id": "reader-a", "recording_id": "recording-a", "audio_path": str(first)}],
+            "validation": [{"reciter_id": "reader-b", "recording_id": "recording-b", "audio_path": str(renamed_copy)}],
+            "test": [{"reciter_id": "reader-c", "recording_id": "recording-c", "audio_path": str(third)}],
+        }
+        with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
+            validate_classifier_split_isolation(groups)
+
+    def test_split_isolation_uses_real_files_before_checking_reciter_and_recording_ids(self):
+        groups = self.split_groups()
+        groups["validation"][0]["reciter_id"] = groups["train"][0]["reciter_id"]
+        with self.assertRaisesRegex(ValueError, "reciters_must_be_disjoint_across_splits"):
+            validate_classifier_split_isolation(groups)
+
+        groups = self.split_groups()
+        groups["test"][0]["recording_id"] = groups["validation"][0]["recording_id"]
+        with self.assertRaisesRegex(ValueError, "recordings_must_be_disjoint_across_splits"):
+            validate_classifier_split_isolation(groups)
 
 
 
