@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
-const [recite, api, riwayah, corpusRaw, surahsSource] = await Promise.all([
+const [recite, api, riwayah, corpusRaw, surahsSource, engineApi] = await Promise.all([
   read("../app/recite.tsx"),
   read("../api/analyze-recitation.ts"),
   read("../src/quran/riwayah.ts"),
   read("../src/quran/verified-corpus.json"),
   read("../src/quran/surahs.ts"),
+  read("../engine/tajweed_engine/api.py"),
 ]);
 const errors = [];
 const expectedCorpus = JSON.parse(corpusRaw);
@@ -61,10 +62,17 @@ if (!recite.includes('analysis?.tajweed?.status==="not_configured"')
 if (!api.includes('requestedRiwaya !== "hafs"')) {
   errors.push("Server analysis must reject unverified riwayat.");
 }
-if (!api.includes('if (result.status === "not_configured")')
-  || !api.includes('result.status !== "preliminary_findings"')
+if (!api.includes('result.status === "not_configured"')
+  || !api.includes('result.status !== "ok"')
+  || !api.includes('result.status === "alignment_low_confidence"')
   || !api.includes('result.status === "completed_no_confirmed_findings" && result.findings.length > 0')) {
-  errors.push("The client must preserve not-configured engine state and reject unsupported result statuses.");
+  errors.push("The client must map the owned-engine response contract and preserve non-ready states.");
+}
+if (!engineApi.includes('word_index - 1')
+  || !engineApi.includes('"wordIndex": word_index + 1')
+  || !engineApi.includes('"evidence": (')
+  || !engineApi.includes('word_alignment_confidence < minimum_word_confidence')) {
+  errors.push("The owned engine must normalize app word indexes, return adapter evidence, and gate weak word alignments.");
 }
 if (!api.includes("total > 20 * 1024 * 1024")) {
   errors.push("Audio upload size limit must remain enforced.");
