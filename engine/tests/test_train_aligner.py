@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from train_aligner import build_vocabulary, minimum_ctc_frames, transcript_for_row, validate_split_isolation
 
@@ -41,6 +43,25 @@ class AlignerTrainingDataTests(unittest.TestCase):
         ]
         with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
             validate_split_isolation(rows)
+
+
+    def test_identical_audio_bytes_under_different_names_cannot_cross_splits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.wav"
+            renamed_copy = root / "renamed-copy.wav"
+            third = root / "third.wav"
+            first.write_bytes(b"same reviewed audio bytes")
+            renamed_copy.write_bytes(b"same reviewed audio bytes")
+            third.write_bytes(b"different test audio")
+            rows = [
+                {"split": "train", "recording_id": "r1", "reciter_id": "a", "audio_path": str(first)},
+                {"split": "validation", "recording_id": "r2", "reciter_id": "b", "audio_path": str(renamed_copy)},
+                {"split": "test", "recording_id": "r3", "reciter_id": "c", "audio_path": str(third)},
+            ]
+            with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
+                validate_split_isolation(rows)
+
 
 
 if __name__ == "__main__":
