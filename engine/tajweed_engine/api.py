@@ -202,6 +202,16 @@ def score_aligned_candidates(
             continue
         seen.add(key)
         word = words[word_index]
+        word_alignment_confidence = word.get("alignmentConfidence")
+        minimum_word_confidence = aligner_metadata["minimum_mean_character_confidence"]
+        if (
+            isinstance(word_alignment_confidence, bool)
+            or not isinstance(word_alignment_confidence, (int, float))
+            or not math.isfinite(word_alignment_confidence)
+            or word_alignment_confidence < minimum_word_confidence
+        ):
+            # A strong global alignment must not hide a weakly aligned candidate word.
+            continue
 
         # Expand server-side alignment by 120 ms on each side, then match the
         # four-second right-padded window used by the supervised training script.
@@ -237,6 +247,11 @@ def score_aligned_candidates(
                 "startMs": word["startMs"],
                 "endMs": word["endMs"],
                 "confidence": round(confidence, 4),
+                "evidence": (
+                    "local_qalqalah_classifier_v1 "
+                    f"calibrated_probability={confidence:.4f} "
+                    f"ctc_word_alignment_confidence={float(word_alignment_confidence):.4f}"
+                ),
                 "status": "review_candidate",
             })
     return findings
