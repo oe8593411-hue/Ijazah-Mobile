@@ -7,7 +7,7 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import { getSelectedRiwayah, setSelectedRiwayah } from "../src/quran/riwayah";
 import { usePreferences } from "../src/preferences";
 import { SURAHS } from "../src/quran/surahs";
-import { getConsensusWordHighlights } from "../src/recitation/word-highlights";
+import { countNormalizedArabicWords, getConsensusWordHighlights } from "../src/recitation/word-highlights";
 
 const C={navy:"#071A33",navy2:"#102B49",cyan:"#35C7DE",soft:"#E5F8FC",ink:"#142A43",muted:"#788BA0",surface:"#F4F8FC",white:"#FFFFFF"};
 
@@ -444,7 +444,7 @@ export default function Recite(){
 }
 function renderAlignedWords(expected:string,heard:string,allowPrefix=false,nabr:any=null,selectedSurah=1,startAyah=1,analysis:any=null,analysisScope:"ayah"|"range"|"surah"="ayah"){
  const expectedWords=expected.split(/\s+/).filter(Boolean);
- const expectedWordCount=expectedWords.filter(word=>!/^﴿\d+﴾$/u.test(word)).length;
+ const expectedWordCount=expectedWords.reduce((count,word)=>count+countNormalizedArabicWords(word),0);
  const expectedReference={
   surah:selectedSurah,
   scope:analysisScope,
@@ -465,8 +465,14 @@ function renderAlignedWords(expected:string,heard:string,allowPrefix=false,nabr:
  return expectedWords.map((word,index)=>{
   const marker=word.match(/^﴿(\d+)﴾$/u);
   if(marker){currentAyah=Number(marker[1])+1;wordIndex=0;return <Text key={index} style={{color:"#B89B5A"}}>{word} </Text>;}
-  const thisWord=wordIndex++;
-  const flatWordIndex=expectedIndex++;
+  const normalizedWordCount=countNormalizedArabicWords(word);
+  if(normalizedWordCount===0)return <Text key={index}>{word} </Text>;
+  const thisWord=wordIndex;
+  const flatWordIndex=expectedIndex;
+  wordIndex+=normalizedWordCount;
+  expectedIndex+=normalizedWordCount;
+  // A token that normalizes to multiple reference words cannot be highlighted safely as one glyph span.
+  if(normalizedWordCount!==1)return <Text key={index}>{word} </Text>;
   const wordKey=[selectedSurah,currentAyah,thisWord+1].join(":");
   const confirmedWrong=consensus.wrongWordKeys.has(wordKey);
   const confirmedCorrect=consensus.matchedExpectedIndexes.has(flatWordIndex);

@@ -93,7 +93,9 @@ if (!riwayah.includes('name === "حفص عن عاصم" ? "verified_hafs_only" as
 }
 
 const usesConsensusHighlights = recite.includes("getConsensusWordHighlights(analysis,expectedReference,expectedWordCount)")
-  && recite.includes('analysis,fullSurahMode?"surah":continuousMode?"range":"ayah"');
+  && recite.includes('analysis,fullSurahMode?"surah":continuousMode?"range":"ayah"')
+  && recite.includes("countNormalizedArabicWords(word)")
+  && wordHighlights.includes("export function countNormalizedArabicWords");
 const requiresConsensusForHighlights = wordHighlights.includes('analysis.confidence === "corroborated"')
   && wordHighlights.includes("gate?.canReleaseResults === true")
   && wordHighlights.includes('reference.riwaya === "حفص عن عاصم"')

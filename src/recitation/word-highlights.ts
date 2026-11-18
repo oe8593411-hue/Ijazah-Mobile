@@ -12,6 +12,20 @@ export type ConsensusWordHighlights = {
   wrongWordKeys: Set<string>;
 };
 
+/** Count visible reference words using the same normalization as the server matcher. */
+export function countNormalizedArabicWords(value: string): number {
+  return value.normalize("NFC")
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ـ/g, "")
+    .replace(/[^\u0621-\u064A\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean).length;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

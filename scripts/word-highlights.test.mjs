@@ -10,7 +10,7 @@ const javascript = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const moduleUrl = "data:text/javascript;base64," + Buffer.from(javascript).toString("base64");
-const { getConsensusWordHighlights } = await import(moduleUrl);
+const { countNormalizedArabicWords, getConsensusWordHighlights } = await import(moduleUrl);
 
 const reference = { surah: 1, riwaya: "حفص عن عاصم", scope: "range", startAyah: 2 };
 const expected = { surah: 1, scope: "range", startAyah: 2 };
@@ -72,4 +72,12 @@ test("rejects stale surah, ayah, range, or riwayah results", () => {
   }
   const wrongScope = getConsensusWordHighlights(base, { surah: 1, scope: "ayah", ayah: 2 }, 4);
   assert.equal(wrongScope.matchedExpectedIndexes.size, 0);
+});
+
+
+test("counts words with the same Quran text normalization as the server", () => {
+  assert.equal(countNormalizedArabicWords("بِسْمِ"), 1);
+  assert.equal(countNormalizedArabicWords("۞"), 0);
+  assert.equal(countNormalizedArabicWords("﴿1﴾"), 0);
+  assert.equal(countNormalizedArabicWords("كلمة،أخرى"), 2);
 });
