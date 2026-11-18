@@ -1,7 +1,7 @@
 name: Tajweed Engine Tests
 on:
   push:
-    branches: [feature/mushaf-first-tasmee]
+    branches: [feature/mushaf-first-tasmee, automation/daily-development]
     paths:
       - 'engine/**'
       - '.github/workflows/tajweed-engine-tests.yml'
