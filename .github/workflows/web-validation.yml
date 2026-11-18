@@ -2,7 +2,7 @@ name: Ijazah Web Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, automation/daily-development]
   pull_request:
     branches: [main, feature/mushaf-first-tasmee]
 
@@ -24,6 +24,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm install
+      - name: Test consensus-gated Quran word highlights
+        run: npm run test:word-highlights
       - name: Check Expo configuration
         run: npx expo-doctor
       - name: Verify recitation safety invariants
