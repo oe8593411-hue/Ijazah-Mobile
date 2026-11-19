@@ -81,6 +81,15 @@ class ClassifierManifestGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
             validate_classifier_split_isolation(groups)
 
+    def test_identical_audio_bytes_under_different_names_cannot_cross_splits(self):
+        groups = self.split_groups()
+        duplicate = self.root / "renamed-copy.wav"
+        duplicate.write_bytes(Path(self.audio_paths["train.wav"]).read_bytes())
+        groups["validation"][0]["audio_path"] = str(duplicate)
+
+        with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
+            validate_classifier_split_isolation(groups)
+
     def test_reciter_and_recording_isolation_are_checked(self):
         groups = self.split_groups()
         groups["validation"][0]["reciter_id"] = groups["train"][0]["reciter_id"]
