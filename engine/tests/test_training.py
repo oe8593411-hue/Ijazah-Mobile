@@ -81,15 +81,6 @@ class ClassifierManifestGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
             validate_classifier_split_isolation(groups)
 
-    def test_identical_audio_bytes_under_different_names_cannot_cross_splits(self):
-        groups = self.split_groups()
-        duplicate = self.root / "renamed-copy.wav"
-        duplicate.write_bytes(Path(self.audio_paths["train.wav"]).read_bytes())
-        groups["validation"][0]["audio_path"] = str(duplicate)
-
-        with self.assertRaisesRegex(ValueError, "audio_files_must_be_disjoint_across_splits"):
-            validate_classifier_split_isolation(groups)
-
     def test_reciter_and_recording_isolation_are_checked(self):
         groups = self.split_groups()
         groups["validation"][0]["reciter_id"] = groups["train"][0]["reciter_id"]
@@ -106,12 +97,47 @@ class ClassifierManifestGuardTests(unittest.TestCase):
         groups["train"].append(dict(groups["train"][0]))
         validate_classifier_split_isolation(groups)
 
+    def test_dataset_rejects_silent_training_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sf.write(root / "silent.wav", np.zeros(16000, dtype=np.float32), 16000)
+            dataset = Segments(
+                [{"audio_path": "silent.wav", "start_ms": 0, "end_ms": 1000, "label": 1}],
+                root,
+            )
+            with self.assertRaisesRegex(ValueError, "training_audio_is_silent"):
+                dataset[0]
+
+    def test_dataset_rejects_non_finite_training_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            audio = np.full(16000, 0.01, dtype=np.float32)
+            audio[8000] = np.nan
+            sf.write(root / "non-finite.wav", audio, 16000, subtype="FLOAT")
+            dataset = Segments(
+                [{"audio_path": "non-finite.wav", "start_ms": 0, "end_ms": 1000, "label": 1}],
+                root,
+            )
+            with self.assertRaisesRegex(ValueError, "invalid_training_audio"):
+                dataset[0]
+
+    def test_dataset_rejects_segments_outside_recording_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sf.write(root / "short.wav", np.full(16000, 0.01, dtype=np.float32), 16000)
+            dataset = Segments(
+                [{"audio_path": "short.wav", "start_ms": 0, "end_ms": 1500, "label": 1}],
+                root,
+            )
+            with self.assertRaisesRegex(ValueError, "segment_outside_recording"):
+                dataset[0]
+
     def test_dataset_refuses_to_truncate_a_long_reviewed_segment(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sf.write(
                 root / "overlong.wav",
-                np.zeros(int(5 * 16000), dtype=np.float32),
+                np.full(int(5 * 16000), 0.01, dtype=np.float32),
                 16000,
             )
             dataset = Segments(

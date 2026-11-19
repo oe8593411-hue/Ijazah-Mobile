@@ -72,11 +72,30 @@ class Segments(Dataset):
         path = Path(r["audio_path"])
         if not path.is_absolute():
             path = self.root / path
-        a, sr = sf.read(path, dtype="float32", always_2d=True)
-        a = librosa.resample(a.mean(axis=1), orig_sr=sr, target_sr=SAMPLE_RATE)
+        audio, sample_rate = sf.read(path, dtype="float32", always_2d=True)
+        if sample_rate <= 0 or audio.size == 0 or not np.isfinite(audio).all():
+            raise ValueError("invalid_training_audio")
+
+        duration_ms = audio.shape[0] * 1000.0 / sample_rate
+        validate_segment_timestamps(r["start_ms"], r["end_ms"], duration_ms)
+        validate_classifier_segment_duration(r["start_ms"], r["end_ms"])
+
+        audio = audio.mean(axis=1)
+        if sample_rate != SAMPLE_RATE:
+            audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=SAMPLE_RATE).astype(np.float32)
+        if audio.size == 0 or not np.isfinite(audio).all():
+            raise ValueError("invalid_training_audio")
+
         start = int(r["start_ms"] * SAMPLE_RATE / 1000)
         end = int(r["end_ms"] * SAMPLE_RATE / 1000)
-        segment = a[start:end]
+        if start < 0 or end > len(audio) or end <= start:
+            raise ValueError("training_segment_duration_invalid")
+        segment = audio[start:end]
+        if len(segment) < int(0.25 * SAMPLE_RATE):
+            raise ValueError("training_segment_duration_invalid")
+        if float(np.max(np.abs(segment))) < 1e-4:
+            raise ValueError("training_audio_is_silent")
+
         # Keep the complete reviewed segment; never silently crop a labelled example.
         max_samples = int(SAMPLE_RATE * MAX_SEGMENT_SECONDS)
         if len(segment) > max_samples:
