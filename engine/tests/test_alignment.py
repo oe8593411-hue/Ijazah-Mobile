@@ -71,6 +71,37 @@ class CTCViterbiAlignmentTests(unittest.TestCase):
             ctc_viterbi_align(np.ones((3, 3)), [0], blank_id=2)
 
 
+    def test_preserves_long_breath_pause_between_repeated_words(self):
+        # 0=ا, 1=ب, 2=CTC blank. The same word is read twice with a
+        # long silence/breath between repetitions; alignment must not bridge it.
+        path = [2, 2, 0, 1, 2, 2, 2, 2, 2, 2, 0, 1, 2, 2]
+        emissions = make_log_probabilities(path, 3)
+        result = align_reference_words(
+            emissions, "اب اب", {"ا": 0, "ب": 1}, blank_id=2,
+            sample_rate=16000, frame_hop_samples=160, duration_ms=140,
+            minimum_mean_character_confidence=0.8,
+        )
+        first, second = result["words"]
+        self.assertEqual((first["startMs"], first["endMs"]), (20, 40))
+        self.assertEqual((second["startMs"], second["endMs"]), (100, 120))
+        self.assertGreater(second["startMs"], first["endMs"])
+        self.assertGreaterEqual(second["startMs"] - first["endMs"], 50)
+
+    def test_keeps_leading_and_trailing_silence_outside_word_timestamps(self):
+        # Leading and trailing breath/silence should not stretch the word span.
+        path = [2, 2, 2, 0, 1, 2, 2]
+        emissions = make_log_probabilities(path, 3)
+        result = align_reference_words(
+            emissions, "اب", {"ا": 0, "ب": 1}, blank_id=2,
+            sample_rate=16000, frame_hop_samples=160, duration_ms=70,
+            minimum_mean_character_confidence=0.8,
+        )
+        word = result["words"][0]
+        self.assertEqual((word["startMs"], word["endMs"]), (30, 50))
+        self.assertGreater(word["startMs"], 0)
+        self.assertLess(word["endMs"], 70)
+
+
 class AlignerMetadataTests(unittest.TestCase):
     def valid_metadata(self):
         return {
@@ -171,34 +202,3 @@ class TrainingSplitIsolationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-    def test_preserves_long_breath_pause_between_repeated_words(self):
-        # 0=ا, 1=ب, 2=CTC blank. The same word is read twice with a
-        # long silence/breath between repetitions; alignment must not bridge it.
-        path = [2, 2, 0, 1, 2, 2, 2, 2, 2, 2, 0, 1, 2, 2]
-        emissions = make_log_probabilities(path, 3)
-        result = align_reference_words(
-            emissions, "اب اب", {"ا": 0, "ب": 1}, blank_id=2,
-            sample_rate=16000, frame_hop_samples=160, duration_ms=140,
-            minimum_mean_character_confidence=0.8,
-        )
-        first, second = result["words"]
-        self.assertEqual((first["startMs"], first["endMs"]), (20, 40))
-        self.assertEqual((second["startMs"], second["endMs"]), (100, 120))
-        self.assertGreater(second["startMs"], first["endMs"])
-        self.assertGreaterEqual(second["startMs"] - first["endMs"], 50)
-
-    def test_keeps_leading_and_trailing_silence_outside_word_timestamps(self):
-        # Leading and trailing breath/silence should not stretch the word span.
-        path = [2, 2, 2, 0, 1, 2, 2]
-        emissions = make_log_probabilities(path, 3)
-        result = align_reference_words(
-            emissions, "اب", {"ا": 0, "ب": 1}, blank_id=2,
-            sample_rate=16000, frame_hop_samples=160, duration_ms=70,
-            minimum_mean_character_confidence=0.8,
-        )
-        word = result["words"][0]
-        self.assertEqual((word["startMs"], word["endMs"]), (30, 50))
-        self.assertGreater(word["startMs"], 0)
-        self.assertLess(word["endMs"], 70)
