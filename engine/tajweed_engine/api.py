@@ -24,6 +24,9 @@ from .reference import get_corpus, normalize_reference, validate_reference
 
 app = FastAPI(title="Ijazah Acoustic Tajweed Engine", version="0.3.0")
 TOKEN = os.getenv("IJAZAH_TAJWEED_ENGINE_TOKEN", "")
+MAX_REFERENCE_TEXT_BYTES = 4 * 1024
+MAX_RULE_CHECKS_JSON_BYTES = 64 * 1024
+
 MODEL_DIR = Path(os.getenv("IJAZAH_ENGINE_MODEL_DIR", "/models"))
 MODEL_PATH = MODEL_DIR / "qalqalah_classifier.pt"
 ALIGNER_PATH = MODEL_DIR / "quran_ctc_aligner.pt"
@@ -297,6 +300,10 @@ async def analyze(
         raise HTTPException(status_code=400, detail="invalid_reference")
     if not referenceText.strip():
         raise HTTPException(status_code=400, detail="missing_reference_text")
+    if len(referenceText.encode("utf-8")) > MAX_REFERENCE_TEXT_BYTES:
+        raise HTTPException(status_code=413, detail="reference_text_too_large")
+    if len(expectedRuleChecks.encode("utf-8")) > MAX_RULE_CHECKS_JSON_BYTES:
+        raise HTTPException(status_code=413, detail="rule_checks_payload_too_large")
     try:
         get_corpus()
     except FileNotFoundError as exc:
