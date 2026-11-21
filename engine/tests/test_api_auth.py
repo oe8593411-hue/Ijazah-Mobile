@@ -432,6 +432,43 @@ class AnalyzeReferenceGateTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(upload.read_called)
 
 
+class AnalyzeRequestSizeGuardTests(unittest.IsolatedAsyncioTestCase):
+    class FakeUpload:
+        read_called = False
+        async def read(self, limit):
+            self.read_called = True
+            return b"fake-audio"
+
+    async def test_oversized_reference_text_rejected_before_corpus_or_audio_read(self):
+        upload = self.FakeUpload()
+        with patch.object(api, "authorize"), patch.object(api, "get_corpus") as corpus:
+            with self.assertRaises(HTTPException) as ctx:
+                await api.analyze(
+                    file=upload, surah=1, ayah=1, riwaya="hafs",
+                    referenceText="x" * (api.MAX_REFERENCE_TEXT_BYTES + 1),
+                    expectedRuleChecks="[]", authorization="Bearer test",
+                )
+        self.assertEqual(ctx.exception.status_code, 413)
+        self.assertEqual(ctx.exception.detail, "reference_text_too_large")
+        corpus.assert_not_called()
+        self.assertFalse(upload.read_called)
+
+    async def test_oversized_rule_checks_rejected_before_corpus_or_audio_read(self):
+        upload = self.FakeUpload()
+        with patch.object(api, "authorize"), patch.object(api, "get_corpus") as corpus:
+            with self.assertRaises(HTTPException) as ctx:
+                await api.analyze(
+                    file=upload, surah=1, ayah=1, riwaya="hafs",
+                    referenceText="بسم الله الرحمن الرحيم",
+                    expectedRuleChecks=" " * (api.MAX_RULE_CHECKS_JSON_BYTES + 1),
+                    authorization="Bearer test",
+                )
+        self.assertEqual(ctx.exception.status_code, 413)
+        self.assertEqual(ctx.exception.detail, "rule_checks_payload_too_large")
+        corpus.assert_not_called()
+        self.assertFalse(upload.read_called)
+
+
 class AnalyzeFailClosedTests(unittest.IsolatedAsyncioTestCase):
     async def test_client_timestamps_never_produce_findings_without_server_aligner(self):
         import json
