@@ -17,3 +17,9 @@ Branch: `security/ai4x-api-audit`
 ## Commits
 - `a0116d6`: Stop trusting spoofable forwarded IP headers.
 - `d5e7222`: Bound audio metadata before PCM decoding.
+
+
+## Endpoint security lock (latest)
+- Added an unconditional fail-closed 503 security lock at the top of the analysis handler. The lock is not controlled by an environment variable and prevents transcription/provider spend while verified server authentication and shared quotas remain absent.
+- The previous handler body remains below this lock as inactive code and must not be reactivated until authentication, atomic shared quotas, concurrent tests, and independent review are completed.
+- Commit: `a126e2e`.
