@@ -6,6 +6,7 @@ Branch: `security/ai4x-api-audit`
 - API IP limiter no longer trusts client-supplied `X-Forwarded-For` or `X-Real-IP`. It uses the socket address only; if unavailable, the limiter rejects.
 - The instance-local IP map has an explicit key cap and prunes expired keys, then rejects rather than continuing to grow.
 - Audio decode path inspects metadata before allocating decoded PCM: duration/frame count, sample rate and channel count are bounded; checks decoded array shape against inspected metadata.
+- Multi-ayah/surah analysis requests over 10 ayahs are rejected before audio is read or transcription providers are called, limiting large-range cost and alignment work.
 
 ## Important residual risks
 - Instance-local IP throttling is not distributed: it can be bypassed across serverless instances and may not identify client IP behind hosting proxies. This is explicitly defense-in-depth only.
