@@ -10,20 +10,20 @@ type AnalysisRateWindow = { startedAt: number; count: number };
 const analysisRateWindows = new Map<string, AnalysisRateWindow>();
 const ANALYSIS_RATE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ANALYSIS_REQUESTS_PER_WINDOW = 3;
+const MAX_RATE_KEYS = 2000;
 
+/** Never trust client-provided forwarded IP headers; host proxy sanitation is unverified.
+ * This instance-local limiter is defense-in-depth only, not a shared abuse-control boundary.
+ */
 function analysisClientIp(req: any) {
-  const real = req.headers?.["x-real-ip"];
-  if (typeof real === "string" && real.trim()) return real.trim();
-  const forwarded = req.headers?.["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",").pop()?.trim() || "unknown";
-  }
-  return req.socket?.remoteAddress || "unknown";
+  const ip = req.socket?.remoteAddress;
+  return typeof ip === "string" && ip.trim() ? ip.trim() : "unknown";
 }
 
 function allowAnalysisRequest(req: any) {
   const now = Date.now();
   const ip = analysisClientIp(req);
+  if (ip === "unknown") return false;
   let state = analysisRateWindows.get(ip);
   if (!state || now - state.startedAt >= ANALYSIS_RATE_WINDOW_MS) {
     state = { startedAt: now, count: 0 };
@@ -31,12 +31,11 @@ function allowAnalysisRequest(req: any) {
   }
   if (state.count >= MAX_ANALYSIS_REQUESTS_PER_WINDOW) return false;
   state.count += 1;
-
-  // Bound memory if many source addresses hit a warm serverless instance.
-  if (analysisRateWindows.size > 2000) {
+  if (analysisRateWindows.size > MAX_RATE_KEYS) {
     for (const [key, value] of analysisRateWindows) {
       if (now - value.startedAt >= ANALYSIS_RATE_WINDOW_MS) analysisRateWindows.delete(key);
     }
+    if (analysisRateWindows.size > MAX_RATE_KEYS) return false;
   }
   return true;
 }
