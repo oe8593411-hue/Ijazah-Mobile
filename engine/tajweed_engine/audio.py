@@ -67,16 +67,29 @@ def decode_audio(raw: bytes):
         raise ValueError("invalid_audio_size")
     used_ffmpeg = False
     try:
+        # Inspect metadata before allocating decoded PCM.
+        info = sf.info(io.BytesIO(raw))
+        if (info.samplerate <= 0 or info.frames <= 0 or info.channels < 1
+            or info.channels > 8 or info.samplerate > 192_000
+            or info.frames > int(info.samplerate * MAX_SECONDS)):
+            raise ValueError("audio_metadata_out_of_bounds")
+        duration = info.frames / float(info.samplerate)
+        if not np.isfinite(duration) or duration <= 0 or duration > MAX_SECONDS:
+            raise ValueError("audio_segment_too_long")
         audio, sr = sf.read(io.BytesIO(raw), dtype="float32", always_2d=True)
+        if audio.ndim != 2 or audio.shape[0] != info.frames or audio.shape[1] != info.channels:
+            raise ValueError("audio_decode_shape_invalid")
+        mono = audio.mean(axis=1)
+    except ValueError as exc:
+        if str(exc) in ("audio_metadata_out_of_bounds", "audio_segment_too_long", "audio_decode_shape_invalid"):
+            raise
+        mono, duration = _decode_with_ffmpeg(raw)
+        sr = SAMPLE_RATE
+        used_ffmpeg = True
     except Exception:
         mono, duration = _decode_with_ffmpeg(raw)
         sr = SAMPLE_RATE
         used_ffmpeg = True
-    else:
-        if sr <= 0 or audio.size == 0:
-            raise ValueError("unsupported_or_corrupt_audio")
-        mono = audio.mean(axis=1)
-        duration = len(mono) / float(sr)
 
     if len(mono) < int(.25 * sr):
         raise ValueError("audio_too_short")
