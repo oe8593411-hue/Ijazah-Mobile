@@ -357,6 +357,12 @@ export default async function handler(req: any, res: any) {
       : surahAyahs.find(item => item.ayah === ayah);
   if (!target || !target.text) return res.status(404).json({ error: scope === "ayah" ? "ayah_not_found" : "surah_or_range_not_found" });
   const expectedAyahs = scope === "range" ? rangeAyahs : scope === "surah" ? surahAyahs : [target as Ayah];
+
+  // Avoid expensive full-surah requests until authenticated, chunked analysis and shared quotas exist.
+  const MAX_MULTI_AYAH_ANALYSIS = 10;
+  if (scope !== "ayah" && expectedAyahs.length > MAX_MULTI_AYAH_ANALYSIS) {
+    return res.status(422).json({ error: "analysis_range_too_large", message: "التحليل المتصل محدود حاليًا بعشرة آيات كحد أقصى لحماية الموارد؛ اختر نطاقًا أقصر." });
+  }
   const expectedWordLocations = expectedAyahs.flatMap(item =>
     normalizeArabic(item.text).split(" ").filter(Boolean).map((_, index) => ({ surah: item.surah, ayah: item.ayah, wordIndex: index + 1 }))
   );
