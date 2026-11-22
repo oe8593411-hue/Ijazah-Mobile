@@ -315,10 +315,15 @@ async function runSpecializedTajweedEngine(audioBytes: Uint8Array, contentType: 
 export default async function handler(req: any, res: any) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  // SECURITY LOCK: no verified server-side user-authentication integration exists for this route yet.
+  // This lock cannot be overridden by environment variables; remove only after auth + shared quota are implemented and reviewed.
+  return res.status(503).json({ error: "analysis_security_lock", message: "خدمة التحليل مغلقة حتى اكتمال المصادقة والتحكم المشترك في الاستخدام." });
+  /*
   // Keep public transcription spending disabled until app authentication and per-user rate limits are wired in.
   if (process.env.IJAZAH_ANALYSIS_ENABLED !== "true") {
     return res.status(503).json({ error: "analysis_not_enabled", message: "خدمة التحليل لم تُفعّل بعد؛ يجب إكمال المصادقة وحدود الاستخدام قبل فتحها للمستخدمين." });
   }
+  */
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "analysis_not_configured", message: "خادم التحليل يحتاج إلى ضبط مفتاح مزود الذكاء الاصطناعي." });
   if (!allowAnalysisRequest(req)) {
