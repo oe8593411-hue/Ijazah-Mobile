@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeArabic, wordCost, costState, alignFrom, emptyTrack,
-  readFinal, endSpeech, startSpeech, readResults,
+  readFinal, endSpeech, startSpeech, readResults, takeSpeech,
 } from "../src/recitation/matching.ts";
 
 test("normalizes Arabic diacritics and dagger alif without changing the base word", () => {
@@ -65,4 +65,55 @@ test("recognizer confidence values outside 0..1 are discarded", () => {
   const list = [Object.assign([{ transcript: "الحمد", confidence: 1.5 }], { isFinal: false })];
   const parsed = readResults(list);
   assert.deepEqual(parsed[0].confidences, [undefined]);
+});
+
+
+test("final results advance once, interim words remain provisional, and a restarted session resumes at the cursor", () => {
+  const expected = ["الحمد", "لله", "رب", "العالمين"];
+  let track = emptyTrack(expected.length);
+  let speech = startSpeech(track);
+
+  let event = takeSpeech(expected, track, speech, [
+    { alts: ["الحمد"], confidences: [undefined], isFinal: true },
+    { alts: ["لله"], confidences: [undefined], isFinal: false },
+  ]);
+  track = event.track;
+  speech = event.speech;
+  assert.equal(track.cursor, 1);
+  assert.equal(track.states[0], "ok");
+  assert.equal(track.states[1], undefined);
+  assert.equal(event.view.cursor, 2);
+
+  event = takeSpeech(expected, track, speech, [
+    { alts: ["الحمد"], confidences: [undefined], isFinal: true },
+    { alts: ["لله"], confidences: [undefined], isFinal: true },
+    { alts: ["رب"], confidences: [undefined], isFinal: false },
+  ]);
+  track = event.track;
+  speech = event.speech;
+  assert.equal(track.cursor, 2);
+  assert.equal(track.states[1], "ok");
+  assert.equal(track.states[2], undefined);
+  assert.equal(event.view.cursor, 3);
+
+  // A duplicate event must not consume already-final results a second time.
+  event = takeSpeech(expected, track, speech, [
+    { alts: ["الحمد"], confidences: [undefined], isFinal: true },
+    { alts: ["لله"], confidences: [undefined], isFinal: true },
+    { alts: ["رب"], confidences: [undefined], isFinal: false },
+  ]);
+  track = event.track;
+  speech = event.speech;
+  assert.equal(track.cursor, 2);
+
+  track = endSpeech(expected, track, speech);
+  assert.equal(track.cursor, 2);
+  assert.equal(track.states[2], undefined);
+
+  // A fresh recognizer session starts from the last committed word.
+  const resumed = takeSpeech(expected, track, startSpeech(track), [
+    { alts: ["رب"], confidences: [undefined], isFinal: true },
+  ]);
+  assert.equal(resumed.track.cursor, 3);
+  assert.equal(resumed.track.states[2], "ok");
 });
