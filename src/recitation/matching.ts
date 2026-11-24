@@ -94,7 +94,13 @@ export function emptyTrack(n: number): Track {
 // Aligns the heard words with the verified words from `from` on. It may skip verified words (at a cost),
 // and it may ignore heard words. Returns the cells of the verified words it covers, and the new cursor.
 export function alignFrom(expected: string[], from: number, heard: string[]) {
-  const W = Math.min(expected.length - from, 90);
+  // Guard the alignment boundary: a stale or corrupt cursor beyond the verified text
+  // must not produce a negative cell-array size or invent words past the Quran text.
+  const start = Math.max(0, Math.min(Number.isFinite(from) ? Math.floor(from) : 0, expected.length));
+  if (start >= expected.length) {
+    return { cursor: expected.length, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
+  }
+  const W = Math.min(expected.length - start, 90);
   const m = heard.length;
   const INF = 1e9;
   const D: number[][] = Array.from({ length: m + 1 }, () => Array(W + 1).fill(INF));
@@ -104,14 +110,14 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
   for (let i = 1; i <= m; i++) {
     D[i][0] = D[i - 1][0] + EXTRA_COST; B[i][0] = "I";
     for (let j = 1; j <= W; j++) {
-      const e = expected[from + j - 1];
+      const e = expected[start + j - 1];
       let best = D[i - 1][j - 1] + wordCost(e, heard[i - 1]);
       let op = "S";
       const tryOp = (cost: number, name: string) => { if (cost < best) { best = cost; op = name; } };
       tryOp(D[i][j - 1] + MISS_COST, "D");
       tryOp(D[i - 1][j] + EXTRA_COST, "I");
       if (i >= 2) tryOp(D[i - 2][j - 1] + wordCost(e, heard[i - 2] + heard[i - 1]) + JOIN_COST, "M");
-      if (j >= 2) tryOp(D[i - 1][j - 2] + wordCost(expected[from + j - 2] + e, heard[i - 1]) + JOIN_COST, "P");
+      if (j >= 2) tryOp(D[i - 1][j - 2] + wordCost(expected[start + j - 2] + e, heard[i - 1]) + JOIN_COST, "P");
       D[i][j] = best;
       B[i][j] = op;
     }
@@ -126,7 +132,7 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
   while (i > 0 || j > 0) {
     const op = i === 0 ? "D" : j === 0 ? "I" : B[i][j];
     if (op === "S") {
-      cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 1])), heard: heard[i - 1] };
+      cells[j - 1] = { state: costState(wordCost(expected[start + j - 1], heard[i - 1])), heard: heard[i - 1] };
       i--; j--;
     } else if (op === "D") {
       missed[j - 1] = true;
@@ -135,10 +141,10 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
       i--;
     } else if (op === "M") {
       const joined = heard[i - 2] + " " + heard[i - 1];
-      cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 2] + heard[i - 1])), heard: joined };
+      cells[j - 1] = { state: costState(wordCost(expected[start + j - 1], heard[i - 2] + heard[i - 1])), heard: joined };
       i -= 2; j--;
     } else {
-      const c = costState(wordCost(expected[from + j - 2] + expected[from + j - 1], heard[i - 1]));
+      const c = costState(wordCost(expected[start + j - 2] + expected[start + j - 1], heard[i - 1]));
       cells[j - 2] = { state: c, heard: heard[i - 1] };
       cells[j - 1] = cells[j - 2];
       i--; j -= 2;
@@ -150,7 +156,7 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
     const run = (c > 0 && missed[c - 1]) || (c + 1 < jEnd && missed[c + 1]);
     cells[c] = { state: run ? "skipped" : "unsure" };
   }
-  return { cursor: from + jEnd, cells, cost: D[m][jEnd] };
+  return { cursor: start + jEnd, cells, cost: D[m][jEnd] };
 }
 
 // What the recognizer has said in one session. Its results are cumulative: the first `done` of them are final
