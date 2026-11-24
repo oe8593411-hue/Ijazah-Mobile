@@ -117,3 +117,10 @@ test("final results advance once, interim words remain provisional, and a restar
   assert.equal(resumed.track.cursor, 3);
   assert.equal(resumed.track.states[2], "ok");
 });
+
+test("alignment clamps a stale cursor past the verified text and does not invent words", () => {
+  const result = alignFrom(["الحمد"], 2, ["لله"]);
+  assert.equal(result.cursor, 1);
+  assert.deepEqual(result.cells, []);
+  assert.equal(result.cost, 0.8);
+});
