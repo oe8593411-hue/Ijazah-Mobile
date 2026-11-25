@@ -211,11 +211,16 @@ export function pendingWords(expected: string[], speech: Speech) {
 
 // Writes an alignment onto the track, from the word where it starts.
 export function applyAlignment(track: Track, from: number, r: { cursor: number; cells: (Cell | undefined)[] }): Track {
-  const next: Track = { text: track.text, cursor: r.cursor, states: track.states.slice(), heardAt: track.heardAt.slice() };
-  r.cells.forEach((c, k) => {
+  // Guard writes as well as the DP boundary: a stale, negative, fractional, or
+  // non-finite cursor must never create non-array properties or silently miss cells.
+  const safeFrom = Math.max(0, Math.min(Number.isFinite(from) ? Math.floor(from) : 0, track.states.length));
+  const rawCursor = Number.isFinite(r.cursor) ? Math.floor(r.cursor) : safeFrom;
+  const safeCursor = Math.max(safeFrom, Math.min(rawCursor, track.states.length));
+  const next: Track = { text: track.text, cursor: safeCursor, states: track.states.slice(), heardAt: track.heardAt.slice() };
+  r.cells.slice(0, safeCursor - safeFrom).forEach((c, k) => {
     if (!c) return;
-    next.states[from + k] = c.state;
-    next.heardAt[from + k] = c.state === "bad" ? c.heard : undefined;
+    next.states[safeFrom + k] = c.state;
+    next.heardAt[safeFrom + k] = c.state === "bad" ? c.heard : undefined;
   });
   return next;
 }
