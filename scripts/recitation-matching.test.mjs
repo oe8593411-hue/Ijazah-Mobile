@@ -124,3 +124,15 @@ test("alignment clamps a stale cursor past the verified text and does not invent
   assert.deepEqual(result.cells, []);
   assert.equal(result.cost, 0.8);
 });
+
+
+test("a negative fractional cursor is normalized before alignment state writes", () => {
+  const track = emptyTrack(2);
+  track.cursor = -0.5;
+  const repaired = readFinal(["الحمد", "لله"], track, ["الحمد"], [undefined]);
+  assert.equal(repaired.cursor, 1);
+  assert.equal(repaired.states[0], "ok");
+  assert.equal(repaired.states[1], undefined);
+  assert.equal(repaired.states.length, 2);
+  assert.deepEqual(Object.keys(repaired.states), ["0", "1"]);
+});
