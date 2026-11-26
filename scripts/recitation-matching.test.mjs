@@ -126,6 +126,14 @@ test("alignment clamps a stale cursor past the verified text and does not invent
 });
 
 
+test("oversized recognizer transcripts fail closed before alignment allocation", () => {
+  const heard = Array.from({ length: 181 }, (_, i) => `token${i}`);
+  const result = alignFrom(["الحمد", "لله"], 0, heard);
+  assert.equal(result.cursor, 0);
+  assert.deepEqual(result.cells, []);
+  assert.equal(result.cost, heard.length * 0.8);
+});
+
 test("a negative fractional cursor is normalized before alignment state writes", () => {
   const track = emptyTrack(2);
   track.cursor = -0.5;
