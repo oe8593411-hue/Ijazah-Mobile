@@ -57,6 +57,11 @@ export function readResults(list: any): Heard[] {
   return out;
 }
 
+// Bound recognizer input before allocating the dynamic-programming matrices.
+// The aligner examines at most 90 Quran words per window; 180 heard tokens
+// allows generous split-token noise while failing closed on oversized transcripts.
+const MAX_HEARD_WORDS = 180;
+
 // ---------- Alignment of the heard words with the verified words ----------
 
 // The recognizer may drop a word, add a filler, write two words as one, or one word as two.
@@ -99,6 +104,10 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
   const start = Math.max(0, Math.min(Number.isFinite(from) ? Math.floor(from) : 0, expected.length));
   if (start >= expected.length) {
     return { cursor: expected.length, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
+  }
+  if (heard.length > MAX_HEARD_WORDS) {
+    // Avoid unbounded O(heard × expected) memory/time and never fabricate progress.
+    return { cursor: start, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
   }
   const W = Math.min(expected.length - start, 90);
   const m = heard.length;
