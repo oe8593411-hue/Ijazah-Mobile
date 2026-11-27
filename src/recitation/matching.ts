@@ -79,14 +79,16 @@ export function emptyTrack(n: number): Track {
 
 // Aligns the heard words with the verified words from `from` on. It may skip verified words (at a cost),
 // and it may ignore heard words. Returns the cells of the verified words it covers, and the new cursor.
-export function alignFrom(expected: string[], from: number, heard: string[]) {
+// The first `optional` verified words (the basmala at the start of a surah) cost nothing when they are skipped
+// before anything is heard: a reader who does not say the basmala is not marked for it.
+export function alignFrom(expected: string[], from: number, heard: string[], optional = 0) {
   const W = Math.min(expected.length - from, 90);
   const m = heard.length;
   const INF = 1e9;
   const D: number[][] = Array.from({ length: m + 1 }, () => Array(W + 1).fill(INF));
   const B: string[][] = Array.from({ length: m + 1 }, () => Array(W + 1).fill(""));
   D[0][0] = 0;
-  for (let j = 1; j <= W; j++) { D[0][j] = D[0][j - 1] + MISS_COST; B[0][j] = "D"; }
+  for (let j = 1; j <= W; j++) { D[0][j] = D[0][j - 1] + (from + j - 1 < optional ? 0 : MISS_COST); B[0][j] = "D"; }
   for (let i = 1; i <= m; i++) {
     D[i][0] = D[i - 1][0] + EXTRA_COST; B[i][0] = "I";
     for (let j = 1; j <= W; j++) {
@@ -115,7 +117,7 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
       cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 1])), heard: heard[i - 1] };
       i--; j--;
     } else if (op === "D") {
-      missed[j - 1] = true;
+      if (i > 0 || from + j - 1 >= optional) missed[j - 1] = true; // an optional word skipped before anything was heard is not missed
       j--;
     } else if (op === "I") {
       i--;
@@ -148,29 +150,29 @@ export function startSpeech(track: Track): Speech {
 }
 
 // Reads one final result into the track, with the guess that fits it best from where the reading stands.
-export function readFinal(expected: string[], track: Track, alts: string[]): Track {
+export function readFinal(expected: string[], track: Track, alts: string[], optional = 0): Track {
   let best: { r: ReturnType<typeof alignFrom>; } | null = null;
   for (const alt of alts) {
     const words = normalizeArabic(alt).split(" ").filter(Boolean);
     if (!words.length) continue;
-    const r = alignFrom(expected, track.cursor, words);
+    const r = alignFrom(expected, track.cursor, words, optional);
     if (!best || r.cost < best.r.cost) best = { r };
   }
   return best ? applyAlignment(track, track.cursor, best.r) : track;
 }
 
 // The words still changing: each of the newest results keeps the guess that fits the session best.
-export function pendingWords(expected: string[], speech: Speech) {
+export function pendingWords(expected: string[], speech: Speech, optional = 0) {
   const pending = speech.results.slice(speech.done);
   const choice = pending.map(() => 0);
   const wordsOf = (k: number, c: number) => normalizeArabic(pending[k].alts[c] ?? "").split(" ").filter(Boolean);
   const joint = () => pending.flatMap((_, k) => wordsOf(k, choice[k]));
-  let best = alignFrom(expected, speech.from, joint()).cost;
+  let best = alignFrom(expected, speech.from, joint(), optional).cost;
   for (let k = Math.max(0, pending.length - 3); k < pending.length; k++) {
     for (let c = 1; c < pending[k].alts.length; c++) {
       const keep = choice[k];
       choice[k] = c;
-      const cost = alignFrom(expected, speech.from, joint()).cost;
+      const cost = alignFrom(expected, speech.from, joint(), optional).cost;
       if (cost < best) best = cost; else choice[k] = keep;
     }
   }
@@ -190,33 +192,33 @@ export function applyAlignment(track: Track, from: number, r: { cursor: number; 
 
 // What the session shows now: the track with the words still changing on top. The newest word of a result
 // still being said waits until it settles.
-export function viewOf(expected: string[], track: Track, speech: Speech): Track {
-  const words = pendingWords(expected, speech);
-  let r = alignFrom(expected, speech.from, words);
+export function viewOf(expected: string[], track: Track, speech: Speech, optional = 0): Track {
+  const words = pendingWords(expected, speech, optional);
+  let r = alignFrom(expected, speech.from, words, optional);
   const last = speech.results[speech.results.length - 1];
   if (last && !last.isFinal && words.length) {
     const newest = words[words.length - 1];
     const settled = r.cells.some(c => c && c.state === "ok" && c.heard !== undefined && c.heard.split(" ").pop() === newest);
-    if (!settled) r = alignFrom(expected, speech.from, words.slice(0, -1));
+    if (!settled) r = alignFrom(expected, speech.from, words.slice(0, -1), optional);
   }
   return applyAlignment(track, speech.from, r);
 }
 
 // One event of a recognizer session: final results are read into the track, and the view is what is shown now.
-export function takeSpeech(expected: string[], track: Track, speech: Speech, results: Heard[]) {
+export function takeSpeech(expected: string[], track: Track, speech: Speech, results: Heard[], optional = 0) {
   let t = track;
   let done = speech.done;
   while (done < results.length && results[done].isFinal) {
-    t = readFinal(expected, t, results[done].alts);
+    t = readFinal(expected, t, results[done].alts, optional);
     done++;
   }
   const next: Speech = { from: t.cursor, done, results };
-  return { track: t, speech: next, view: viewOf(expected, t, next) };
+  return { track: t, speech: next, view: viewOf(expected, t, next, optional) };
 }
 
 // The session has ended: whatever it still holds is read as it is.
-export function endSpeech(expected: string[], track: Track, speech: Speech): Track {
+export function endSpeech(expected: string[], track: Track, speech: Speech, optional = 0): Track {
   let t = track;
-  for (let k = speech.done; k < speech.results.length; k++) t = readFinal(expected, t, speech.results[k].alts);
+  for (let k = speech.done; k < speech.results.length; k++) t = readFinal(expected, t, speech.results[k].alts, optional);
   return t;
 }

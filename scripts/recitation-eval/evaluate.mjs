@@ -107,11 +107,19 @@ export function alignWords(ref, hyp) {
   return { ...counts, substitutionPairs };
 }
 
+// The basmala at the start of a surah is optional, as on the screen: it is not counted when it is not said.
+// Only verse 1 of a surah with a basmala starts with it. Al-Fatiha's basmala is its verse 1, so it is counted.
+export function optionalHeadOf(surah, ayah, expected) {
+  const BASMALA = ["بسم", "الله", "الرحمان", "الرحيم"];
+  const basmalaStart = ayah === 1 && surah !== 1 && surah !== 9 && BASMALA.every((word, k) => expected[k] === word);
+  return basmalaStart ? BASMALA.length : 0;
+}
+
 // The matcher's decision for each verse word, from one final result holding the engine's words.
-export function appStates(expected, heardText) {
+export function appStates(expected, heardText, optional = 0) {
   const start = emptyTrack(expected.length);
-  const taken = takeSpeech(expected, start, startSpeech(start), [{ alts: [heardText], isFinal: true }]);
-  return endSpeech(expected, taken.track, taken.speech).states;
+  const taken = takeSpeech(expected, start, startSpeech(start), [{ alts: [heardText], isFinal: true }], optional);
+  return endSpeech(expected, taken.track, taken.speech, optional).states;
 }
 
 // The screen's groups: ok (green); flagged (bad in red or skipped in amber, both listed for review);
@@ -303,7 +311,7 @@ export async function evaluate({ manifestPath, engineCommand, label, corpus }) {
     const engine = await runEngine(engineCommand, path.resolve(baseDir, clip.file));
     const heard = heardWords(engine.words);
     const planted = new Set((clip.planted_words ?? []).map((number) => number - 1));
-    const states = appStates(expected, engine.words.join(" "));
+    const states = appStates(expected, engine.words.join(" "), optionalHeadOf(clip.surah, clip.ayah, expected));
     rows.push({
       file: clip.file,
       surah: clip.surah,

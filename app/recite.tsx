@@ -75,6 +75,7 @@ export default function Recite() {
 
   // Live recognition state: the recognizer's event handlers read these without re-subscribing.
   const expectedRef = useRef<string[]>([]);
+  const optionalRef = useRef(0);                                // leading words that are an optional basmala
   const trackRef = useRef<Track>(emptyTrack(0));                // what has been read, kept across pauses
   const peakRef = useRef(0);                                    // the furthest word reached: the shown place never steps back
   const sessionRef = useRef<{ id: number; speech: Speech } | null>(null); // the recognizer session that is running
@@ -137,11 +138,17 @@ export default function Recite() {
     const k = expectedIdx.findIndex(i => ayahOfToken[i] >= startAyah);
     return k < 0 ? 0 : k;
   }, [expectedIdx, ayahOfToken, startAyah]);
+  // Most surahs open with the basmala inside verse 1. It is shown once, as the header, and the verses flow after it.
+  const BASMALA_NORM = ["بسم", "الله", "الرحمان", "الرحيم"];
+  const hasBasmala = surahNumber !== 1 && surahNumber !== 9 && BASMALA_NORM.every((n, k) => wordInfo[k]?.norm === n);
+  // At the start of a surah the basmala may be recited or left out. Left out, it is not counted as a mistake.
+  const optionalHead = hasBasmala && startPos === 0 ? BASMALA_NORM.length : 0;
   const readable = useMemo(() => expectedIdx.slice(startPos), [expectedIdx, startPos]);
 
   useEffect(() => {
     expectedRef.current = readable.map(i => wordInfo[i].norm);
-  }, [readable, wordInfo]);
+    optionalRef.current = optionalHead;
+  }, [readable, wordInfo, optionalHead]);
 
   const columnWidth = Math.min(screenWidth, COLUMN_MAX) - 40;
   // The width the column really has once laid out, so the lines fill exactly what is shown.
@@ -167,9 +174,6 @@ export default function Recite() {
     return () => { cancelled = true; };
   }, [wordInfo]);
 
-  // Most surahs open with the basmala inside verse 1. It is shown once, as the header, and the verses flow after it.
-  const BASMALA_NORM = ["بسم", "الله", "الرحمان", "الرحيم"];
-  const hasBasmala = surahNumber !== 1 && surahNumber !== 9 && BASMALA_NORM.every((n, k) => wordInfo[k]?.norm === n);
   const headerEnd = surahNumber === 1 ? wordInfo.findIndex(w => w.marker) + 1 : hasBasmala ? BASMALA_NORM.length : 0;
   const showBasmala = surahNumber !== 9;
 
@@ -235,7 +239,9 @@ export default function Recite() {
   }
   const counts = { ok: 0, unsure: 0, bad: 0, skipped: 0 };
   Object.values(byToken).forEach(v => { counts[v.state]++; });
-  const notReached = readable.length - counts.ok - counts.unsure - counts.bad - counts.skipped;
+  // Optional basmala words the reader went past unsaid are neither read nor flagged, so they are not counted either.
+  const passedOver = tracked ? readable.slice(0, optionalHead).filter((i, k) => k < tracked.cursor && !byToken[i]).length : 0;
+  const notReached = readable.length - passedOver - counts.ok - counts.unsure - counts.bad - counts.skipped;
   const needReview = readable
     .filter(i => byToken[i] && (byToken[i].state === "bad" || byToken[i].state === "skipped"))
     .slice(0, 8);
@@ -284,7 +290,7 @@ export default function Recite() {
         r.onresult = (e: any) => {
           const session = sessionRef.current;
           if (!session || session.id !== id) return; // a session that was dropped
-          const n = takeSpeech(expectedRef.current, trackRef.current, session.speech, readResults(e.results));
+          const n = takeSpeech(expectedRef.current, trackRef.current, session.speech, readResults(e.results), optionalRef.current);
           trackRef.current = n.track;
           session.speech = n.speech;
           idleRestartsRef.current = 0;
@@ -303,7 +309,7 @@ export default function Recite() {
           const session = sessionRef.current;
           if (session && session.id === id) {
             // What the session still held is read as it is, even when the page has stopped listening.
-            trackRef.current = endSpeech(expectedRef.current, trackRef.current, session.speech);
+            trackRef.current = endSpeech(expectedRef.current, trackRef.current, session.speech, optionalRef.current);
             sessionRef.current = null;
             const cursor = Math.max(trackRef.current.cursor, peakRef.current);
             peakRef.current = cursor;

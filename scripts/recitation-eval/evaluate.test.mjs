@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { normalizeArabic } from "../../src/recitation/matching.ts";
-import { alignWords, appStates, checkManifest, evaluate, judge, verseWords } from "./evaluate.mjs";
+import { alignWords, appStates, checkManifest, evaluate, judge, optionalHeadOf, verseWords } from "./evaluate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const harness = path.join(here, "evaluate.mjs");
@@ -49,6 +49,41 @@ test("the matcher marks one missed word unsure, two in a row skipped, and a clea
   assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحيم"), ["ok", "ok", "unsure", "ok"]);
   assert.deepEqual(appStates(VERSE_1_1, "بسم الرحيم"), ["ok", "skipped", "skipped", "ok"]);
   assert.deepEqual(appStates(VERSE_1_1, "بسم الله الرحمان كتاب"), ["ok", "ok", "ok", "bad"]);
+});
+
+test("the basmala at the start of a surah is optional: unsaid it is not flagged, said it is ok", () => {
+  const surah2 = verseWords(corpus.ayahs.find((item) => item.surah === 2 && item.ayah === 1).text);
+  assert.deepEqual(surah2.slice(0, 4), VERSE_1_1);
+  assert.equal(optionalHeadOf(2, 1, surah2), 4);
+  // Not said: the four basmala words have no state, and the verse word after them is ok.
+  assert.deepEqual(appStates(surah2, "الم", 4), [undefined, undefined, undefined, undefined, "ok"]);
+  // Said: every word is ok.
+  assert.deepEqual(appStates(surah2, "بسم الله الرحمان الرحيم الم", 4), ["ok", "ok", "ok", "ok", "ok"]);
+});
+
+test("a basmala said in part is read like any other words, so its unsaid rest is flagged", () => {
+  const surah2 = verseWords(corpus.ayahs.find((item) => item.surah === 2 && item.ayah === 1).text);
+  assert.deepEqual(appStates(surah2, "بسم الله الم", 4), ["ok", "ok", "skipped", "skipped", "ok"]);
+});
+
+test("the optional basmala applies only to verse 1 of a surah that opens with it", () => {
+  const verse = (surah, ayah) => verseWords(corpus.ayahs.find((item) => item.surah === surah && item.ayah === ayah).text);
+  assert.equal(optionalHeadOf(1, 1, verse(1, 1)), 0); // Al-Fatiha: the basmala is its verse 1, so it is counted
+  assert.equal(optionalHeadOf(9, 1, verse(9, 1)), 0); // At-Tawbah has no basmala
+  assert.equal(optionalHeadOf(2, 2, verse(2, 2)), 0); // later verses never start with it
+});
+
+test("the harness scores a surah's opening basmala as the screen does", async () => {
+  const dir = workDir();
+  const engine = path.join(dir, "engine.mjs");
+  writeFileSync(engine, FAKE_ENGINE);
+  writeFileSync(path.join(dir, "a.wav"), "placeholder");
+  writeFileSync(path.join(dir, "a.wav.json"), JSON.stringify({ words: [{ text: "الم" }] }));
+  const manifestPath = path.join(dir, "manifest.json");
+  writeFileSync(manifestPath, JSON.stringify({ clips: [{ file: "a.wav", surah: 2, ayah: 1, reciter: "reciter-a", consent }] }));
+  const report = await evaluate({ manifestPath, engineCommand: [process.execPath, engine], label: "basmala", corpus });
+  assert.equal(report.totals.app.flagged, 0);
+  assert.deepEqual(report.clips[0].states, ["unread", "unread", "unread", "unread", "ok"]);
 });
 
 test("words after the last word the engine heard stay unread", () => {
