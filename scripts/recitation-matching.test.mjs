@@ -144,3 +144,17 @@ test("a negative fractional cursor is normalized before alignment state writes",
   assert.equal(repaired.states.length, 2);
   assert.deepEqual(Object.keys(repaired.states), ["0", "1"]);
 });
+
+
+test("oversized individual ASR tokens fail closed before edit-distance allocation", () => {
+  const result = alignFrom(["الحمد"], 0, ["ا".repeat(10000)]);
+  assert.equal(result.cursor, 0);
+  assert.deepEqual(result.cells, []);
+});
+
+test("excessive aggregate transcript characters fail closed before alignment allocation", () => {
+  const heard = Array.from({ length: 80 }, () => "ا".repeat(60));
+  const result = alignFrom(["الحمد", "لله"], 0, heard);
+  assert.equal(result.cursor, 0);
+  assert.deepEqual(result.cells, []);
+});
