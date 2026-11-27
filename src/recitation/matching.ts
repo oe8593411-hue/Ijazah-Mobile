@@ -57,10 +57,13 @@ export function readResults(list: any): Heard[] {
   return out;
 }
 
-// Bound recognizer input before allocating the dynamic-programming matrices.
-// The aligner examines at most 90 Quran words per window; 180 heard tokens
-// allows generous split-token noise while failing closed on oversized transcripts.
+// Bound recognizer input before allocating the dynamic-programming matrices or running edit-distance loops.
+// The aligner examines at most 90 Quran words per window; 180 heard tokens allows split-token noise.
+// Per-token and total character limits also prevent a single enormous ASR token from causing
+// weightedDistance to allocate a huge row or spend disproportionate CPU on an otherwise small transcript.
 const MAX_HEARD_WORDS = 180;
+const MAX_HEARD_TOKEN_CHARS = 128;
+const MAX_HEARD_TOTAL_CHARS = 4096;
 
 // ---------- Alignment of the heard words with the verified words ----------
 
@@ -105,8 +108,11 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
   if (start >= expected.length) {
     return { cursor: expected.length, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
   }
-  if (heard.length > MAX_HEARD_WORDS) {
-    // Avoid unbounded O(heard × expected) memory/time and never fabricate progress.
+  if (heard.length > MAX_HEARD_WORDS ||
+      heard.some(word => word.length > MAX_HEARD_TOKEN_CHARS) ||
+      heard.reduce((total, word) => total + word.length, 0) > MAX_HEARD_TOTAL_CHARS) {
+    // Reject excessive token count/size before DP allocation or edit-distance work.
+    // Fail closed: no word is marked and the committed cursor does not advance.
     return { cursor: start, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
   }
   const W = Math.min(expected.length - start, 90);
