@@ -26,6 +26,35 @@ export const TAJWEED_RULES: TajweedRule[] = [
   { id: "tarqiq", name: "الترقيق", description: "تحليل صفات الترقيق من الأدلة الصوتية المناسبة.", requiresAcousticEvidence: true },
 ];
 
+// Reference data for the Hafs rules, from the tajweed notes the user attached on 2026-11-27. Durations are in
+// harakat (movement units), not seconds: they depend on the reader's pace, and the muttasil, munfasil and silah
+// kubra values follow the Shatibiyyah reading of Hafs, as the notes say. Data only: the matcher never reads it and
+// no mistake is reported from it. The letter sets in findExpectedTajweedChecks must agree with these lists.
+export const TAJWEED_REFERENCE = {
+  madd: {
+    natural: [2],             // المد الطبيعي
+    muttasil: [4, 5],         // المد المتصل
+    munfasil: [4, 5],         // المد المنفصل
+    lazim: [6],               // المد اللازم
+    aridSukun: [2, 4, 6],     // المد العارض للسكون
+    badal: [2],               // مد البدل
+    silahSughra: [2],         // مد الصلة الصغرى
+    silahKubra: [4, 5],       // مد الصلة الكبرى
+    liinAridSukun: [2, 4, 6], // مد اللين العارض للسكون
+  },
+  ghunnahHarakat: 2,          // النون والميم المشددتان، والإخفاء، والإدغام بغنة، والإقلاب، وإخفاء الميم وإدغامها
+  idghamLetters: ["ي", "ر", "م", "ل", "و", "ن"],  // يرملون
+  idghamBiGhunnah: ["ي", "ن", "م", "و"],           // ينمو
+  idghamBilaGhunnah: ["ل", "ر"],
+  idghamShafawi: ["م"],       // ميم ساكنة قبل ميم
+  ikhfaLetters: ["ص", "ذ", "ث", "ك", "ج", "ش", "ق", "س", "د", "ط", "ز", "ف", "ت", "ض", "ظ"], // 15 letters
+  ikhfaShafawi: ["ب"],        // ميم ساكنة قبل باء
+  iqlab: ["ب"],               // نون ساكنة أو تنوين قبل باء
+  izharHalqi: ["ء", "ه", "ع", "ح", "غ", "خ"],
+  izharShafawiExcept: ["م", "ب"], // ميم ساكنة قبل كل حرف ما عدا هذين
+  qalqalahLetters: ["ق", "ط", "ب", "ج", "د"],     // قطب جد
+};
+
 const ruleById = new Map(TAJWEED_RULES.map(rule => [rule.id, rule]));
 const NOON_IDGHAM = new Set(["ي", "ر", "م", "ل", "و", "ن"]);
 const IKHFA_LETTERS = new Set(["ت", "ث", "ج", "د", "ذ", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ف", "ق", "ك"]);
