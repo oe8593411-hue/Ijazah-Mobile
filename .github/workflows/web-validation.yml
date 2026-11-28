@@ -28,6 +28,8 @@ jobs:
         run: npx expo-doctor
       - name: Verify recitation safety invariants
         run: node scripts/verify-recitation-safety.mjs
+      - name: Recitation alignment regression tests
+        run: npm run test:recitation
       - name: Type-check
         run: npx tsc --noEmit
       - name: Build web preview

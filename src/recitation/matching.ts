@@ -57,6 +57,14 @@ export function readResults(list: any): Heard[] {
   return out;
 }
 
+// Bound recognizer input before allocating the dynamic-programming matrices or running edit-distance loops.
+// The aligner examines at most 90 Quran words per window; 180 heard tokens allows split-token noise.
+// Per-token and total character limits also prevent a single enormous ASR token from causing
+// weightedDistance to allocate a huge row or spend disproportionate CPU on an otherwise small transcript.
+const MAX_HEARD_WORDS = 180;
+const MAX_HEARD_TOKEN_CHARS = 128;
+const MAX_HEARD_TOTAL_CHARS = 4096;
+
 // ---------- Alignment of the heard words with the verified words ----------
 
 // The recognizer may drop a word, add a filler, write two words as one, or one word as two.
@@ -94,7 +102,20 @@ export function emptyTrack(n: number): Track {
 // Aligns the heard words with the verified words from `from` on. It may skip verified words (at a cost),
 // and it may ignore heard words. Returns the cells of the verified words it covers, and the new cursor.
 export function alignFrom(expected: string[], from: number, heard: string[]) {
-  const W = Math.min(expected.length - from, 90);
+  // Guard the alignment boundary: a stale or corrupt cursor beyond the verified text
+  // must not produce a negative cell-array size or invent words past the Quran text.
+  const start = Math.max(0, Math.min(Number.isFinite(from) ? Math.floor(from) : 0, expected.length));
+  if (start >= expected.length) {
+    return { cursor: expected.length, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
+  }
+  if (heard.length > MAX_HEARD_WORDS ||
+      heard.some(word => word.length > MAX_HEARD_TOKEN_CHARS) ||
+      heard.reduce((total, word) => total + word.length, 0) > MAX_HEARD_TOTAL_CHARS) {
+    // Reject excessive token count/size before DP allocation or edit-distance work.
+    // Fail closed: no word is marked and the committed cursor does not advance.
+    return { cursor: start, cells: [] as (Cell | undefined)[], cost: heard.length * EXTRA_COST };
+  }
+  const W = Math.min(expected.length - start, 90);
   const m = heard.length;
   const INF = 1e9;
   const D: number[][] = Array.from({ length: m + 1 }, () => Array(W + 1).fill(INF));
@@ -104,14 +125,14 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
   for (let i = 1; i <= m; i++) {
     D[i][0] = D[i - 1][0] + EXTRA_COST; B[i][0] = "I";
     for (let j = 1; j <= W; j++) {
-      const e = expected[from + j - 1];
+      const e = expected[start + j - 1];
       let best = D[i - 1][j - 1] + wordCost(e, heard[i - 1]);
       let op = "S";
       const tryOp = (cost: number, name: string) => { if (cost < best) { best = cost; op = name; } };
       tryOp(D[i][j - 1] + MISS_COST, "D");
       tryOp(D[i - 1][j] + EXTRA_COST, "I");
       if (i >= 2) tryOp(D[i - 2][j - 1] + wordCost(e, heard[i - 2] + heard[i - 1]) + JOIN_COST, "M");
-      if (j >= 2) tryOp(D[i - 1][j - 2] + wordCost(expected[from + j - 2] + e, heard[i - 1]) + JOIN_COST, "P");
+      if (j >= 2) tryOp(D[i - 1][j - 2] + wordCost(expected[start + j - 2] + e, heard[i - 1]) + JOIN_COST, "P");
       D[i][j] = best;
       B[i][j] = op;
     }
@@ -126,7 +147,7 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
   while (i > 0 || j > 0) {
     const op = i === 0 ? "D" : j === 0 ? "I" : B[i][j];
     if (op === "S") {
-      cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 1])), heard: heard[i - 1] };
+      cells[j - 1] = { state: costState(wordCost(expected[start + j - 1], heard[i - 1])), heard: heard[i - 1] };
       i--; j--;
     } else if (op === "D") {
       missed[j - 1] = true;
@@ -135,10 +156,10 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
       i--;
     } else if (op === "M") {
       const joined = heard[i - 2] + " " + heard[i - 1];
-      cells[j - 1] = { state: costState(wordCost(expected[from + j - 1], heard[i - 2] + heard[i - 1])), heard: joined };
+      cells[j - 1] = { state: costState(wordCost(expected[start + j - 1], heard[i - 2] + heard[i - 1])), heard: joined };
       i -= 2; j--;
     } else {
-      const c = costState(wordCost(expected[from + j - 2] + expected[from + j - 1], heard[i - 1]));
+      const c = costState(wordCost(expected[start + j - 2] + expected[start + j - 1], heard[i - 1]));
       cells[j - 2] = { state: c, heard: heard[i - 1] };
       cells[j - 1] = cells[j - 2];
       i--; j -= 2;
@@ -150,7 +171,7 @@ export function alignFrom(expected: string[], from: number, heard: string[]) {
     const run = (c > 0 && missed[c - 1]) || (c + 1 < jEnd && missed[c + 1]);
     cells[c] = { state: run ? "skipped" : "unsure" };
   }
-  return { cursor: from + jEnd, cells, cost: D[m][jEnd] };
+  return { cursor: start + jEnd, cells, cost: D[m][jEnd] };
 }
 
 // What the recognizer has said in one session. Its results are cumulative: the first `done` of them are final
@@ -180,10 +201,30 @@ export function readFinal(expected: string[], track: Track, alts: string[], conf
 }
 
 // The words still changing: each of the newest results keeps the guess that fits the session best.
+// Keep the provisional overlay bounded separately from committed alignment limits.
+// These results are not committed, so overload safely hides the overlay instead of guessing.
+const MAX_PENDING_RESULTS = 24;
+const MAX_PENDING_ALTERNATIVES = 5;
+const MAX_PENDING_TEXT_CHARS = 512;
+
 export function pendingWords(expected: string[], speech: Speech) {
-  const pending = speech.results.slice(speech.done);
+  if (!Array.isArray(speech.results) || !Number.isFinite(speech.done)) return [];
+  const done = Math.max(0, Math.min(Math.floor(speech.done), speech.results.length));
+  if (speech.results.length - done > MAX_PENDING_RESULTS) return [];
+  const pending = speech.results.slice(done);
+  if (pending.some(result =>
+    !Array.isArray(result.alts) ||
+    result.alts.slice(0, MAX_PENDING_ALTERNATIVES).some(alt =>
+      typeof alt !== "string" || alt.length > MAX_PENDING_TEXT_CHARS
+    )
+  )) return [];
   const choice = pending.map(() => 0);
-  const wordsOf = (k: number, c: number) => normalizeArabic(pending[k].alts[c] ?? "").split(" ").filter(Boolean);
+  const wordsOf = (k: number, c: number) => {
+    const transcript = pending[k].alts[c];
+    return typeof transcript === "string" && transcript.length <= MAX_PENDING_TEXT_CHARS
+      ? normalizeArabic(transcript).split(" ").filter(Boolean)
+      : [];
+  };
   const confidenceOf = (k: number, c: number) => {
     const value = pending[k].confidences?.[c];
     return typeof value === "number" && Number.isFinite(value) ? value : -1;
@@ -191,7 +232,7 @@ export function pendingWords(expected: string[], speech: Speech) {
   const joint = () => pending.flatMap((_, k) => wordsOf(k, choice[k]));
   let best = alignFrom(expected, speech.from, joint()).cost;
   for (let k = Math.max(0, pending.length - 3); k < pending.length; k++) {
-    for (let c = 1; c < pending[k].alts.length; c++) {
+    for (let c = 1; c < Math.min(pending[k].alts.length, MAX_PENDING_ALTERNATIVES); c++) {
       const keep = choice[k];
       choice[k] = c;
       const cost = alignFrom(expected, speech.from, joint()).cost;
@@ -205,11 +246,16 @@ export function pendingWords(expected: string[], speech: Speech) {
 
 // Writes an alignment onto the track, from the word where it starts.
 export function applyAlignment(track: Track, from: number, r: { cursor: number; cells: (Cell | undefined)[] }): Track {
-  const next: Track = { text: track.text, cursor: r.cursor, states: track.states.slice(), heardAt: track.heardAt.slice() };
-  r.cells.forEach((c, k) => {
+  // Guard writes as well as the DP boundary: a stale, negative, fractional, or
+  // non-finite cursor must never create non-array properties or silently miss cells.
+  const safeFrom = Math.max(0, Math.min(Number.isFinite(from) ? Math.floor(from) : 0, track.states.length));
+  const rawCursor = Number.isFinite(r.cursor) ? Math.floor(r.cursor) : safeFrom;
+  const safeCursor = Math.max(safeFrom, Math.min(rawCursor, track.states.length));
+  const next: Track = { text: track.text, cursor: safeCursor, states: track.states.slice(), heardAt: track.heardAt.slice() };
+  r.cells.slice(0, safeCursor - safeFrom).forEach((c, k) => {
     if (!c) return;
-    next.states[from + k] = c.state;
-    next.heardAt[from + k] = c.state === "bad" ? c.heard : undefined;
+    next.states[safeFrom + k] = c.state;
+    next.heardAt[safeFrom + k] = c.state === "bad" ? c.heard : undefined;
   });
   return next;
 }
