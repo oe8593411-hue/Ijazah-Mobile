@@ -158,3 +158,31 @@ test("excessive aggregate transcript characters fail closed before alignment all
   assert.equal(result.cursor, 0);
   assert.deepEqual(result.cells, []);
 });
+
+test("excessive provisional result backlog is hidden without advancing committed words", () => {
+  const expected = ["الحمد", "لله"];
+  const track = emptyTrack(expected.length);
+  const speech = startSpeech(track);
+  const results = Array.from({ length: 25 }, () => ({
+    alts: ["الحمد"], confidences: [undefined], isFinal: false,
+  }));
+  const event = takeSpeech(expected, track, speech, results);
+  assert.equal(event.track.cursor, 0);
+  assert.deepEqual(event.track.states, [undefined, undefined]);
+  assert.equal(event.view.cursor, 0);
+  assert.deepEqual(event.view.states, [undefined, undefined]);
+});
+
+test("oversized provisional transcript is hidden without committing a guess", () => {
+  const expected = ["الحمد"];
+  const track = emptyTrack(expected.length);
+  const speech = startSpeech(track);
+  const results = [{
+    alts: ["ا".repeat(10000)], confidences: [undefined], isFinal: false,
+  }];
+  const event = takeSpeech(expected, track, speech, results);
+  assert.equal(event.track.cursor, 0);
+  assert.deepEqual(event.track.states, [undefined]);
+  assert.equal(event.view.cursor, 0);
+  assert.deepEqual(event.view.states, [undefined]);
+});
