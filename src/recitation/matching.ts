@@ -201,10 +201,30 @@ export function readFinal(expected: string[], track: Track, alts: string[], conf
 }
 
 // The words still changing: each of the newest results keeps the guess that fits the session best.
+// Keep the provisional overlay bounded separately from committed alignment limits.
+// These results are not committed, so overload safely hides the overlay instead of guessing.
+const MAX_PENDING_RESULTS = 24;
+const MAX_PENDING_ALTERNATIVES = 5;
+const MAX_PENDING_TEXT_CHARS = 512;
+
 export function pendingWords(expected: string[], speech: Speech) {
-  const pending = speech.results.slice(speech.done);
+  if (!Array.isArray(speech.results) || !Number.isFinite(speech.done)) return [];
+  const done = Math.max(0, Math.min(Math.floor(speech.done), speech.results.length));
+  if (speech.results.length - done > MAX_PENDING_RESULTS) return [];
+  const pending = speech.results.slice(done);
+  if (pending.some(result =>
+    !Array.isArray(result.alts) ||
+    result.alts.slice(0, MAX_PENDING_ALTERNATIVES).some(alt =>
+      typeof alt !== "string" || alt.length > MAX_PENDING_TEXT_CHARS
+    )
+  )) return [];
   const choice = pending.map(() => 0);
-  const wordsOf = (k: number, c: number) => normalizeArabic(pending[k].alts[c] ?? "").split(" ").filter(Boolean);
+  const wordsOf = (k: number, c: number) => {
+    const transcript = pending[k].alts[c];
+    return typeof transcript === "string" && transcript.length <= MAX_PENDING_TEXT_CHARS
+      ? normalizeArabic(transcript).split(" ").filter(Boolean)
+      : [];
+  };
   const confidenceOf = (k: number, c: number) => {
     const value = pending[k].confidences?.[c];
     return typeof value === "number" && Number.isFinite(value) ? value : -1;
@@ -212,7 +232,7 @@ export function pendingWords(expected: string[], speech: Speech) {
   const joint = () => pending.flatMap((_, k) => wordsOf(k, choice[k]));
   let best = alignFrom(expected, speech.from, joint()).cost;
   for (let k = Math.max(0, pending.length - 3); k < pending.length; k++) {
-    for (let c = 1; c < pending[k].alts.length; c++) {
+    for (let c = 1; c < Math.min(pending[k].alts.length, MAX_PENDING_ALTERNATIVES); c++) {
       const keep = choice[k];
       choice[k] = c;
       const cost = alignFrom(expected, speech.from, joint()).cost;
